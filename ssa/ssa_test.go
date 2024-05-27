@@ -187,7 +187,7 @@ func TestPyFunc(t *testing.T) {
 }
 
 func TestVar(t *testing.T) {
-	prog := NewProgram(nil)
+	prog := NewProgram(nil) // 创建一个新的LLVM程序
 	pkg := prog.NewPackage("bar", "foo/bar")
 	typ := types.NewPointer(types.Typ[types.Int])
 	a := pkg.NewVar("a", typ, InGo)

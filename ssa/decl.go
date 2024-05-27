@@ -69,9 +69,12 @@ type Global = *aGlobal
 
 // NewVar creates a new global variable.
 func (p Package) NewVar(name string, typ types.Type, bg Background) Global {
+	// bg: InGo, InC
 	if v, ok := p.vars[name]; ok {
+		// 如果已经存在于当前的package，则直接返回
 		return v
 	}
+	// 创建一个新的global变量（LLVM）
 	t := p.Prog.Type(typ, bg)
 	return p.doNewVar(name, t)
 }

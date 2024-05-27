@@ -43,11 +43,12 @@ const (
 	InPython
 )
 
-// Type convert a Go/C type into raw type.
-// C type = raw type
-// Go type: convert to raw type (because of closure)
+// 转换Go/C的类型到原生类型
+// C 类型 = 原生类型
+// Go 类型: 转换到原生类型 (because of closure)
 func (p Program) Type(typ types.Type, bg Background) Type {
 	if bg == InGo {
+		// 如果是一个go的类型，转换为原生类型
 		typ, _ = p.gocvt.cvtType(typ)
 	}
 	return p.rawType(typ)
