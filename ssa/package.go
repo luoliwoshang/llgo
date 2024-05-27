@@ -100,7 +100,7 @@ func Initialize(flags InitFlags) {
 
 type aProgram struct {
 	ctx   llvm.Context
-	typs  typeutil.Map // rawType -> Type
+	typs  typeutil.Map // rawType -> Type(包含LLVM类型和原始类型)
 	sizes types.Sizes  // provided by Go compiler
 	gocvt goTypes
 
