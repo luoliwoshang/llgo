@@ -141,7 +141,7 @@ type rawType struct {
 
 type aType struct {
 	ll   llvm.Type
-	raw  rawType
+	raw  rawType   //原始的go类型
 	kind valueKind // value kind of llvm.Type
 }
 
@@ -229,12 +229,13 @@ func (p Program) Field(typ Type, i int) Type {
 }
 
 func (p Program) rawType(raw types.Type) Type {
+	// 如果在类型缓存中，则直接返回
 	if v := p.typs.At(raw); v != nil {
 		return v.(Type)
 	}
 	ret := p.toType(raw)
-	p.typs.Set(raw, ret)
-	return ret
+	p.typs.Set(raw, ret) // 设置这个原始类型到LLVM类型的映射关系
+	return ret           //go/types.Basic {kind: Int (2), info: IsInteger (2), name: "int"} -> ssa.aType {ll: llvm.Type {C: *(*llvm._Ctype_struct_LLVMOpaqueType")(0x101809fe0)}, raw: /ssa.rawType {Type: go/types.Type(*go/types.Basic) ...}, kind: 1}
 }
 
 func (p Program) tyVoidPtr() llvm.Type {
@@ -258,14 +259,14 @@ func (p Program) tyInt1() llvm.Type {
 	return p.int1Type
 }
 
-func (p Program) tyInt() llvm.Type {
+func (p Program) tyInt() llvm.Type { //获得LLVM的int类型
 	if p.intType.IsNil() {
-		p.intType = llvmIntType(p.ctx, p.td.PointerSize())
+		p.intType = llvmIntType(p.ctx, p.td.PointerSize()) // 根据目标平台的指针大小，获得一个Int类型，并且存储在该LLVM PROGRAME中
 	}
 	return p.intType
 }
 
-func llvmIntType(ctx llvm.Context, size int) llvm.Type {
+func llvmIntType(ctx llvm.Context, size int) llvm.Type { // 根据大小创建一个LLVM的int类型
 	if size <= 4 {
 		return ctx.Int32Type()
 	}
@@ -305,9 +306,9 @@ func (p Program) toTuple(typ *types.Tuple) Type {
 	return &aType{p.toLLVMTuple(typ), rawType{typ}, vkTuple}
 }
 */
-
+// 将一个Go的原始类型转换到LLVM类型
 func (p Program) toType(raw types.Type) Type {
-	typ := rawType{raw}
+	typ := rawType{raw} // 设置原始类型
 	switch t := raw.(type) {
 	case *types.Basic:
 		switch t.Kind() {

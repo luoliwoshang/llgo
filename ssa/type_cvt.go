@@ -75,6 +75,7 @@ func (p Program) Closure(fn Type) Type {
 func (p goTypes) cvtType(typ types.Type) (raw types.Type, cvt bool) {
 	switch t := typ.(type) {
 	case *types.Basic:
+		// 基础类型不处理，直接返回
 	case *types.Pointer:
 		if elem, cvt := p.cvtType(t.Elem()); cvt {
 			return types.NewPointer(elem), true

@@ -111,12 +111,12 @@ type aProgram struct {
 	pyget func() *types.Package
 
 	target *Target
-	td     llvm.TargetData
+	td     llvm.TargetData // 目标平台
 	// tm  llvm.TargetMachine
 	named   map[string]llvm.Type
 	fnnamed map[string]int
 
-	intType   llvm.Type
+	intType   llvm.Type // LLVM的int类型，会在创建类型的时候，动态的赋值，防止不必要的性能损耗
 	int1Type  llvm.Type
 	int8Type  llvm.Type
 	int16Type llvm.Type

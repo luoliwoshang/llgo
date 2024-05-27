@@ -5,6 +5,7 @@ import (
 )
 
 func main() {
+	// fmt.Print("dsadas")
 	c.Printf(c.Str("Hello world\n"))
 }
 

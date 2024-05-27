@@ -74,9 +74,9 @@ func (p Package) NewVar(name string, typ types.Type, bg Background) Global {
 		// 如果已经存在于当前的package，则直接返回
 		return v
 	}
-	// 创建一个新的global变量（LLVM）
-	t := p.Prog.Type(typ, bg)
-	return p.doNewVar(name, t)
+
+	t := p.Prog.Type(typ, bg)  // 获得aType，其中包含了LLVM的类型和原始的类型
+	return p.doNewVar(name, t) // 根据该类型创建一个新的global变量（LLVM）
 }
 
 // NewVarEx creates a new global variable.
