@@ -54,7 +54,7 @@ func (p Program) Type(typ types.Type, bg Background) Type {
 	return p.rawType(typ)
 }
 
-// FuncDecl converts a Go/C function declaration into raw type.
+// 转换一个Go或者C的函数声明到原生类型
 func (p Program) FuncDecl(sig *types.Signature, bg Background) Type {
 	recv := sig.Recv()
 	if bg == InGo {
@@ -72,6 +72,7 @@ func (p Program) Closure(fn Type) Type {
 	return p.rawType(closure)
 }
 
+// 转换类型为标准的类型
 func (p goTypes) cvtType(typ types.Type) (raw types.Type, cvt bool) {
 	switch t := typ.(type) {
 	case *types.Basic:
@@ -144,12 +145,15 @@ func (p goTypes) cvtClosure(sig *types.Signature) *types.Struct {
 	return types.NewStruct(flds, nil)
 }
 
+// 转换函数类型到一个标准的函数类型
 func (p goTypes) cvtFunc(sig *types.Signature, recv *types.Var) (raw *types.Signature) {
 	if recv != nil {
 		sig = FuncAddCtx(recv, sig)
 	}
+	// 转换这个类型中的参数和返回值为标准的元祖类型
 	params, cvt1 := p.cvtTuple(sig.Params())
 	results, cvt2 := p.cvtTuple(sig.Results())
+	// 如果参数或者返回值有转换，则返回一个标准的函数类型
 	if cvt1 || cvt2 || sig.Variadic() {
 		// variadic always is false in raw type for Go function
 		return types.NewSignatureType(nil, nil, nil, params, results, false)
@@ -157,6 +161,7 @@ func (p goTypes) cvtFunc(sig *types.Signature, recv *types.Var) (raw *types.Sign
 	return sig
 }
 
+// 转换为符合标准的元祖类型，遍历元组中的每一项，发现如果存在可以转换的的类型，则转换，并存放于原始位置
 func (p goTypes) cvtTuple(t *types.Tuple) (*types.Tuple, bool) {
 	n := t.Len()
 	vars := make([]*types.Var, n)

@@ -560,8 +560,8 @@ type aPackage struct {
 
 	Prog Program
 
-	vars   map[string]Global
-	fns    map[string]Function
+	vars   map[string]Global   // name -> Global(var)
+	fns    map[string]Function // name -> Function
 	stubs  map[string]Function
 	pyobjs map[string]PyObjRef
 	pymods map[string]Global

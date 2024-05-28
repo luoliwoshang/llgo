@@ -167,7 +167,7 @@ type aFunction struct {
 	Pkg  Package
 	Prog Program
 
-	blks []BasicBlock
+	blks []BasicBlock // 基本块数组
 
 	defer_ *aDefer
 	recov  BasicBlock
@@ -181,13 +181,14 @@ type aFunction struct {
 // Function represents a function or method.
 type Function = *aFunction
 
-// NewFunc creates a new function.
+// 创建一个新的Func
 func (p Package) NewFunc(name string, sig *types.Signature, bg Background) Function {
 	return p.NewFuncEx(name, sig, bg, false)
 }
 
-// NewFuncEx creates a new function.
+// 创建一个新的Func
 func (p Package) NewFuncEx(name string, sig *types.Signature, bg Background, hasFreeVars bool) Function {
+	// 如果存在于当前的package，则直接返回
 	if v, ok := p.fns[name]; ok {
 		return v
 	}
@@ -279,32 +280,34 @@ func (p Function) HasBody() bool {
 	return len(p.blks) > 0
 }
 
-// MakeBody creates nblk basic blocks for the function, and creates
-// a new Builder associated to #0 block.
+// MakeBody 创建函数的nblk个基本块，以及创建一个新的Builder指向第一个基本块 #0
 func (p Function) MakeBody(nblk int) Builder {
-	p.MakeBlocks(nblk)
+	p.MakeBlocks(nblk) // 为函数创建nblk个基本块
 	b := p.NewBuilder()
 	b.blk = p.blks[0]
 	b.impl.SetInsertPointAtEnd(b.blk.last)
 	return b
 }
 
-// MakeBlocks creates nblk basic blocks for the function.
+// MakeBlocks 为函数新创建nblk个基本块，返回新创建的那些基本块
 func (p Function) MakeBlocks(nblk int) []BasicBlock {
-	n := len(p.blks)
+	n := len(p.blks) // 当前函数的block个数
 	if n == 0 {
+		// 创建函数的nblk个block的空间
 		p.blks = make([]BasicBlock, 0, nblk)
 	}
 	for i := 0; i < nblk; i++ {
+		// 创建函数的nblk个block，如果
 		p.addBlock(n + i)
 	}
-	return p.blks[n:]
+	return p.blks[n:] //返回新创建的block从n开始
 }
 
+// 为函数创建一个新的基本块
 func (p Function) addBlock(idx int) BasicBlock {
-	label := "_llgo_" + strconv.Itoa(idx)
-	blk := llvm.AddBasicBlock(p.impl, label)
-	ret := &aBasicBlock{blk, blk, p, idx}
+	label := "_llgo_" + strconv.Itoa(idx)    //为基本块创建label
+	blk := llvm.AddBasicBlock(p.impl, label) //创建基本块
+	ret := &aBasicBlock{blk, blk, p, idx}    //创建基本块对象
 	p.blks = append(p.blks, ret)
 	return ret
 }

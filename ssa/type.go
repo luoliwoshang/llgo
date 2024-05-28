@@ -366,7 +366,7 @@ func (p Program) toType(raw types.Type) Type {
 		return p.toNamed(t)
 	case *types.Signature: // represents a C function pointer in raw type
 		return &aType{p.toLLVMFuncPtr(t), typ, vkFuncPtr}
-	case *types.Tuple:≠
+	case *types.Tuple:
 		return &aType{p.toLLVMTuple(t), typ, vkTuple}
 	case *types.Array:
 		elem := p.rawType(t.Elem())
