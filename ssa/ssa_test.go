@@ -505,6 +505,7 @@ _llgo_0:
 `)
 }
 
+// 测试取值表达式
 func TestUnOp(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
@@ -514,11 +515,11 @@ func TestUnOp(t *testing.T) {
 	rets := types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int]))
 	sig := types.NewSignatureType(nil, nil, nil, params, rets, false)
 	fn := pkg.NewFunc("fn", sig, InGo)
-	b := fn.MakeBody(1)
-	ptr := fn.Param(0)
-	val := b.UnOp(token.MUL, ptr)
-	val2 := b.BinOp(token.XOR, val, prog.Val(1))
-	b.Store(ptr, val2)
+	b := fn.MakeBody(1)                          // 获得Builder
+	ptr := fn.Param(0)                           // 获得一个函数第一个参数 *ptr int
+	val := b.UnOp(token.MUL, ptr)                // *ptr -> %1 = load i64, ptr %0, align 4
+	val2 := b.BinOp(token.XOR, val, prog.Val(1)) // %1 ^ 1    ->    %2 = xor i64 %1, 1 将结果存储到%2中
+	b.Store(ptr, val2)                           //store i64 %2, ptr %0, align 4 将 %2 的值存储到 %0 中，ptr中的值为 按位取反表达式的结果
 	b.Return(val2)
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
