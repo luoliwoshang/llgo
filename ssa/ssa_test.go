@@ -198,6 +198,7 @@ func TestVar(t *testing.T) {
 	a.Init(prog.Val(100))
 	b := pkg.NewVar("b", typ, InGo)
 	b.Init(a.Expr)
+	// 将当前pkg转换为ll的表达形式
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 

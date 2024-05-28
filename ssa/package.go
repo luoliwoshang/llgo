@@ -555,7 +555,7 @@ func (p Program) Uint64() Type {
 // initializer) and "init#%d", the nth declared init function,
 // and unspecified other things too.
 type aPackage struct {
-	mod llvm.Module
+	mod llvm.Module // 通过调用aPackage.mod.String(),即可获得ll
 	abi abi.Builder
 
 	Prog Program

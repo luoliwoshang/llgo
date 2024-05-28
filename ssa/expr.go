@@ -189,6 +189,7 @@ func (p Program) ComplexVal(v complex128, t Type) Expr {
 }
 
 // Val returns a constant expression.
+// 返回一个常量表达式
 func (p Program) Val(v interface{}) Expr {
 	switch v := v.(type) {
 	case int:
