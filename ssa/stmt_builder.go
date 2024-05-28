@@ -198,7 +198,7 @@ func (b Builder) Extract(x Expr, i int) (ret Expr) {
 	return b.getField(x, i)
 }
 
-// Jump emits a jump instruction.
+// 构建一个跳转指令（Jump emits a jump instruction）
 func (b Builder) Jump(jmpb BasicBlock) {
 	if b.Func != jmpb.fn {
 		panic("mismatched function")

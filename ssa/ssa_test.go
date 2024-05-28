@@ -402,12 +402,13 @@ _llgo_0:
 `)
 }
 
+// 测试控制块跳转
 func TestJump(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
 	fn := pkg.NewFunc("loop", NoArgsNoRet, InGo)
 	b := fn.MakeBody(1)
-	b.Jump(fn.Block(0))
+	b.Jump(fn.Block(0)) // 在当前控制块结束的位置跳转到函数的第一个控制块（一直循环）
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 
