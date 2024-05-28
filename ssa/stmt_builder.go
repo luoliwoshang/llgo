@@ -57,8 +57,8 @@ func (p BasicBlock) Addr() Expr {
 // -----------------------------------------------------------------------------
 
 type aBuilder struct {
-	impl llvm.Builder
-	blk  BasicBlock
+	impl llvm.Builder // Builder示例
+	blk  BasicBlock   // 当前的基本块
 	Func Function
 	Pkg  Package
 	Prog Program

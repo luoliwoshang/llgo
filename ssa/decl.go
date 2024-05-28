@@ -266,7 +266,9 @@ func (p Function) FreeVar(b Builder, i int) Expr {
 	return b.getField(ctx, i)
 }
 
-// NewBuilder creates a new Builder for the function.
+// NewBuilder 创建了一个新的函数Builder，可以向函数体中插入指令
+// SetInsertPointAtEnd 是 LLVM C++ API 中的一个方法,它用于设置 Builder 的当前插入点(insertion point)。
+// 插入点决定了当使用 Builder 添加新的指令时,这些指令将被插入到哪里。
 func (p Function) NewBuilder() Builder {
 	prog := p.Prog
 	b := prog.ctx.NewBuilder()
@@ -282,10 +284,10 @@ func (p Function) HasBody() bool {
 
 // MakeBody 创建函数的nblk个基本块，以及创建一个新的Builder指向第一个基本块 #0
 func (p Function) MakeBody(nblk int) Builder {
-	p.MakeBlocks(nblk) // 为函数创建nblk个基本块
-	b := p.NewBuilder()
-	b.blk = p.blks[0]
-	b.impl.SetInsertPointAtEnd(b.blk.last)
+	p.MakeBlocks(nblk)                     // 为函数创建nblk个基本块
+	b := p.NewBuilder()                    // 创建一个Builder
+	b.blk = p.blks[0]                      //将 Builder 的当前基本块设置为刚刚创建的第一个基本块。
+	b.impl.SetInsertPointAtEnd(b.blk.last) //插入点决定了当使用 Builder 添加新的指令时,这些指令将被插入到哪里。
 	return b
 }
 

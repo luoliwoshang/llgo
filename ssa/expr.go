@@ -206,7 +206,7 @@ func (p Program) Val(v interface{}) Expr {
 	panic("todo")
 }
 
-// Const returns a constant expression.
+// 返回一个常量表达式
 func (b Builder) Const(v constant.Value, typ Type) Expr {
 	prog := b.Prog
 	if v == nil {
