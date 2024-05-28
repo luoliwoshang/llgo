@@ -215,7 +215,6 @@ func TestConst(t *testing.T) {
 	rets := types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Bool]))
 	sig := types.NewSignatureType(nil, nil, nil, nil, rets, false)
 	// 创建了一个签名：函数无参数非方法，返回一个bool类型
-
 	b := pkg.NewFunc("fn", sig, InGo).MakeBody(1)
 	// 创建一个函数，并且获得这个函数的Builder，指向了最后一个控制点的位置
 
