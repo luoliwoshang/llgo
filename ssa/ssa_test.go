@@ -534,6 +534,7 @@ _llgo_0:
 `)
 }
 
+// 测试基本program的原始类型是否能和go语言的类型对应
 func TestBasicType(t *testing.T) {
 	type typeInfo struct {
 		typ  Type
