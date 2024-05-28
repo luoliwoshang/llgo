@@ -172,9 +172,10 @@ func (b Builder) Return(results ...Expr) {
 	case 0:
 		b.impl.CreateRetVoid()
 	case 1:
-		raw := b.Func.raw.Type.(*types.Signature).Results().At(0).Type()
-		ret := checkExpr(results[0], raw, b)
-		b.impl.CreateRet(ret.impl)
+		raw := b.Func.raw.Type.(*types.Signature).Results().At(0).Type() // 获得原始的类型
+		ret := checkExpr(results[0], raw, b)                             // 获得LLVM表达式
+		b.impl.CreateRet(ret.impl)                                       // 创建返回指令
+		// 当调用 CreateRet 方法时,它会将 ret 指令添加到当前基本块的末尾。 b.blk.last
 	default:
 		tret := b.Func.raw.Type.(*types.Signature).Results()
 		b.impl.CreateAggregateRet(llvmParams(0, results, tret, b))
