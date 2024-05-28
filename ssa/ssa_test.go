@@ -465,6 +465,7 @@ _llgo_2:                                          ; preds = %_llgo_0
 `)
 }
 
+// 测试C情况下的printf函数
 func TestPrintf(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")

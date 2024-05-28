@@ -54,12 +54,12 @@ func (p Program) Type(typ types.Type, bg Background) Type {
 	return p.rawType(typ)
 }
 
-// 转换一个Go或者C的函数声明到原生类型
+// 转换一个Go或者C的函数声明到原生类型（函数的签名中的Recv会被处理到签名的第一个参数）
 func (p Program) FuncDecl(sig *types.Signature, bg Background) Type {
 	recv := sig.Recv()
 	if bg == InGo {
 		sig = p.gocvt.cvtFunc(sig, recv)
-	} else if recv != nil { // even in C, we need to add ctx for method
+	} else if recv != nil { //even in C, we need to add ctx for method
 		sig = FuncAddCtx(recv, sig)
 	}
 	return &aType{p.toLLVMFunc(sig), rawType{sig}, vkFuncDecl}
@@ -148,6 +148,7 @@ func (p goTypes) cvtClosure(sig *types.Signature) *types.Struct {
 // 转换函数类型到一个标准的函数类型
 func (p goTypes) cvtFunc(sig *types.Signature, recv *types.Var) (raw *types.Signature) {
 	if recv != nil {
+		// 移除接收者，将接收者作为签名的第一个参数
 		sig = FuncAddCtx(recv, sig)
 	}
 	// 转换这个类型中的参数和返回值为标准的元祖类型
@@ -257,6 +258,7 @@ func (p goTypes) cvtStruct(typ *types.Struct) (raw *types.Struct, cvt bool) {
 
 // -----------------------------------------------------------------------------
 
+// 将Recv作为函数签名的第一个参数，返回一个不带Recv的函数签名
 // FuncAddCtx adds a ctx to a function signature.
 func FuncAddCtx(ctx *types.Var, sig *types.Signature) *types.Signature {
 	tParams := sig.Params()

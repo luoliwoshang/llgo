@@ -201,7 +201,7 @@ func (p Package) NewFuncEx(name string, sig *types.Signature, bg Background, has
 	if debugInstr {
 		log.Println("NewFunc", name, t.raw.Type, "hasFreeVars:", hasFreeVars)
 	}
-	fn := llvm.AddFunction(p.mod, name, t.ll)
+	fn := llvm.AddFunction(p.mod, name, t.ll) // 为当前Package创建一个新的函数类型
 	ret := newFunction(fn, t, p, p.Prog, hasFreeVars)
 	p.fns[name] = ret
 	return ret
@@ -212,6 +212,7 @@ func (p Package) FuncOf(name string) Function {
 	return p.fns[name]
 }
 
+// 创建一个新的LLVM Function
 func newFunction(fn llvm.Value, t Type, pkg Package, prog Program, hasFreeVars bool) Function {
 	params, hasVArg := newParams(t, prog)
 	base := 0
@@ -228,6 +229,7 @@ func newFunction(fn llvm.Value, t Type, pkg Package, prog Program, hasFreeVars b
 	}
 }
 
+// 创建函数的参数
 func newParams(fn Type, prog Program) (params []Type, hasVArg bool) {
 	sig := fn.raw.Type.(*types.Signature)
 	in := sig.Params()
