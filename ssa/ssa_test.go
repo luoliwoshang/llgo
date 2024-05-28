@@ -310,6 +310,7 @@ _llgo_0:
 `)
 }
 
+// 测试函数参数（形参作为返回值）
 func TestFuncParam(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
@@ -319,7 +320,7 @@ func TestFuncParam(t *testing.T) {
 	rets := types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int]))
 	sig := types.NewSignatureType(nil, nil, nil, params, rets, false)
 	fn := pkg.NewFunc("fn", sig, InGo)
-	fn.MakeBody(1).Return(fn.Param(0))
+	fn.MakeBody(1).Return(fn.Param(0)) // 使用函数的第一个形参，作为返回值
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 
