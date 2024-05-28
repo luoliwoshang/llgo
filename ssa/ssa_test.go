@@ -217,7 +217,6 @@ func TestConst(t *testing.T) {
 	// 创建了一个签名：函数无参数非方法，返回一个bool类型
 	b := pkg.NewFunc("fn", sig, InGo).MakeBody(1)
 	// 创建一个函数，并且获得这个函数的Builder，指向了最后一个控制点的位置
-
 	b.Return(b.Const(constant.MakeBool(true), prog.Bool()))
 	// 在当前这个Function的Builder指向的基本块最后插入一个返回表达
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
