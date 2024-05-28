@@ -369,19 +369,26 @@ _llgo_0:
 `)
 }
 
+// 测试多返回值的函数
 func TestFuncMultiRet(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
 	params := types.NewTuple(
-		types.NewVar(0, nil, "b", types.Typ[types.Float64]))
+		types.NewVar(0, nil, "b", types.Typ[types.Float64])) // b Float64
 	rets := types.NewTuple(
-		types.NewVar(0, nil, "c", types.Typ[types.Int]),
-		types.NewVar(0, nil, "d", types.Typ[types.Float64]))
+		types.NewVar(0, nil, "c", types.Typ[types.Int]),     // c Int
+		types.NewVar(0, nil, "d", types.Typ[types.Float64])) // d Float64
 	sig := types.NewSignatureType(nil, nil, nil, params, rets, false)
 	a := pkg.NewVar("a", types.NewPointer(types.Typ[types.Int]), InGo)
 	fn := pkg.NewFunc("fn", sig, InGo)
+
 	b := fn.MakeBody(1)
-	b.Return(a.Expr, fn.Param(0))
+	b.Return(a.Expr, fn.Param(0)) // 返回多个内容
+	// 多个返回值会被表示为一个结构体类型
+	// %mrv = insertvalue { i64, double } { ptr @a, double poison }, double %0, 1
+	// insertvalue { i64, double } 表述了这个结构体的返回值
+	// { ptr @a, double poison } 表示了结构体字面量
+	// double %0, 1 这行代码将输入参数 %0(也就是函数的 double 类型参数)插入到上述结构体的第二个位置(索引 1)。
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 

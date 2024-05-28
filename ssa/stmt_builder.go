@@ -170,15 +170,15 @@ func (b Builder) Return(results ...Expr) {
 	}
 	switch n := len(results); n {
 	case 0:
-		b.impl.CreateRetVoid()
+		b.impl.CreateRetVoid() // 没有返回值
 	case 1:
 		raw := b.Func.raw.Type.(*types.Signature).Results().At(0).Type() // 获得原始的类型
 		ret := checkExpr(results[0], raw, b)                             // 获得LLVM表达式
 		b.impl.CreateRet(ret.impl)                                       // 创建返回指令
 		// 当调用 CreateRet 方法时,它会将 ret 指令添加到当前基本块的末尾。 b.blk.last
-	default:
-		tret := b.Func.raw.Type.(*types.Signature).Results()
-		b.impl.CreateAggregateRet(llvmParams(0, results, tret, b))
+	default: // 多个返回值
+		tret := b.Func.raw.Type.(*types.Signature).Results()       // 返回值是个元组，其中包含了函数的多个返回值
+		b.impl.CreateAggregateRet(llvmParams(0, results, tret, b)) // 创建一个聚合返回指令
 	}
 }
 
