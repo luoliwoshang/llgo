@@ -186,6 +186,7 @@ func TestPyFunc(t *testing.T) {
 	}
 }
 
+// 测试一个全局变量
 func TestVar(t *testing.T) {
 	prog := NewProgram(nil) // 创建一个新的LLVM程序
 	pkg := prog.NewPackage("bar", "foo/bar")
@@ -207,6 +208,7 @@ source_filename = "foo/bar"
 `)
 }
 
+// 测试一个函数是否能生成预期的函数IR
 func TestConst(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
