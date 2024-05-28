@@ -481,6 +481,7 @@ declare i32 @printf(ptr, ...)
 `)
 }
 
+// 测试二元表达式的相加（+）
 func TestBinOp(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")

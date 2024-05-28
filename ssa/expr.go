@@ -387,7 +387,7 @@ func isPredOp(op token.Token) bool {
 	return op >= predOpBase && op <= predOpLast
 }
 
-// 返回二元表达式
+// 创建一个二元表达式
 // The BinOp instruction yields the result of binary operation (x op y).
 // op can be:
 // ADD SUB MUL QUO REM          + - * / %
