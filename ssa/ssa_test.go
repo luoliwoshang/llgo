@@ -268,12 +268,13 @@ source_filename = "foo/bar"
 `)
 }
 
+// 测试不带函数体的函数（声明）
 func TestDeclFunc(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
 	params := types.NewTuple(types.NewVar(0, nil, "a", types.Typ[types.Int]))
 	sig := types.NewSignatureType(nil, nil, nil, params, nil, false)
-	pkg.NewFunc("fn", sig, InGo)
+	pkg.NewFunc("fn", sig, InGo).MakeBody(1)
 	if pkg.FuncOf("fn") == nil { // 从p.fns中获得函数
 		t.Fatal("FuncOf failed")
 	}
@@ -288,6 +289,7 @@ declare void @fn(i64)
 `)
 }
 
+// 测试带返回，带参数的函数
 func TestBasicFunc(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
