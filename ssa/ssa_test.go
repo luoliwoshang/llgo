@@ -331,6 +331,7 @@ _llgo_0:
 `)
 }
 
+// 测试函数调用
 func TestFuncCall(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
@@ -346,8 +347,12 @@ func TestFuncCall(t *testing.T) {
 
 	b := pkg.NewFunc("main", NoArgsNoRet, InGo).MakeBody(1)
 	b.Call(fn.Expr, prog.Val(1), prog.Val(1.2))
-	b.Return()
+	b.Return() // 在当前基本块执行一个空的返回  -》 ret void
 
+	// %0 = call i64 @fn(i64 1, double 1.200000e+00)
+	// @fn: 这是被调用函数的名称。前面的 @ 符号表示这是一个全局函数。
+	// (i64 1, double 1.200000e+00): 这是函数的参数列表。第一个参数是 64 位整数 1,第二个参数是 64 位浮点数 1.2。
+	// i64: 这是函数返回值的类型,在这里是 64 位整数。
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 
