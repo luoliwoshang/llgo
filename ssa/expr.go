@@ -387,6 +387,7 @@ func isPredOp(op token.Token) bool {
 	return op >= predOpBase && op <= predOpLast
 }
 
+// 返回二元表达式
 // The BinOp instruction yields the result of binary operation (x op y).
 // op can be:
 // ADD SUB MUL QUO REM          + - * / %
@@ -495,7 +496,7 @@ func (b Builder) BinOp(op token.Token, x, y Expr) Expr {
 		kind := x.kind
 		switch kind {
 		case vkSigned:
-			pred := intPredOpToLLVM[op-predOpBase]
+			pred := intPredOpToLLVM[op-predOpBase] // 获得对应的LLVM操作符
 			return Expr{llvm.CreateICmp(b.impl, pred, x.impl, y.impl), tret}
 		case vkUnsigned, vkPtr:
 			pred := uintPredOpToLLVM[op-predOpBase]

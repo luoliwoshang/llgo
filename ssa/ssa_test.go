@@ -419,23 +419,35 @@ _llgo_0:
 `)
 }
 
+// 测试基础的IF ELSE
 func TestIf(t *testing.T) {
 	prog := NewProgram(nil)
 	pkg := prog.NewPackage("bar", "foo/bar")
 	params := types.NewTuple(types.NewVar(0, nil, "a", types.Typ[types.Int]))
 	rets := types.NewTuple(types.NewVar(0, nil, "", types.Typ[types.Int]))
 	sig := types.NewSignatureType(nil, nil, nil, params, rets, false)
-	fn := pkg.NewFunc("fn", sig, InGo)
-	b := fn.MakeBody(3)
-	iftrue := fn.Block(1)
-	iffalse := fn.Block(2)
+	fn := pkg.NewFunc("fn", sig, InGo) // 创建一个基础的函数 func (a int) int {}
+	b := fn.MakeBody(3)                // 创建三个基本块，获得该函数的Builder
+	iftrue := fn.Block(1)              // 获得第二个块
+	iffalse := fn.Block(2)             // 获得第三个块
 	if iftrue.Index() != 1 || iftrue.Parent() != fn {
 		t.Fatal("iftrue")
 	}
+
+	// token.GTR ->  > 这个表示构建一个大于的比较 用函数的第一个参数和0进行对比
 	cond := b.BinOp(token.GTR, fn.Param(0), prog.Val(0))
-	b.If(cond, iftrue, iffalse)
-	b.SetBlock(iftrue).Return(prog.Val(1))
-	b.SetBlock(iffalse).Return(prog.Val(0))
+	b.If(cond, iftrue, iffalse)             //在当前基本块上（0）创建一个if语句，如果cond为真，则跳转到iftrue对应的块，否则跳转到iffalse对应的块
+	b.SetBlock(iftrue).Return(prog.Val(1))  // 将true情况下的块，作为当前Builder指向的块，为其添加返回的指令
+	b.SetBlock(iffalse).Return(prog.Val(0)) //将false情况下的块，作为当前Builder指向的块，为其添加返回的指令
+
+	// icmp (Integer Comparison) 整数类型比较
+	// sgt (Signed Greater Than) 有符号大于
+	// %1 = icmp sgt i64 %0, 0 将比较 %0 和 0 大小的结果存储到 %1 中
+
+	// br是一个判断语句，如果%1为true，则执行abel %_llgo_1，否则执行label %_llgo_2
+	// br i1 %1, label %_llgo_1, label %_llgo_2
+
+	// ; preds = %_llgo_0 是注释，表示上一个基本块
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 

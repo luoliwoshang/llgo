@@ -77,7 +77,7 @@ func (b Builder) Dispose() {
 	b.impl.Dispose()
 }
 
-// SetBlock means SetBlockEx(blk, AtEnd, true).
+// 为Builder设置当前的基本块 （SetBlock means SetBlockEx(blk, AtEnd, true).）
 func (b Builder) SetBlock(blk BasicBlock) Builder {
 	if debugInstr {
 		log.Printf("Block _llgo_%v:\n", blk.idx)
@@ -110,6 +110,7 @@ const (
 	afterInit
 )
 
+// 将传入的基本块设置为当前的基本块，并将插入点设置为基本块的末尾，builder后再执行指令，即会在该基本块后插入
 // SetBlockEx sets blk as current basic block and pos as its insert point.
 func (b Builder) SetBlockEx(blk BasicBlock, pos InsertPoint, setBlk bool) {
 	if b.Func != blk.fn {
