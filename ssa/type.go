@@ -228,6 +228,7 @@ func (p Program) Field(typ Type, i int) Type {
 	return p.rawType(fld.Type())
 }
 
+// 根据原始类型获得LLVM类型
 func (p Program) rawType(raw types.Type) Type {
 	// 如果在类型缓存中，则直接返回
 	if v := p.typs.At(raw); v != nil {
@@ -360,7 +361,7 @@ func (p Program) toType(raw types.Type) Type {
 	case *types.Map:
 		return &aType{p.rtMap(), typ, vkMap}
 	case *types.Struct:
-		ll, kind := p.toLLVMStruct(t)
+		ll, kind := p.toLLVMStruct(t) // 直接转换为LLVM结构体类型
 		return &aType{ll, typ, kind}
 	case *types.Named:
 		return p.toNamed(t)

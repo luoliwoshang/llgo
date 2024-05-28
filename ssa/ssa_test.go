@@ -232,9 +232,9 @@ _llgo_0:
 }
 
 func TestStruct(t *testing.T) {
-	empty := types.NewStruct(nil, nil)
+	empty := types.NewStruct(nil, nil) // 创建一个空的结构体
 
-	prog := NewProgram(nil)
+	prog := NewProgram(nil) // 创建一个新的LLVM程序
 	pkg := prog.NewPackage("bar", "foo/bar")
 	pkg.NewVar("a", types.NewPointer(empty), InGo)
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'

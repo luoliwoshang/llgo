@@ -67,7 +67,7 @@ type aGlobal struct {
 // variable.
 type Global = *aGlobal
 
-// NewVar creates a new global variable.
+// NewVar 创建一个新的全局变量
 func (p Package) NewVar(name string, typ types.Type, bg Background) Global {
 	// bg: InGo, InC
 	if v, ok := p.vars[name]; ok {
@@ -87,6 +87,7 @@ func (p Package) NewVarEx(name string, t Type) Global {
 	return p.doNewVar(name, t)
 }
 
+// 创建一个全局变量，并且存放于package的vars中
 func (p Package) doNewVar(name string, t Type) Global {
 	typ := p.Prog.Elem(t).ll
 	gbl := llvm.AddGlobal(p.mod, typ, name)

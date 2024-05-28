@@ -228,6 +228,7 @@ func (p goTypes) cvtInterface(typ *types.Interface) (raw *types.Interface, cvt b
 	return typ, false
 }
 
+// 递归的去转换结构体类型
 func (p goTypes) cvtStruct(typ *types.Struct) (raw *types.Struct, cvt bool) {
 	if v, ok := p.typs[unsafe.Pointer(typ)]; ok {
 		raw = (*types.Struct)(v)
