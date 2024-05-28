@@ -207,7 +207,7 @@ func (p Package) NewFuncEx(name string, sig *types.Signature, bg Background, has
 	return ret
 }
 
-// FuncOf returns a function by name.
+// 通过名称获得函数，p.fns[name]
 func (p Package) FuncOf(name string) Function {
 	return p.fns[name]
 }

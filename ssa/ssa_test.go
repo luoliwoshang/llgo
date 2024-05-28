@@ -231,6 +231,7 @@ _llgo_0:
 `)
 }
 
+// 测试匿名结构体
 func TestStruct(t *testing.T) {
 	empty := types.NewStruct(nil, nil) // 创建一个空的结构体
 
@@ -247,6 +248,7 @@ source_filename = "foo/bar"
 	}
 }
 
+// 测试结构体类型
 func TestNamedStruct(t *testing.T) {
 	src := types.NewPackage("bar", "foo/bar")
 	empty := types.NewNamed(types.NewTypeName(0, src, "Empty", nil), types.NewStruct(nil, nil), nil)
@@ -272,9 +274,10 @@ func TestDeclFunc(t *testing.T) {
 	params := types.NewTuple(types.NewVar(0, nil, "a", types.Typ[types.Int]))
 	sig := types.NewSignatureType(nil, nil, nil, params, nil, false)
 	pkg.NewFunc("fn", sig, InGo)
-	if pkg.FuncOf("fn") == nil {
+	if pkg.FuncOf("fn") == nil { // 从p.fns中获得函数
 		t.Fatal("FuncOf failed")
 	}
+	// 以上的签名经过处理之后，获得其实际的类型应该是 Void
 	if prog.retType(sig) != prog.Void() {
 		t.Fatal("retType failed")
 	}
