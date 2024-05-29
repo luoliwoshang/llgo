@@ -97,7 +97,7 @@ type context struct {
 	patches  Patches
 	blkInfos []blocks.Info
 
-	inits []func()
+	inits []func() // 存储初始化函数
 	phis  []func()
 
 	state   pkgState
@@ -225,7 +225,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		}
 		fn = pkg.NewFuncEx(name, sig, llssa.Background(ftype), hasCtx)
 	}
-
+	// 对于存在函数体的函数，进行编译
 	if nblk := len(f.Blocks); nblk > 0 {
 		fn.MakeBlocks(nblk)   // to set fn.HasBody() = true
 		if f.Recover != nil { // set recover block
@@ -244,7 +244,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			if debugInstr {
 				log.Println("==> FuncBody", name)
 			}
-			b := fn.NewBuilder()
+			b := fn.NewBuilder() // 创建一个函数的构建器
 			p.bvals = make(map[ssa.Value]llssa.Expr)
 			off := make([]int, len(f.Blocks))
 			for i, block := range f.Blocks {
