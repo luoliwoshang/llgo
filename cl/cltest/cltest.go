@@ -49,6 +49,12 @@ func InitDebug() {
 	llssa.SetDebug(llssa.DbgFlagAll)
 }
 
+func FromFolder(t *testing.T, name string, pkgDir string, byLLGen bool) {
+	t.Run(name, func(t *testing.T) {
+		testFrom(t, pkgDir, "", byLLGen)
+	})
+}
+
 func FromDir(t *testing.T, sel, relDir string, byLLGen bool) {
 	dir, err := os.Getwd()
 	if err != nil {

@@ -27,6 +27,10 @@ import (
 	"github.com/goplus/llgo/ssa"
 )
 
+func TestApkg(t *testing.T) {
+	cltest.FromFolder(t, "apkg", "./_testdata/apkg", false)
+}
+
 func testCompile(t *testing.T, src, expected string) {
 	t.Helper()
 	cltest.TestCompileEx(t, src, "foo.go", expected)
