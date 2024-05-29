@@ -305,9 +305,9 @@ func (p Program) tyComplex128() llvm.Type {
 	return p.c128Type
 }
 
-// NewPackage creates a new package.
+// 创建一个新的包，初始化一些默认配置
 func (p Program) NewPackage(name, pkgPath string) Package {
-	mod := p.ctx.NewModule(pkgPath)
+	mod := p.ctx.NewModule(pkgPath) // 初始化一个LLVM Module
 	// TODO(xsw): Finalize may cause panic, so comment it.
 	// mod.Finalize()
 	gbls := make(map[string]Global)
