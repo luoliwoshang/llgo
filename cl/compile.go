@@ -238,18 +238,18 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			defer func() {
 				p.fn = nil
 			}()
-			p.phis = nil
+			p.phis = nil // TODO: 不清楚这是什么
 			if debugGoSSA {
 				f.WriteTo(os.Stderr)
 			}
 			if debugInstr {
 				log.Println("==> FuncBody", name)
 			}
-			b := fn.NewBuilder() // 创建一个函数的构建器
-			p.bvals = make(map[ssa.Value]llssa.Expr)
-			off := make([]int, len(f.Blocks))
-			for i, block := range f.Blocks {
-				off[i] = p.compilePhis(b, block)
+			b := fn.NewBuilder()                     // 创建一个函数的构建器
+			p.bvals = make(map[ssa.Value]llssa.Expr) // TODO: 不清楚这是为什么
+			off := make([]int, len(f.Blocks))        // 获得原始函数基本块数量
+			for i, block := range f.Blocks {         //将每一个基本块的Phi指令都进行编译
+				off[i] = p.compilePhis(b, block) // 获得每个基本块的Phi指令的数量
 			}
 			p.blkInfos = blocks.Infos(f.Blocks)
 			i := 0
@@ -262,7 +262,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 					break
 				}
 			}
-			for _, phi := range p.phis {
+			for _, phi := range p.phis { // TODO: 执行phi指令
 				phi()
 			}
 			b.EndBuild()
