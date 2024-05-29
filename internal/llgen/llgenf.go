@@ -81,7 +81,7 @@ func GenFrom(fileOrPkg string) string {
 		ssaPkg.WriteTo(os.Stderr)
 	}
 
-	ret, err := cl.NewPackage(prog, ssaPkg, pkg.Syntax)
+	ret, err := cl.NewPackage(prog, ssaPkg, pkg.Syntax) // 生成LLVM IR
 	check(err)
 
 	if prog.NeedPyInit { // call PyInit if needed
