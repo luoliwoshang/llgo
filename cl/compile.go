@@ -759,7 +759,7 @@ func NewPackageEx(prog llssa.Program, patches Patches, pkg *ssa.Package, files [
 	if pkgPath == llssa.PkgRuntime {
 		prog.SetRuntime(pkgTypes)
 	}
-	ret = prog.NewPackage(pkgName, pkgPath)
+	ret = prog.NewPackage(pkgName, pkgPath) //初始化
 
 	ctx := &context{
 		prog:    prog,
@@ -828,6 +828,8 @@ func processPkg(ctx *context, ret llssa.Package, pkg *ssa.Package) {
 		member := m.val
 		switch member := member.(type) {
 		case *ssa.Function:
+			// TypeParams 是泛型函数定义中声明的类型参数，TypeArgs是调用泛型函数时传递的类型参数
+			// 暂时不处理这种情况
 			if member.TypeParams() != nil || member.TypeArgs() != nil {
 				// TODO(xsw): don't compile generic functions
 				// Do not try to build generic (non-instantiated) functions.
