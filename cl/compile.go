@@ -178,6 +178,7 @@ var (
 	argvTy = types.NewPointer(types.NewPointer(types.Typ[types.Int8]))
 )
 
+// 将ssa.Function编译为llssa.Function，在p.Inits中注册 编译该函数基本块的函数
 func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Function, llssa.PyObjRef, int) {
 	pkgTypes, name, ftype := p.funcName(f, true) // ftype:inGo inC
 	if ftype != goFunc {
