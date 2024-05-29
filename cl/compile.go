@@ -179,7 +179,7 @@ var (
 )
 
 func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Function, llssa.PyObjRef, int) {
-	pkgTypes, name, ftype := p.funcName(f, true)
+	pkgTypes, name, ftype := p.funcName(f, true) // ftype:inGo inC
 	if ftype != goFunc {
 		/*
 			if ftype == pyFunc {
@@ -742,13 +742,21 @@ type Patches = map[string]*ssa.Package
 
 // NewPackage compiles a Go package to LLVM IR package.
 func NewPackage(prog llssa.Program, pkg *ssa.Package, files []*ast.File) (ret llssa.Package, err error) {
-	return NewPackageEx(prog, nil, pkg, files)
-}
+	type namedMember struct {
+		name string
+		val  ssa.Member
+	}
+	// pkg.Members 存放了所有的包级别的变量和函数
+	members := make([]*namedMember, 0, len(pkg.Members))
+	for name, v := range pkg.Members {
+		members = append(members, &namedMember{name, v})
+	}
+	sort.Slice(members, func(i, j int) bool {
+		return members[i].name < members[j].name
+	})
 
-// NewPackageEx compiles a Go package to LLVM IR package.
-func NewPackageEx(prog llssa.Program, patches Patches, pkg *ssa.Package, files []*ast.File) (ret llssa.Package, err error) {
-	pkgProg := pkg.Prog
-	pkgTypes := pkg.Pkg
+	pkgProg := pkg.Prog // 正在分析的go程序
+	pkgTypes := pkg.Pkg // 包中的package类型信息
 	pkgName, pkgPath := pkgTypes.Name(), llssa.PathOf(pkgTypes)
 	alt, hasPatch := patches[pkgPath]
 	if hasPatch {
