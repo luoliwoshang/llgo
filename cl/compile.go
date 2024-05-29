@@ -274,6 +274,73 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 	return fn, nil, goFunc
 }
 
+type blockInfo struct {
+	kind llssa.DoAction
+	next int
+}
+
+func blockInfos(blks []*ssa.BasicBlock) []blockInfo {
+	n := len(blks)
+	infos := make([]blockInfo, n)
+	for i := range blks {
+		next := i + 1
+		if next >= n {
+			next = -1
+		}
+		infos[i] = blockInfo{kind: llssa.DeferInCond, next: next}
+	}
+	return infos
+}
+
+// funcOf returns a function by name and set ftype = goFunc, cFunc, etc.
+// or returns nil and set ftype = llgoCstr, llgoAlloca, llgoUnreachable, etc.
+func (p *context) funcOf(fn *ssa.Function) (aFn llssa.Function, pyFn llssa.PyObjRef, ftype int) {
+	pkgTypes, name, ftype := p.funcName(fn, false)
+	switch ftype {
+	case pyFunc:
+		if kind, mod := pkgKindByScope(pkgTypes.Scope()); kind == PkgPyModule {
+			pkg := p.pkg
+			fnName := pysymPrefix + mod + "." + name
+			if pyFn = pkg.PyObjOf(fnName); pyFn == nil {
+				pyFn = pkg.PyNewFunc(fnName, fn.Signature, true)
+			}
+			return
+		}
+		ftype = ignoredFunc
+	case llgoInstr:
+		switch name {
+		case "cstr":
+			ftype = llgoCstr
+		case "advance":
+			ftype = llgoAdvance
+		case "index":
+			ftype = llgoIndex
+		case "alloca":
+			ftype = llgoAlloca
+		case "allocaCStr":
+			ftype = llgoAllocaCStr
+		case "stringData":
+			ftype = llgoStringData
+		case "pyList":
+			ftype = llgoPyList
+		case "unreachable":
+			ftype = llgoUnreachable
+		default:
+			panic("unknown llgo instruction: " + name)
+		}
+	default:
+		pkg := p.pkg
+		if aFn = pkg.FuncOf(name); aFn == nil {
+			if len(fn.FreeVars) > 0 {
+				return nil, nil, ignoredFunc
+			}
+			sig := fn.Signature
+			aFn = pkg.NewFuncEx(name, sig, llssa.Background(ftype), false)
+		}
+	}
+	return
+}
+
 func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, doMainInit, doModInit bool) llssa.BasicBlock {
 	var last int
 	var pyModInit bool
