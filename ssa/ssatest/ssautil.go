@@ -32,7 +32,8 @@ func NewProgram(t *testing.T, target *ssa.Target) ssa.Program {
 }
 
 func NewProgramEx(t *testing.T, target *ssa.Target, imp types.Importer) ssa.Program {
-	prog := ssa.NewProgram(target)
+	prog := ssa.NewProgram(target) // 设置一个ssa解析程序
+	//  设置一些必要的运行时环境的包
 	prog.SetRuntime(func() *types.Package {
 		rt, err := imp.Import(ssa.PkgRuntime)
 		if err != nil {

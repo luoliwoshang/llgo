@@ -284,7 +284,7 @@ func (p Function) NewBuilder() Builder {
 	return &aBuilder{b, nil, p, p.Pkg, prog}
 }
 
-// HasBody reports whether the function has a body.
+// 是否存在函数体
 func (p Function) HasBody() bool {
 	return len(p.blks) > 0
 }
@@ -331,12 +331,12 @@ func (p Function) addBlock(idx int) BasicBlock {
 	return ret
 }
 
-// MakeBlock creates a new basic block for the function.
+// 创建一个新的基本块
 func (p Function) MakeBlock() BasicBlock {
 	return p.addBlock(len(p.blks))
 }
 
-// Block returns the ith basic block of the function.
+// 返回这个函数指定索引的基本块
 func (p Function) Block(idx int) BasicBlock {
 	return p.blks[idx]
 }

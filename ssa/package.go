@@ -105,7 +105,7 @@ type aProgram struct {
 	gocvt goTypes
 
 	rt    *types.Package
-	rtget func() *types.Package
+	rtget func() *types.Package // 以匿名函数定义的运行时
 
 	py    *types.Package
 	pyget func() *types.Package
@@ -190,7 +190,7 @@ type aProgram struct {
 
 	ptrSize int
 
-	NeedRuntime bool
+	NeedRuntime bool // 是否需要运行时
 	NeedPyInit  bool
 	is32Bits    bool
 }
@@ -198,7 +198,7 @@ type aProgram struct {
 // A Program presents a program.
 type Program = *aProgram
 
-// NewProgram creates a new program.
+// 创建一个新的LLVM编译程序
 func NewProgram(target *Target) Program {
 	if target == nil {
 		target = &Target{}
@@ -236,7 +236,7 @@ func (p Program) SetRuntime(runtime any) {
 
 func (p Program) runtime() *types.Package {
 	if p.rt == nil {
-		p.rt = p.rtget()
+		p.rt = p.rtget() // 设置运行时
 	}
 	p.NeedRuntime = true
 	return p.rt
@@ -628,7 +628,7 @@ func (p Package) Path() string {
 	return p.abi.Pkg
 }
 
-// String returns a string representation of the package.
+// 为当前包转换为IR表达（String returns a string representation of the package.）
 func (p Package) String() string {
 	return p.mod.String()
 }

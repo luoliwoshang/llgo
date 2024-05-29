@@ -59,6 +59,7 @@ func initRtAndPy(prog llssa.Program, cfg *packages.Config) {
 	})
 }
 
+// 生成IR
 func GenFrom(fileOrPkg string) string {
 	prog := llssa.NewProgram(nil)
 
