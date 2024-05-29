@@ -341,6 +341,7 @@ func (p *context) funcOf(fn *ssa.Function) (aFn llssa.Function, pyFn llssa.PyObj
 	return
 }
 
+// 编译函数的某个基本块，对块中的每一个指令进行编译
 func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, doMainInit, doModInit bool) llssa.BasicBlock {
 	var last int
 	var pyModInit bool
@@ -662,13 +663,14 @@ func (p *context) jumpTo(v *ssa.Jump) llssa.BasicBlock {
 	return fn.Block(succs[0].Index)
 }
 
+// 编译函数中的某个基本块中的指定指令
 func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	if iv, ok := instr.(instrOrValue); ok {
 		p.compileInstrOrValue(b, iv, false)
 		return
 	}
 	switch v := instr.(type) {
-	case *ssa.Store:
+	case *ssa.Store: //存储指令
 		va := v.Addr
 		if va, ok := va.(*ssa.IndexAddr); ok {
 			if args, ok := p.isVArgs(va.X); ok { // varargs: this is a varargs store
