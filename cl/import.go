@@ -178,7 +178,7 @@ func (p *context) initFiles(pkgPath string, files []*ast.File) {
 		for _, decl := range file.Decls {
 			switch decl := decl.(type) {
 			case *ast.FuncDecl:
-				fullName, inPkgName := astFuncName(pkgPath, decl)
+				fullName, inPkgName := astFuncName(pkgPath, decl) // 获得包级别的函数名以及函数名 apkg.Max && Max
 				p.initLinknameByDoc(decl.Doc, fullName, inPkgName, false)
 			case *ast.GenDecl:
 				switch decl.Tok {
@@ -299,6 +299,7 @@ func trecvTypeName(t ast.Expr, indices ...ast.Expr) string {
 	return t.(*ast.Ident).Name
 }
 
+// 获得带包名的函数/方法名
 // inPkgName:
 // - func: name
 // - method: T.name, (*T).name
@@ -412,6 +413,7 @@ const (
 	llgoAtomicOpLast = llgoAtomicOpBase + int(llssa.OpUMin)
 )
 
+// 用于获得完整的函数名，带上包，比如apkg下定义了一个Max函数，那么就会获得apkg.Max，对于内置函数，不返回pkg
 func (p *context) funcName(fn *ssa.Function, ignore bool) (*types.Package, string, int) {
 	var pkg *types.Package
 	var orgName string
@@ -421,12 +423,12 @@ func (p *context) funcName(fn *ssa.Function, ignore bool) (*types.Package, strin
 		orgName = funcName(pkg, origin)
 	} else {
 		if fnPkg := fn.Pkg; fnPkg != nil {
-			pkg = fnPkg.Pkg
+			pkg = fnPkg.Pkg // 如果这个函数的包不为空，则使用函数的pkg
 		} else {
 			pkg = p.goTyps
 		}
-		p.ensureLoaded(pkg)
-		orgName = funcName(pkg, fn)
+		p.ensureLoaded(pkg)         // 确保该包已经加载
+		orgName = funcName(pkg, fn) // 获得函数名
 		if ignore && ignoreName(orgName) || checkCgo(fn.Name()) {
 			return nil, orgName, ignoredFunc
 		}
