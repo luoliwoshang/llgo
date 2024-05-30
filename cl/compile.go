@@ -665,7 +665,7 @@ func (p *context) jumpTo(v *ssa.Jump) llssa.BasicBlock {
 
 // 编译函数中的某个基本块中的指定指令
 func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
-	if iv, ok := instr.(instrOrValue); ok {
+	if iv, ok := instr.(instrOrValue); ok { //TODO: BinOp符合这个条件
 		p.compileInstrOrValue(b, iv, false)
 		return
 	}
@@ -703,12 +703,12 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		}
 		b.Return(results...)
 	case *ssa.If:
-		fn := p.fn
-		cond := p.compileValue(b, v.Cond)
-		succs := v.Block().Succs
-		thenb := fn.Block(succs[0].Index)
-		elseb := fn.Block(succs[1].Index)
-		b.If(cond, thenb, elseb)
+		fn := p.fn                        //获得当前正在处理的LLVM func
+		cond := p.compileValue(b, v.Cond) //获得条件表达式的结果的类型
+		succs := v.Block().Succs          //获得这个指令对应的基本块的if true 和 else的基本块
+		thenb := fn.Block(succs[0].Index) //获得if true的基本块
+		elseb := fn.Block(succs[1].Index) // 获得else的基本块
+		b.If(cond, thenb, elseb)          // 为该基本块创建对应的IF指令，此时仅仅构建了对应的块的IF跳转指令，对应块中还未生成对应的指令
 	case *ssa.MapUpdate:
 		m := p.compileValue(b, v.Map)
 		key := p.compileValue(b, v.Key)
