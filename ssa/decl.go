@@ -250,7 +250,7 @@ func (p Function) Name() string {
 	return p.impl.Name()
 }
 
-// Params returns the function's ith parameter.
+// 返回指定索引的参数表达式 Params returns the function's ith parameter.
 func (p Function) Param(i int) Expr {
 	i += p.base // skip if hasFreeVars
 	return Expr{p.impl.Param(i), p.params[i]}

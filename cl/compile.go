@@ -694,7 +694,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		if n := len(v.Results); n > 0 {
 			results = make([]llssa.Expr, n)
 			for i, r := range v.Results {
-				results[i] = p.compileValue(b, r)
+				results[i] = p.compileValue(b, r) // 如果返回内容的某个参数为函数形参的某一个，那么该项就会是形参的表达
 			}
 		}
 		if p.inMain(instr) {
@@ -745,11 +745,11 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 		return p.compileInstrOrValue(b, iv, true)
 	}
 	switch v := v.(type) {
-	case *ssa.Parameter:
-		fn := v.Parent()
+	case *ssa.Parameter: //函数的返回值和形参都为该类型
+		fn := v.Parent() // 获得参数对应的Func
 		for idx, param := range fn.Params {
 			if param == v {
-				return p.fn.Param(idx)
+				return p.fn.Param(idx) // 如果某个返回值正好与函数的形参对应，那么返回该形参（保证引用）
 			}
 		}
 	case *ssa.Function:
