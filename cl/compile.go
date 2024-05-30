@@ -216,13 +216,13 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		}
 	}
 	if fn == nil {
-		if name == "main" {
-			argc := types.NewParam(token.NoPos, pkgTypes, "", types.Typ[types.Int32])
-			argv := types.NewParam(token.NoPos, pkgTypes, "", argvTy)
+		if name == "main" { // 对main包的main函数进行处理，添加对c的命令行参数接受
+			argc := types.NewParam(token.NoPos, pkgTypes, "", types.Typ[types.Int32]) // c:argc：命令行参数
+			argv := types.NewParam(token.NoPos, pkgTypes, "", argvTy)                 // c:argv 命令行参数数组，第一项是程序名（还未确定）
 			params := types.NewTuple(argc, argv)
-			ret := types.NewParam(token.NoPos, pkgTypes, "", p.prog.CInt().RawType())
+			ret := types.NewParam(token.NoPos, pkgTypes, "", p.prog.CInt().RawType()) // c语言中main函数的返回值
 			results := types.NewTuple(ret)
-			sig = types.NewSignatureType(nil, nil, nil, params, results, false)
+			sig = types.NewSignatureType(nil, nil, nil, params, results, false) // 生成函数签名
 		}
 		fn = pkg.NewFuncEx(name, sig, llssa.Background(ftype), hasCtx)
 	}

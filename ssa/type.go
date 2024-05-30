@@ -517,7 +517,7 @@ func PathOf(pkg *types.Package) string {
 	return abi.PathOf(pkg)
 }
 
-// FuncName:
+// 返回函数的完整名称，对于main包下的main函数，只返回一个main | FuncName:
 // - func: pkg.name
 // - method: pkg.T.name, pkg.(*T).name
 func FuncName(pkg *types.Package, name string, recv *types.Var) string {

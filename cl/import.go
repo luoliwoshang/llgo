@@ -337,7 +337,7 @@ func typesFuncName(pkgPath string, fn *types.Func) (fullName, inPkgName string) 
 	return pkgPath + "." + name, name
 }
 
-// TODO(xsw): may can use typesFuncName
+// 返回函数的完整名称，对于main包下的main函数
 // fullName:
 // - func: pkg.name
 // - method: pkg.(T).name, pkg.(*T).name
@@ -414,6 +414,7 @@ const (
 )
 
 // 用于获得完整的函数名，带上包，比如apkg下定义了一个Max函数，那么就会获得apkg.Max，对于内置函数，不返回pkg
+// 对于main包下的main函数，只返回一个main
 func (p *context) funcName(fn *ssa.Function, ignore bool) (*types.Package, string, int) {
 	var pkg *types.Package
 	var orgName string
