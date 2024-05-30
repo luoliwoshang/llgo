@@ -185,7 +185,7 @@ func PathOf(pkg *types.Package) string {
 	return strings.TrimPrefix(pkg.Path(), PatchPathPrefix)
 }
 
-// FullName returns the full name of a package member.
+// (为包级别的变量返回完整的名称) FullName returns the full name of a package member.
 func FullName(pkg *types.Package, name string) string {
 	if pkg == nil {
 		return name

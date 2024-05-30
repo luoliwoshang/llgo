@@ -507,7 +507,7 @@ func NameOf(typ *types.Named) string {
 	return name
 }
 
-// FullName returns the full name of a package member.
+// (返回包级别的成员) FullName returns the full name of a package member.
 func FullName(pkg *types.Package, name string) string {
 	return abi.FullName(pkg, name)
 }

@@ -135,7 +135,7 @@ func testFrom(t *testing.T, pkgDir, sel string, byLLGen bool) {
 
 func TestCompileEx(t *testing.T, src any, fname, expected string) {
 	t.Helper()
-	fset := token.NewFileSet()
+	fset := token.NewFileSet() //ast,type
 	f, err := parser.ParseFile(fset, fname, src, parser.ParseComments)
 	if err != nil {
 		t.Fatal("ParseFile failed:", err)

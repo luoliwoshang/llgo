@@ -74,6 +74,7 @@ func GenFrom(fileOrPkg string) string {
 	pkg := initial[0]
 	ssaPkg := pkgs[0]
 	ssaPkg.Build()
+	// ssaPkg.Progs
 
 	initRtAndPy(prog, cfg)
 
