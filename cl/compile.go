@@ -400,8 +400,11 @@ const (
 	RuntimeInit = llssa.PkgRuntime + ".init"
 )
 
+// 当前位置插入运行时初始化函数
 func callRuntimeInit(b llssa.Builder, pkg llssa.Package) {
+	// 在IR中声明这个函数 declare void @"github.com/goplus/llgo/internal/runtime.init"()
 	fn := pkg.NewFunc(RuntimeInit, llssa.NoArgsNoRet, llssa.InC) // don't need to convert runtime.init
+	// 当前位置调用该函数 call void @"github.com/goplus/llgo/internal/runtime.init"()
 	b.Call(fn.Expr)
 }
 
