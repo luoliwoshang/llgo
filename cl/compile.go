@@ -368,8 +368,8 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 		argv.InitNil()
 		b.Store(argc.Expr, fn.Param(0))
 		b.Store(argv.Expr, fn.Param(1))
-		callRuntimeInit(b, pkg)
-		b.Call(pkg.FuncOf("main.init").Expr)
+		callRuntimeInit(b, pkg)              // 调用运行时的初始化函数
+		b.Call(pkg.FuncOf("main.init").Expr) // 创建函数调用指令，调用main.init函数
 	}
 	for i, instr := range instrs {
 		if i == 1 && doModInit && p.state == pkgInPatch {
