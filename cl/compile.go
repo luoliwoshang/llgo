@@ -62,12 +62,13 @@ type instrOrValue interface {
 	ssa.Value
 }
 
+// 在PkgNoInit前的种类的包，都是需要执行Init的PkgNormal，PkgLLGo，PkgPyModule
 const (
-	PkgNormal = iota
+	PkgNormal = iota // 正常的导入路径
 	PkgLLGo
 	PkgPyModule   // py.<module>
 	PkgNoInit     // noinit: a package that don't need to be initialized
-	PkgDeclOnly   // decl: a package that only have declarations
+	PkgDeclOnly   //TODO:(了解这里的应用) decl: a package that only have declarations "syscall", "runtime/cgo", "unsafe":
 	PkgLinkIR     // link llvm ir (.ll)
 	PkgLinkExtern // link external object (.a/.so/.dll/.dylib/etc.)
 	// PkgLinkBitCode // link bitcode (.bc)
@@ -85,7 +86,7 @@ type context struct {
 	fn     llssa.Function
 	fset   *token.FileSet
 	goProg *ssa.Program
-	goTyps *types.Package
+	goTyps *types.Package //TODO: 这个goTyps是何时导入的
 	goPkg  *ssa.Package
 	pyMod  string
 	link   map[string]string // pkgPath.nameInPkg => linkname
