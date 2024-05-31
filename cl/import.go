@@ -40,8 +40,8 @@ type symInfo struct {
 }
 
 type pkgSymInfo struct {
-	files map[string][]byte  // file => content
-	syms  map[string]symInfo // name => isVar
+	files map[string][]byte  //TODO: file => content
+	syms  map[string]symInfo //TODO: name => isVar
 }
 
 func newPkgSymInfo() *pkgSymInfo {
@@ -129,6 +129,7 @@ func pkgKindByScope(scope *types.Scope) (int, string) {
 	return PkgNormal, ""
 }
 
+// 导入包 1.(会根据LLGOPackage常量修改包的种类) 2.(仅对LLGO包进行处理)
 func (p *context) importPkg(pkg *types.Package, i *pkgInfo) {
 	pkgPath := llssa.PathOf(pkg)
 	scope := pkg.Scope()
