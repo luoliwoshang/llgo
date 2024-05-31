@@ -491,11 +491,11 @@ func (p *context) varOf(b llssa.Builder, v *ssa.Global) llssa.Expr {
 
 func (p *context) ensureLoaded(pkgTypes *types.Package) *types.Package {
 	if p.goTyps != pkgTypes {
-		if _, ok := p.loaded[pkgTypes]; !ok {
+		if _, ok := p.loaded[pkgTypes]; !ok { // 判断是否已经完成该包的加载
 			i := &pkgInfo{
 				kind: pkgKindByPath(pkgTypes.Path()),
 			}
-			p.loaded[pkgTypes] = i
+			p.loaded[pkgTypes] = i // 标记为已加载，存储对应的包种类
 			p.importPkg(pkgTypes, i)
 		}
 	}
