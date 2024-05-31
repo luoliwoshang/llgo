@@ -471,8 +471,9 @@ func (p *context) varName(pkg *types.Package, v *ssa.Global) (vName string, vtyp
 	return name, goVar, true
 }
 
+// 获得对应的全局变量的表达式（从当前的LLVM包中获得）
 func (p *context) varOf(b llssa.Builder, v *ssa.Global) llssa.Expr {
-	pkgTypes := p.ensureLoaded(v.Pkg.Pkg)
+	pkgTypes := p.ensureLoaded(v.Pkg.Pkg) // 确认这个全局变量对应的包已经加载
 	pkg := p.pkg
 	name, vtype, _ := p.varName(pkgTypes, v)
 	if vtype == pyVar {

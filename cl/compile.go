@@ -91,7 +91,7 @@ type context struct {
 	link   map[string]string // pkgPath.nameInPkg => linkname
 	skips  map[string]none
 	loaded map[*types.Package]*pkgInfo // loaded packages
-	bvals  map[ssa.Value]llssa.Expr    // block values
+	bvals  map[ssa.Value]llssa.Expr    // block values go ssa -> llvm ir
 	vargs  map[*ssa.Alloc][]llssa.Expr // varargs
 
 	patches  Patches
@@ -551,13 +551,13 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		elem := p.prog.Type(t.Elem(), llssa.InGo)
 		ret = b.Alloc(elem, v.Heap)
 	case *ssa.IndexAddr:
-		vx := v.X
-		if _, ok := p.isVArgs(vx); ok { // varargs: this is a varargs index
+		vx := v.X                       //获得变量
+		if _, ok := p.isVArgs(vx); ok { // TODO:(了解这里是什么) varargs: this is a varargs index
 			return
 		}
-		x := p.compileValue(b, vx)
-		idx := p.compileValue(b, v.Index)
-		ret = b.IndexAddr(x, idx)
+		x := p.compileValue(b, vx)        // 获得对应的全局变量
+		idx := p.compileValue(b, v.Index) // 获得常量表达式
+		ret = b.IndexAddr(x, idx)         // 获得地址访问指针（不构建）
 	case *ssa.Index:
 		x := p.compileValue(b, v.X)
 		idx := p.compileValue(b, v.Index)
@@ -674,9 +674,9 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	}
 	switch v := instr.(type) {
 	case *ssa.Store: //存储指令
-		va := v.Addr
+		va := v.Addr // 获得对应的IndexAddr表达式，对应某个指针
 		if va, ok := va.(*ssa.IndexAddr); ok {
-			if args, ok := p.isVArgs(va.X); ok { // varargs: this is a varargs store
+			if args, ok := p.isVArgs(va.X); ok { //TODO: 考虑这个情况 varargs: this is a varargs store
 				idx := intVal(va.Index)
 				val := v.Val
 				if vi, ok := val.(*ssa.MakeInterface); ok {
@@ -686,9 +686,9 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 				return
 			}
 		}
-		ptr := p.compileValue(b, va)
-		val := p.compileValue(b, v.Val)
-		b.Store(ptr, val)
+		ptr := p.compileValue(b, va)    //获取IndexAddr获得对应的指针
+		val := p.compileValue(b, v.Val) //获取常量表达式
+		b.Store(ptr, val)               //构建存储指令
 	case *ssa.Jump:
 		jmpb := p.jumpTo(v)
 		b.Jump(jmpb)
@@ -761,9 +761,9 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 			return aFn.Expr
 		}
 		return pyFn.Expr
-	case *ssa.Global:
+	case *ssa.Global: // 从LLVM包中获得该全局变量的引用
 		return p.varOf(b, v)
-	case *ssa.Const:
+	case *ssa.Const: // 获得该常量对应的类型的表达式
 		t := types.Default(v.Type())
 		bg := llssa.InGo
 		if p.inCFunc {

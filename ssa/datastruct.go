@@ -147,6 +147,7 @@ func (b Builder) SliceCap(x Expr) Expr {
 
 // -----------------------------------------------------------------------------
 
+// 获得地址索引指针（但是不构建）
 // The IndexAddr instruction yields the address of the element at
 // index `idx` of collection `x`.  `idx` is an integer expression.
 //
