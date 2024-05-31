@@ -117,6 +117,8 @@ func pkgKind(v string) (int, string) {
 	return PkgLLGo, ""
 }
 
+// 根据scope获得包的类型，查看这个包中有没有LLGoPackage常量，如果是true那就返回一个基本的LLGo包
+// TODO: 如果LLGoPackage对应是个字符串，那么就是另外的处理
 func pkgKindByScope(scope *types.Scope) (int, string) {
 	if v, ok := scope.Lookup("LLGoPackage").(*types.Const); ok {
 		if v := v.Val(); v.Kind() == constant.String {

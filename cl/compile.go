@@ -64,13 +64,13 @@ type instrOrValue interface {
 
 // 在PkgNoInit前的种类的包，都是需要执行Init的PkgNormal，PkgLLGo，PkgPyModule
 const (
-	PkgNormal = iota // 正常的导入路径
-	PkgLLGo
-	PkgPyModule   // py.<module>
-	PkgNoInit     // noinit: a package that don't need to be initialized
-	PkgDeclOnly   //TODO:(了解这里的应用) decl: a package that only have declarations "syscall", "runtime/cgo", "unsafe":
-	PkgLinkIR     // link llvm ir (.ll)
-	PkgLinkExtern // link external object (.a/.so/.dll/.dylib/etc.)
+	PkgNormal     = iota // 正常的包，非LLGO包（不包含LLGoPackage常量）
+	PkgLLGo              // 一个基本的LLGo包
+	PkgPyModule          //TODO: py.<module>
+	PkgNoInit            //TODO: noinit: a package that don't need to be initialized
+	PkgDeclOnly          //TODO:(了解这里的应用) decl: a package that only have declarations
+	PkgLinkIR            //TODO: link llvm ir (.ll)
+	PkgLinkExtern        //TODO: link external object (.a/.so/.dll/.dylib/etc.)
 	// PkgLinkBitCode // link bitcode (.bc)
 )
 
