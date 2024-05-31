@@ -644,7 +644,9 @@ func (p Package) afterBuilder() Builder {
 	return Builder(p.afterb)
 }
 
-// AfterInit is called after the package is initialized (init all packages that depends on).
+// -----------------------------------------------------------------------------
+
+// TODO:当函数是Init时，这个会被推入  AfterInit is called after the package is initialized (init all packages that depends on).
 func (p Package) AfterInit(b Builder, ret BasicBlock) {
 	p.keyInit(deferKey)
 	doAfterb := p.afterb != nil
