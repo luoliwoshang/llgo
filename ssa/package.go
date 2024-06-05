@@ -555,11 +555,13 @@ func (p Program) Uint64() Type {
 // initializer) and "init#%d", the nth declared init function,
 // and unspecified other things too.
 type aPackage struct {
-	mod    llvm.Module // 通过调用aPackage.mod.String(),即可获得ll
-	abi    abi.Builder
-	abiini []func(b unsafe.Pointer) // b Builder
-	vars   map[string]Global        // name -> Global(var)
-	fns    map[string]Function      // name -> Function 可以使用 p.FuncOf()获得指定名称的函数
+	mod llvm.Module // 通过调用aPackage.mod.String(),即可获得ll
+	abi abi.Builder
+
+	Prog Program
+
+	vars   map[string]Global   // name -> Global(var)
+	fns    map[string]Function // name -> Function 可以使用 p.FuncOf()获得指定名称的函数
 	stubs  map[string]Function
 	pyobjs map[string]PyObjRef
 	pymods map[string]Global

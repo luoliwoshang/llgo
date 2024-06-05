@@ -255,7 +255,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			p.blkInfos = blocks.Infos(f.Blocks)
 			i := 0
 			for {
-				block := f.Blocks[i]
+				block := f.Blocks[i] // 根据索引获得原本函数的每一个基本块
 				doMainInit := (i == 0 && name == "main")
 				doModInit := (i == 1 && isInit)
 				p.compileBlock(b, block, off[i], doMainInit, doModInit)
