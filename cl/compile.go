@@ -526,7 +526,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 	switch v := iv.(type) {
 	case *ssa.Call:
 		ret = p.call(b, llssa.Call, &v.Call)
-	case *ssa.BinOp:
+	case *ssa.BinOp: // 构建双目运算符
 		x := p.compileValue(b, v.X)
 		y := p.compileValue(b, v.Y)
 		ret = b.BinOp(v.Op, x, y)
