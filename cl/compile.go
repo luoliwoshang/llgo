@@ -674,7 +674,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		return
 	}
 	switch v := instr.(type) {
-	case *ssa.Store: //存储指令
+	case *ssa.Store: //存储指令  ssa:*init$guard = true:bool
 		va := v.Addr // 获得对应的IndexAddr表达式，对应某个指针
 		if va, ok := va.(*ssa.IndexAddr); ok {
 			if args, ok := p.isVArgs(va.X); ok { //TODO: 考虑这个情况 varargs: this is a varargs store

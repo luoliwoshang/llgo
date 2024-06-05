@@ -324,7 +324,7 @@ func astFuncName(pkgPath string, fn *ast.FuncDecl) (fullName, inPkgName string) 
 	return pkgPath + "." + name, name
 }
 
-func typesFuncName(pkgPath string, fn *types.Func) (fullName, inPkgName string) {
+func typesFuncName(pkgPath string, fn *types.Func) (fullName, inPkgName string) { // 获得带包名的函数/方法名
 	sig := fn.Type().(*types.Signature)
 	name := fn.Name()
 	if recv := sig.Recv(); recv != nil {
