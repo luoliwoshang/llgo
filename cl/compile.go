@@ -669,7 +669,7 @@ func (p *context) jumpTo(v *ssa.Jump) llssa.BasicBlock {
 
 // 编译函数中的某个基本块中的指定指令
 func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
-	if iv, ok := instr.(instrOrValue); ok { //TODO: BinOp符合这个条件
+	if iv, ok := instr.(instrOrValue); ok { //TODO: 了解这里为什么Store，Jump不符合这里类型
 		p.compileInstrOrValue(b, iv, false)
 		return
 	}
