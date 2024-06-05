@@ -39,7 +39,7 @@ type symInfo struct {
 	isVar    bool
 }
 
-type pkgSymInfo struct {
+type pkgSymInfo struct { // TODO: 了解这里的作用
 	files map[string][]byte  //TODO: file => content
 	syms  map[string]symInfo //TODO: name => isVar
 }
@@ -51,9 +51,9 @@ func newPkgSymInfo() *pkgSymInfo {
 	}
 }
 
-func (p *pkgSymInfo) addSym(fset *token.FileSet, pos token.Pos, fullName, inPkgName string, isVar bool) {
+func (p *pkgSymInfo) addSym(fset *token.FileSet, pos token.Pos, fullName, inPkgName string, isVar bool) { // TODO: 了解这里的作用
 	f := fset.File(pos)
-	if fp := f.Position(pos); fp.Line > 2 {
+	if fp := f.Position(pos); fp.Line > 2 { //TODO: 为什么fp.Line>2
 		file := fp.Filename
 		if _, ok := p.files[file]; !ok {
 			b, err := os.ReadFile(file)
@@ -155,7 +155,7 @@ start:
 		case *types.Func:
 			if pos := obj.Pos(); pos != token.NoPos {
 				fullName, inPkgName := typesFuncName(pkgPath, obj)
-				syms.addSym(fset, pos, fullName, inPkgName, false)
+				syms.addSym(fset, pos, fullName, inPkgName, false) // TODO: 了解这里的作用
 			}
 		case *types.TypeName:
 			if !obj.IsAlias() {
@@ -163,17 +163,17 @@ start:
 					for i, n := 0, t.NumMethods(); i < n; i++ {
 						fn := t.Method(i)
 						fullName, inPkgName := typesFuncName(pkgPath, fn)
-						syms.addSym(fset, fn.Pos(), fullName, inPkgName, false)
+						syms.addSym(fset, fn.Pos(), fullName, inPkgName, false) // TODO: 了解这里的作用
 					}
 				}
 			}
 		case *types.Var:
 			if pos := obj.Pos(); pos != token.NoPos {
-				syms.addSym(fset, pos, pkgPath+"."+name, name, true)
+				syms.addSym(fset, pos, pkgPath+"."+name, name, true) // TODO: 了解这里的作用
 			}
 		}
 	}
-	syms.initLinknames(p)
+	syms.initLinknames(p) // TODO: 了解这里的作用
 }
 
 func (p *context) initFiles(pkgPath string, files []*ast.File) {
