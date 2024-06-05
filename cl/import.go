@@ -39,9 +39,9 @@ type symInfo struct {
 	isVar    bool
 }
 
-type pkgSymInfo struct { // TODO: 了解这里的作用
-	files map[string][]byte  //TODO: file => content
-	syms  map[string]symInfo //TODO: name => isVar
+type pkgSymInfo struct {
+	files map[string][]byte  //文件路径 -> 文件内容
+	syms  map[string]symInfo //包中的函数名 -> file,fullName,isVar
 }
 
 func newPkgSymInfo() *pkgSymInfo {
@@ -51,11 +51,12 @@ func newPkgSymInfo() *pkgSymInfo {
 	}
 }
 
-func (p *pkgSymInfo) addSym(fset *token.FileSet, pos token.Pos, fullName, inPkgName string, isVar bool) { // TODO: 了解这里的作用
+// 添加函数与文件的映射,文件路径与文件内容的映射
+func (p *pkgSymInfo) addSym(fset *token.FileSet, pos token.Pos, fullName, inPkgName string, isVar bool) {
 	f := fset.File(pos)
-	if fp := f.Position(pos); fp.Line > 2 { //TODO: 为什么fp.Line>2
+	if fp := f.Position(pos); fp.Line > 2 { // 为什么fp.Line>2 ? 因为第一行为package 声明，第二行为空格行
 		file := fp.Filename
-		if _, ok := p.files[file]; !ok {
+		if _, ok := p.files[file]; !ok { // 不存在的文件存储到files中
 			b, err := os.ReadFile(file)
 			if err == nil {
 				p.files[file] = b
@@ -155,7 +156,7 @@ start:
 		case *types.Func:
 			if pos := obj.Pos(); pos != token.NoPos {
 				fullName, inPkgName := typesFuncName(pkgPath, obj)
-				syms.addSym(fset, pos, fullName, inPkgName, false) // TODO: 了解这里的作用
+				syms.addSym(fset, pos, fullName, inPkgName, false)
 			}
 		case *types.TypeName:
 			if !obj.IsAlias() {
@@ -163,13 +164,13 @@ start:
 					for i, n := 0, t.NumMethods(); i < n; i++ {
 						fn := t.Method(i)
 						fullName, inPkgName := typesFuncName(pkgPath, fn)
-						syms.addSym(fset, fn.Pos(), fullName, inPkgName, false) // TODO: 了解这里的作用
+						syms.addSym(fset, fn.Pos(), fullName, inPkgName, false) // TODO:
 					}
 				}
 			}
 		case *types.Var:
 			if pos := obj.Pos(); pos != token.NoPos {
-				syms.addSym(fset, pos, pkgPath+"."+name, name, true) // TODO: 了解这里的作用
+				syms.addSym(fset, pos, pkgPath+"."+name, name, true) // TODO:
 			}
 		}
 	}
