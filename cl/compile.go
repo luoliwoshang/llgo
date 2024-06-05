@@ -530,7 +530,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		x := p.compileValue(b, v.X)
 		y := p.compileValue(b, v.Y)
 		ret = b.BinOp(v.Op, x, y)
-	case *ssa.UnOp:
+	case *ssa.UnOp: // 构建单目运算符
 		x := p.compileValue(b, v.X)
 		ret = b.UnOp(v.Op, x)
 	case *ssa.ChangeType:

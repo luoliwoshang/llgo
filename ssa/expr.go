@@ -618,12 +618,12 @@ func (b Builder) BinOp(op token.Token, x, y Expr) Expr {
 	panic("todo")
 }
 
-// The UnOp instruction yields the result of (op x).
-// ARROW is channel receive.
-// MUL is pointer indirection (load).
-// XOR is bitwise complement.
-// SUB is negation.
-// NOT is logical negation.
+// 构建单目运算符 （The UnOp instruction yields the result of (op x).）
+// < 代表channel的单目运算（ARROW is channel receive.）
+// < 代表取值表达式（MUL is pointer indirection (load).）
+// TODO:（XOR is bitwise complement.）
+// TODO:（SUB is negation.）
+// TODO:（NOT is logical negation.）
 func (b Builder) UnOp(op token.Token, x Expr) (ret Expr) {
 	if debugInstr {
 		log.Printf("UnOp %v, %v\n", op, x.impl)
