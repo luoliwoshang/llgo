@@ -20,3 +20,8 @@ func TestFnCall(t *testing.T) {
 func TestImportPkg(t *testing.T) {
 	cltest.FromFolder(t, "importpkg", "./_testdata/importpkg", false)
 }
+
+// 测试方法(method)的定义，调用
+func TestMethod(t *testing.T) {
+	cltest.FromFolder(t, "importpkg", "./_testdata/method", false)
+}
