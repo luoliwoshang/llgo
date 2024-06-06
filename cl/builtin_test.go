@@ -77,7 +77,7 @@ func TestErrCompileInstrOrValue(t *testing.T) {
 	ctx := &context{
 		bvals: make(map[ssa.Value]llssa.Expr),
 	}
-	ctx.compileInstrOrValue(nil, &ssa.Call{}, true)
+	ctx.compileInstrOrValue(nil, &ssa.Call{}, true, false)
 }
 
 func TestErrAdvance(t *testing.T) {

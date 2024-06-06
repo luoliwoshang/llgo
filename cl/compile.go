@@ -478,8 +478,8 @@ func (p *context) index(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 // func advance(ptr *T, offset int) *T
 func (p *context) advance(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 	if len(args) == 2 {
-		ptr := p.compileValue(b, args[0])
-		offset := p.compileValue(b, args[1])
+		ptr := p.compileValue(b, args[0], false)
+		offset := p.compileValue(b, args[1], false)
 		return b.Advance(ptr, offset)
 	}
 	panic("advance(p ptr, offset int): invalid arguments")
@@ -488,7 +488,7 @@ func (p *context) advance(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 // func alloca(size uintptr) unsafe.Pointer
 func (p *context) alloca(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 	if len(args) == 1 {
-		n := p.compileValue(b, args[0])
+		n := p.compileValue(b, args[0], false)
 		return b.Alloca(n)
 	}
 	panic("alloca(size uintptr): invalid arguments")
@@ -497,7 +497,7 @@ func (p *context) alloca(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 // func allocaCStr(s string) *int8
 func (p *context) allocaCStr(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 	if len(args) == 1 {
-		s := p.compileValue(b, args[0])
+		s := p.compileValue(b, args[0], false)
 		return b.AllocaCStr(s)
 	}
 	panic("allocaCStr(s string): invalid arguments")
@@ -506,7 +506,7 @@ func (p *context) allocaCStr(b llssa.Builder, args []ssa.Value) (ret llssa.Expr)
 // func stringData(s string) *int8
 func (p *context) stringData(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 	if len(args) == 1 {
-		s := p.compileValue(b, args[0])
+		s := p.compileValue(b, args[0], false)
 		return b.StringData(s)
 	}
 	panic("stringData(s string): invalid arguments")
@@ -553,7 +553,7 @@ func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) {
 		edges := v.Edges
 		phi.AddIncoming(b, bblks, func(i int, blk llssa.BasicBlock) llssa.Expr {
 			b.SetBlockEx(blk, llssa.BeforeLast, false)
-			return p.compileValue(b, edges[i])
+			return p.compileValue(b, edges[i], false)
 		})
 	})
 	return
@@ -562,7 +562,7 @@ func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) {
 func (p *context) call(b llssa.Builder, act llssa.DoAction, call *ssa.CallCommon) (ret llssa.Expr) {
 	cv := call.Value
 	if mthd := call.Method; mthd != nil {
-		o := p.compileValue(b, cv)
+		o := p.compileValue(b, cv, false)
 		fn := b.Imethod(o, mthd)
 		args := p.compileValues(b, call.Args, fnNormal)
 		ret = b.Do(act, fn, args...)
@@ -581,7 +581,7 @@ func (p *context) call(b llssa.Builder, act llssa.DoAction, call *ssa.CallCommon
 		fn := cv.Name()
 		if fn == "ssa:wrapnilchk" { // TODO(xsw): check nil ptr
 			arg := args[0]
-			ret = p.compileValue(b, arg)
+			ret = p.compileValue(b, arg, false)
 		} else {
 			args := p.compileValues(b, args, kind)
 			ret = b.Do(act, llssa.Builtin(fn), args...)
@@ -617,14 +617,14 @@ func (p *context) call(b llssa.Builder, act llssa.DoAction, call *ssa.CallCommon
 			log.Panicln("unknown ftype:", ftype)
 		}
 	default:
-		fn := p.compileValue(b, cv)
+		fn := p.compileValue(b, cv, false)
 		args := p.compileValues(b, args, kind)
 		ret = b.Do(act, fn, args...)
 	}
 	return
 }
 
-func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue bool) (ret llssa.Expr) {
+func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue bool, isStore bool) (ret llssa.Expr) {
 	if asValue {
 		if v, ok := p.bvals[iv]; ok {
 			return v
@@ -634,23 +634,23 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 	switch v := iv.(type) {
 	case *ssa.Call:
 		ret = p.call(b, llssa.Call, &v.Call)
-	case *ssa.BinOp:
-		x := p.compileValue(b, v.X)
-		y := p.compileValue(b, v.Y)
+	case *ssa.BinOp: // 构建双目运算符
+		x := p.compileValue(b, v.X, false)
+		y := p.compileValue(b, v.Y, false)
 		ret = b.BinOp(v.Op, x, y)
-	case *ssa.UnOp:
-		x := p.compileValue(b, v.X)
+	case *ssa.UnOp: // 构建单目运算符
+		x := p.compileValue(b, v.X, false)
 		ret = b.UnOp(v.Op, x)
 	case *ssa.ChangeType:
 		t := v.Type()
-		x := p.compileValue(b, v.X)
+		x := p.compileValue(b, v.X, false)
 		ret = b.ChangeType(p.prog.Type(t, llssa.InGo), x)
 	case *ssa.Convert:
 		t := v.Type()
-		x := p.compileValue(b, v.X)
+		x := p.compileValue(b, v.X, false)
 		ret = b.Convert(p.prog.Type(t, llssa.InGo), x)
 	case *ssa.FieldAddr:
-		x := p.compileValue(b, v.X)
+		x := p.compileValue(b, v.X, false)
 		ret = b.FieldAddr(x, v.Field)
 	case *ssa.Alloc:
 		t := v.Type().(*types.Pointer)
@@ -660,27 +660,29 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		elem := p.prog.Type(t.Elem(), llssa.InGo)
 		ret = b.Alloc(elem, v.Heap)
 	case *ssa.IndexAddr:
-		vx := v.X
-		if _, ok := p.isVArgs(vx); ok { // varargs: this is a varargs index
-			return
+		if isStore {
+			vx := v.X                       //获得变量
+			if _, ok := p.isVArgs(vx); ok { // TODO:(了解这里是什么) varargs: this is a varargs index
+				return
+			}
+			x := p.compileValue(b, vx, false)        // 获得对应的全局变量
+			idx := p.compileValue(b, v.Index, false) // 获得索引的表达式（获得常量表达式）
+			ret = b.IndexAddr(x, idx)                // 获得地址访问指针（不构建）
 		}
-		x := p.compileValue(b, vx)
-		idx := p.compileValue(b, v.Index)
-		ret = b.IndexAddr(x, idx)
 	case *ssa.Index:
-		x := p.compileValue(b, v.X)
-		idx := p.compileValue(b, v.Index)
+		x := p.compileValue(b, v.X, false)
+		idx := p.compileValue(b, v.Index, false)
 		ret = b.Index(x, idx, func(e llssa.Expr) (ret llssa.Expr) {
 			if e == x {
 				if n, ok := v.X.(*ssa.UnOp); ok {
-					return p.compileValue(b, n.X)
+					return p.compileValue(b, n.X, false)
 				}
 			}
 			panic(fmt.Errorf("todo: addr of %v", e))
 		})
 	case *ssa.Lookup:
-		x := p.compileValue(b, v.X)
-		idx := p.compileValue(b, v.Index)
+		x := p.compileValue(b, v.X, false)
+		idx := p.compileValue(b, v.Index, false)
 		ret = b.Lookup(x, idx, v.CommaOk)
 	case *ssa.Slice:
 		vx := v.X
@@ -688,15 +690,15 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 			return
 		}
 		var low, high, max llssa.Expr
-		x := p.compileValue(b, vx)
+		x := p.compileValue(b, vx, false)
 		if v.Low != nil {
-			low = p.compileValue(b, v.Low)
+			low = p.compileValue(b, v.Low, false)
 		}
 		if v.High != nil {
-			high = p.compileValue(b, v.High)
+			high = p.compileValue(b, v.High, false)
 		}
 		if v.Max != nil {
-			max = p.compileValue(b, v.Max)
+			max = p.compileValue(b, v.Max, false)
 		}
 		ret = b.Slice(x, low, high, max)
 	case *ssa.MakeInterface:
@@ -710,43 +712,43 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 			}
 		}
 		t := p.prog.Type(v.Type(), llssa.InGo)
-		x := p.compileValue(b, v.X)
+		x := p.compileValue(b, v.X, false)
 		ret = b.MakeInterface(t, x)
 	case *ssa.MakeSlice:
 		var nCap llssa.Expr
 		t := p.prog.Type(v.Type(), llssa.InGo)
-		nLen := p.compileValue(b, v.Len)
+		nLen := p.compileValue(b, v.Len, false)
 		if v.Cap != nil {
-			nCap = p.compileValue(b, v.Cap)
+			nCap = p.compileValue(b, v.Cap, false)
 		}
 		ret = b.MakeSlice(t, nLen, nCap)
 	case *ssa.MakeMap:
 		var nReserve llssa.Expr
 		t := p.prog.Type(v.Type(), llssa.InGo)
 		if v.Reserve != nil {
-			nReserve = p.compileValue(b, v.Reserve)
+			nReserve = p.compileValue(b, v.Reserve, false)
 		}
 		ret = b.MakeMap(t, nReserve)
 	case *ssa.MakeClosure:
-		fn := p.compileValue(b, v.Fn)
+		fn := p.compileValue(b, v.Fn, false)
 		bindings := p.compileValues(b, v.Bindings, 0)
 		ret = b.MakeClosure(fn, bindings)
 	case *ssa.TypeAssert:
-		x := p.compileValue(b, v.X)
+		x := p.compileValue(b, v.X, false)
 		t := p.prog.Type(v.AssertedType, llssa.InGo)
 		ret = b.TypeAssert(x, t, v.CommaOk)
 	case *ssa.Extract:
-		x := p.compileValue(b, v.Tuple)
+		x := p.compileValue(b, v.Tuple, false)
 		ret = b.Extract(x, v.Index)
 	case *ssa.Range:
-		x := p.compileValue(b, v.X)
+		x := p.compileValue(b, v.X, false)
 		ret = b.Range(x)
 	case *ssa.Next:
-		iter := p.compileValue(b, v.Iter)
+		iter := p.compileValue(b, v.Iter, false)
 		ret = b.Next(iter, v.IsString)
 	case *ssa.ChangeInterface:
 		t := v.Type()
-		x := p.compileValue(b, v.X)
+		x := p.compileValue(b, v.X, false)
 		ret = b.ChangeInterface(p.prog.Type(t, llssa.InGo), x)
 	default:
 		panic(fmt.Sprintf("compileInstrAndValue: unknown instr - %T\n", iv))
@@ -762,8 +764,8 @@ func (p *context) jumpTo(v *ssa.Jump) llssa.BasicBlock {
 }
 
 func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
-	if iv, ok := instr.(instrOrValue); ok {
-		p.compileInstrOrValue(b, iv, false)
+	if iv, ok := instr.(instrOrValue); ok { //TODO: 了解这里为什么Store，Jump不符合这里类型
+		p.compileInstrOrValue(b, iv, false, false)
 		return
 	}
 	switch v := instr.(type) {
@@ -776,13 +778,13 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 				if vi, ok := val.(*ssa.MakeInterface); ok {
 					val = vi.X
 				}
-				args[idx] = p.compileValue(b, val)
+				args[idx] = p.compileValue(b, val, false)
 				return
 			}
 		}
-		ptr := p.compileValue(b, va)
-		val := p.compileValue(b, v.Val)
-		b.Store(ptr, val)
+		ptr := p.compileValue(b, va, true)     //获取IndexAddr获得对应的指针
+		val := p.compileValue(b, v.Val, false) //获取常量表达式
+		b.Store(ptr, val)                      //构建存储指令
 	case *ssa.Jump:
 		jmpb := p.jumpTo(v)
 		b.Jump(jmpb)
@@ -791,7 +793,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		if n := len(v.Results); n > 0 {
 			results = make([]llssa.Expr, n)
 			for i, r := range v.Results {
-				results[i] = p.compileValue(b, r)
+				results[i] = p.compileValue(b, r, false) // 如果返回内容的某个参数为函数形参的某一个，那么该项就会是形参的表达
 			}
 		}
 		if p.inMain(instr) {
@@ -800,16 +802,16 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		}
 		b.Return(results...)
 	case *ssa.If:
-		fn := p.fn
-		cond := p.compileValue(b, v.Cond)
-		succs := v.Block().Succs
-		thenb := fn.Block(succs[0].Index)
-		elseb := fn.Block(succs[1].Index)
-		b.If(cond, thenb, elseb)
+		fn := p.fn                               //获得当前正在处理的LLVM func
+		cond := p.compileValue(b, v.Cond, false) //获得条件表达式的结果的类型
+		succs := v.Block().Succs                 //获得这个指令对应的基本块的if true 和 else的基本块
+		thenb := fn.Block(succs[0].Index)        //获得if true的基本块
+		elseb := fn.Block(succs[1].Index)        // 获得else的基本块
+		b.If(cond, thenb, elseb)                 // 为该基本块创建对应的IF指令，此时仅仅构建了对应的块的IF跳转指令，对应块中还未生成对应的指令
 	case *ssa.MapUpdate:
-		m := p.compileValue(b, v.Map)
-		key := p.compileValue(b, v.Key)
-		val := p.compileValue(b, v.Value)
+		m := p.compileValue(b, v.Map, false)
+		key := p.compileValue(b, v.Key, false)
+		val := p.compileValue(b, v.Value, false)
 		b.MapUpdate(m, key, val)
 	case *ssa.Defer:
 		p.call(b, p.blkInfos[v.Block().Index].Kind, &v.Call)
@@ -818,7 +820,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	case *ssa.RunDefers:
 		b.RunDefers()
 	case *ssa.Panic:
-		arg := p.compileValue(b, v.X)
+		arg := p.compileValue(b, v.X, false)
 		b.Panic(arg)
 	default:
 		panic(fmt.Sprintf("compileInstr: unknown instr - %T\n", instr))
@@ -837,9 +839,9 @@ func (p *context) compileFunction(v *ssa.Function) (goFn llssa.Function, pyFn ll
 	return p.funcOf(v)
 }
 
-func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
+func (p *context) compileValue(b llssa.Builder, v ssa.Value, isStore bool) llssa.Expr {
 	if iv, ok := v.(instrOrValue); ok {
-		return p.compileInstrOrValue(b, iv, true)
+		return p.compileInstrOrValue(b, iv, false, isStore)
 	}
 	switch v := v.(type) {
 	case *ssa.Parameter:
@@ -890,7 +892,7 @@ func (p *context) compileValues(b llssa.Builder, vals []ssa.Value, hasVArg int) 
 	n := len(vals) - hasVArg
 	ret := make([]llssa.Expr, n)
 	for i := 0; i < n; i++ {
-		ret[i] = p.compileValue(b, vals[i])
+		ret[i] = p.compileValue(b, vals[i], false)
 	}
 	if hasVArg > 0 {
 		ret = p.compileVArg(ret, b, vals[n])
