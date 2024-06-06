@@ -231,14 +231,17 @@ func TestErrImport(t *testing.T) {
 	ctx.importPkg(pkg, &pkgInfo{})
 }
 
+// 测试是否能正确的抛出link错误
 func TestErrInitLinkname(t *testing.T) {
 	var ctx context
+	// 如果第三个参数ok=false，那么则为没找到
 	ctx.initLinkname("//llgo:link abc", func(name string) (string, bool, bool) {
 		return "", false, false
 	})
 	ctx.initLinkname("//go:linkname Printf printf", func(name string) (string, bool, bool) {
 		return "", false, false
 	})
+	// 这里预期会正确的获得错误
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatal("initLinkname: no error?")

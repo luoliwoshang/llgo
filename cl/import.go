@@ -254,7 +254,7 @@ func (p *context) initLinkname(line string, f func(inPkgName string) (fullName s
 		llgolink  = "//llgo:link "
 		llgolink2 = "// llgo:link "
 	)
-	if strings.HasPrefix(line, linkname) {
+	if strings.HasPrefix(line, linkname) { // go:linkname Printf C.printf
 		p.initLink(line, len(linkname), f)
 	} else if strings.HasPrefix(line, llgolink2) {
 		p.initLink(line, len(llgolink2), f)
@@ -264,12 +264,12 @@ func (p *context) initLinkname(line string, f func(inPkgName string) (fullName s
 }
 
 func (p *context) initLink(line string, prefix int, f func(inPkgName string) (fullName string, isVar, ok bool)) {
-	text := strings.TrimSpace(line[prefix:])
-	if idx := strings.IndexByte(text, ' '); idx > 0 {
-		inPkgName := text[:idx]
-		if fullName, isVar, ok := f(inPkgName); ok {
-			link := strings.TrimLeft(text[idx+1:], " ")
-			if isVar || strings.Contains(link, ".") { // eg. C.printf, C.strlen, llgo.cstr
+	text := strings.TrimSpace(line[prefix:])          // 去掉注释指令的前缀部分以及空白字符
+	if idx := strings.IndexByte(text, ' '); idx > 0 { // 查找第一个空格的位置  Printf C.printf 这个就能查找到
+		inPkgName := text[:idx]                      // 获得包中的函数名
+		if fullName, isVar, ok := f(inPkgName); ok { // 从上下文中获得完整函数名
+			link := strings.TrimLeft(text[idx+1:], " ") // 获得链接的指向的函数名 C.printf
+			if isVar || strings.Contains(link, ".") {   // eg. C.printf, C.strlen, llgo.cstr
 				p.link[fullName] = link
 			} else {
 				panic(line + ": no specified call convention. eg. //go:linkname Printf C.printf")

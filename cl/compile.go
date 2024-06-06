@@ -80,6 +80,7 @@ type pkgInfo struct {
 
 type none struct{}
 
+// 编译过程中的上下文
 type context struct {
 	prog   llssa.Program
 	pkg    llssa.Package
@@ -89,16 +90,15 @@ type context struct {
 	goTyps *types.Package //TODO: 这个goTyps是何时导入的
 	goPkg  *ssa.Package
 	pyMod  string
-	link   map[string]string // pkgPath.nameInPkg => linkname
-	skips  map[string]none
-	loaded map[*types.Package]*pkgInfo // loaded packages
+	link   map[string]string           // pkgPath.nameInPkg => linkname
+	loaded map[*types.Package]*pkgInfo // package -> packageInfo(包的种类)
 	bvals  map[ssa.Value]llssa.Expr    // block values go ssa -> llvm ir
 	vargs  map[*ssa.Alloc][]llssa.Expr // varargs
 
 	patches  Patches
 	blkInfos []blocks.Info
 
-	inits []func() // 存储初始化函数
+	inits []func() // 存储初始化函数,会在预先处理完全局变量，类型后执行，在处理到函数的SSA时推入，内容主要是对函数中的基本块进行处理
 	phis  []func()
 
 	state   pkgState
