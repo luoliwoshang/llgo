@@ -174,7 +174,7 @@ start:
 			}
 		}
 	}
-	syms.initLinknames(p) // TODO: 了解这里的作用
+	syms.initLinknames(p) // 初始化一些链接的映射 比如 go:linkname Printf C.printf
 }
 
 func (p *context) initFiles(pkgPath string, files []*ast.File) {
