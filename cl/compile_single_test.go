@@ -23,5 +23,10 @@ func TestImportPkg(t *testing.T) {
 
 // 测试方法(method)的定义，调用
 func TestMethod(t *testing.T) {
-	cltest.FromFolder(t, "importpkg", "./_testdata/method", false)
+	cltest.FromFolder(t, "method", "./_testdata/method", false)
+}
+
+// TODO: 了解这里的print是否可以使用 测试runtime c.printf
+func TestPrintf(t *testing.T) {
+	cltest.FromFolder(t, "printf", "./_testdata/printf", false)
 }
