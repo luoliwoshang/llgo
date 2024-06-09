@@ -149,7 +149,7 @@ func TestCompileEx(t *testing.T, src any, fname, expected string) {
 	if err != nil {
 		t.Fatal("BuildPackage failed:", err)
 	}
-	foo.WriteTo(os.Stderr)
+	foo.WriteTo(os.Stderr) // 输出包的ssa表达
 	prog := ssatest.NewProgramEx(t, nil, imp)
 
 	ret, err := cl.NewPackage(prog, foo, files)

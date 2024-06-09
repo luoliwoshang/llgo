@@ -193,7 +193,7 @@ func (p Package) NewFuncEx(name string, sig *types.Signature, bg Background, has
 	if v, ok := p.fns[name]; ok {
 		return v
 	}
-	t := p.Prog.FuncDecl(sig, bg)
+	t := p.Prog.FuncDecl(sig, bg) //函数的签名中的Recv会被处理到签名的第一个参数）
 	if debugInstr {
 		log.Println("NewFunc", name, t.raw.Type, "hasFreeVars:", hasFreeVars)
 	}
