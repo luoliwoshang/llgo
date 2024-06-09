@@ -134,10 +134,15 @@ func (p *context) compileType(pkg llssa.Package, t *ssa.Type) {
 	if debugInstr {
 		log.Println("==> NewType", name, typ)
 	}
-	p.compileMethods(pkg, typ)
-	p.compileMethods(pkg, types.NewPointer(typ))
+	p.compileMethods(pkg, typ)                   //TODO:
+	p.compileMethods(pkg, types.NewPointer(typ)) //TODO:
 }
 
+// 编译类型时编译方法(method)
+// 对于一个type下的method，会编译值类型的method以及指针类型的method，无论其实际声明的是值类型的method还是指针类型的method
+// 通过prog.MethodValue 分别获得指针类型和值类型的方法
+// 对于值类型的方法是直接返回其函数的ssa.Function,
+// 而对于指针类型的方法是返回一个经过wrapper处理的调用了值类型方法的ssa.Function
 func (p *context) compileMethods(pkg llssa.Package, typ types.Type) {
 	prog := p.goProg
 	mthds := prog.MethodSets.MethodSet(typ)
@@ -266,7 +271,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			for _, phi := range p.phis { // TODO: 执行phi指令
 				phi()
 			}
-			b.EndBuild()
+			b.EndBuild() //TODO: 了解这个函数
 		})
 		for _, af := range f.AnonFuncs {
 			p.compileFuncDecl(pkg, af)
@@ -513,6 +518,71 @@ func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) {
 			return p.compileValue(b, edges[i])
 		})
 	})
+	return
+}
+
+func (p *context) call(b llssa.Builder, act llssa.DoAction, call *ssa.CallCommon) (ret llssa.Expr) {
+	cv := call.Value
+	if mthd := call.Method; mthd != nil {
+		o := p.compileValue(b, cv)
+		fn := b.Imethod(o, mthd)
+		args := p.compileValues(b, call.Args, fnNormal)
+		ret = b.Do(act, fn, args...)
+		return
+	}
+	kind := p.funcKind(cv) // 获得调用的函数的种类
+	if kind == fnIgnore {
+		return
+	}
+	args := call.Args
+	if debugGoSSA {
+		log.Println(">>> Do", act, cv, args)
+	}
+	switch cv := cv.(type) { // 根据 call 调用的对象，执行不同的操作
+	case *ssa.Builtin: // TODO:
+		fn := cv.Name()
+		if fn == "ssa:wrapnilchk" { // TODO(xsw): check nil ptr
+			arg := args[0]
+			ret = p.compileValue(b, arg)
+		} else {
+			args := p.compileValues(b, args, kind)
+			ret = b.Do(act, llssa.Builtin(fn), args...)
+		}
+	case *ssa.Function: // 调用的是一个函数
+		aFn, pyFn, ftype := p.compileFunction(cv)
+		// TODO(xsw): check ca != llssa.Call
+		switch ftype {
+		case goFunc, cFunc:
+			args := p.compileValues(b, args, kind) // 编译参数
+			ret = b.Do(act, aFn.Expr, args...)
+		case pyFunc:
+			args := p.compileValues(b, args, kind)
+			ret = b.Do(act, pyFn.Expr, args...)
+		case llgoPyList:
+			args := p.compileValues(b, args, fnHasVArg)
+			ret = b.PyList(args...)
+		case llgoCstr:
+			ret = cstr(b, args)
+		case llgoAdvance:
+			ret = p.advance(b, args)
+		case llgoIndex:
+			ret = p.index(b, args)
+		case llgoAlloca:
+			ret = p.alloca(b, args)
+		case llgoAllocaCStr:
+			ret = p.allocaCStr(b, args)
+		case llgoStringData:
+			ret = p.stringData(b, args)
+		case llgoUnreachable: // func unreachable()
+			b.Unreachable()
+		default:
+			log.Panicln("unknown ftype:", ftype)
+		}
+	default:
+		fn := p.compileValue(b, cv)
+		args := p.compileValues(b, args, kind)
+		ret = b.Do(act, fn, args...)
+	}
 	return
 }
 
