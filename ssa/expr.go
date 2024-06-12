@@ -901,8 +901,8 @@ func (b Builder) InlineCall(fn Expr, args ...Expr) (ret Expr) {
 	return b.Call(fn, args...)
 }
 
+// 创建调用函数的LLVM IR
 // The Call instruction represents a function call.
-//
 // The Call instruction yields the function result if there is exactly
 // one.  Otherwise it returns a tuple, the components of which are
 // accessed via Extract.
@@ -924,7 +924,7 @@ func (b Builder) Call(fn Expr, args ...Expr) (ret Expr) {
 	var sig *types.Signature
 	var raw = fn.raw.Type
 	switch kind {
-	case vkClosure:
+	case vkClosure: //TODO:
 		data = b.Field(fn, 1)
 		fn = b.Field(fn, 0)
 		raw = fn.raw.Type
@@ -941,8 +941,8 @@ func (b Builder) Call(fn Expr, args ...Expr) (ret Expr) {
 	default:
 		log.Panicf("unreachable: %d(%T)\n", kind, raw)
 	}
-	ret.Type = b.Prog.retType(sig)
-	ret.impl = llvm.CreateCall(b.impl, ll, fn.impl, llvmParamsEx(data, args, sig.Params(), b))
+	ret.Type = b.Prog.retType(sig)                                                             //转换函数签名
+	ret.impl = llvm.CreateCall(b.impl, ll, fn.impl, llvmParamsEx(data, args, sig.Params(), b)) //创建调用的LLVM IR
 	return
 }
 

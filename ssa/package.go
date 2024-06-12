@@ -575,10 +575,10 @@ type aPackage struct {
 type Package = *aPackage
 
 func (p Package) rtFunc(fnName string) Expr {
-	fn := p.Prog.runtime().Scope().Lookup(fnName).(*types.Func)
-	name := FullName(fn.Pkg(), fnName)
+	fn := p.Prog.runtime().Scope().Lookup(fnName).(*types.Func) // 获得运行时的函数
+	name := FullName(fn.Pkg(), fnName)                          // 获得函数名
 	sig := fn.Type().(*types.Signature)
-	return p.NewFunc(name, sig, InGo).Expr
+	return p.NewFunc(name, sig, InGo).Expr //转换为LLVM IR表达
 }
 
 func (p Package) cFunc(fullName string, sig *types.Signature) Expr {

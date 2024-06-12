@@ -627,9 +627,9 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		if _, ok := p.isVArgs(vx); ok { // TODO:(了解这里是什么) varargs: this is a varargs index
 			return
 		}
-		x := p.compileValue(b, vx)        // 获得对应的全局变量
-		idx := p.compileValue(b, v.Index) // 获得常量表达式
-		ret = b.IndexAddr(x, idx)         // 获得地址访问指针（不构建）
+		x := p.compileValue(b, vx)        // 获得对应的全局变量 （不构建）
+		idx := p.compileValue(b, v.Index) // 获得常量表达式 （不构建）
+		ret = b.IndexAddr(x, idx)         // 获得地址访问表达式 （构建比较运算指令，数组越界指令）
 	case *ssa.Index:
 		x := p.compileValue(b, v.X)
 		idx := p.compileValue(b, v.Index)
