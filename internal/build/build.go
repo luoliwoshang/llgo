@@ -70,7 +70,7 @@ type Config struct {
 func NewDefaultConf(mode Mode) *Config {
 	bin := os.Getenv("GOBIN")
 	if bin == "" {
-		bin = filepath.Join(runtime.GOROOT(), "bin")
+		bin = filepath.Join(GetGoPATH(), "bin") // default is GOPATH/bin
 	}
 	conf := &Config{
 		BinPath: bin,
@@ -85,6 +85,18 @@ func DefaultAppExt() string {
 		return ".exe"
 	}
 	return ""
+}
+
+func GetGoPATH() string {
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		home := os.Getenv("HOME")
+		if home == "" {
+			return ""
+		}
+		gopath = home + "/go"
+	}
+	return gopath
 }
 
 // -----------------------------------------------------------------------------
