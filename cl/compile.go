@@ -251,10 +251,10 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			if debugInstr {
 				log.Println("==> FuncBody", name)
 			}
-			b := fn.NewBuilder()                     // 创建一个函数的构建器
-			p.bvals = make(map[ssa.Value]llssa.Expr) // TODO: 不清楚这是为什么
-			off := make([]int, len(f.Blocks))        // 获得原始函数基本块数量
-			for i, block := range f.Blocks {         //将每一个基本块的Phi指令都进行编译
+			b := fn.NewBuilder() // 创建一个函数的构建器
+			p.bvals = make(map[ssa.Value]llssa.Expr)
+			off := make([]int, len(f.Blocks)) // 存储每一个基本块中有几个前置PHI指令
+			for i, block := range f.Blocks {
 				off[i] = p.compilePhis(b, block) // 获得每个基本块的Phi指令的数量
 			}
 			p.blkInfos = blocks.Infos(f.Blocks)
@@ -268,7 +268,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 					break
 				}
 			}
-			for _, phi := range p.phis { // TODO: 执行phi指令
+			for _, phi := range p.phis { // 在函数基本块编译完成后，编译PHIS指令
 				phi()
 			}
 			b.EndBuild() //TODO: 了解这个函数
@@ -347,7 +347,7 @@ func (p *context) funcOf(fn *ssa.Function) (aFn llssa.Function, pyFn llssa.PyObj
 	return
 }
 
-// 编译函数的某个基本块，对块中的每一个指令进行编译
+// 编译函数的某个基本块，对块中的每一个指令进行编译，跳过前n个phi指令
 func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, doMainInit, doModInit bool) llssa.BasicBlock {
 	var last int
 	var pyModInit bool
@@ -485,15 +485,15 @@ func (p *context) compilePhis(b llssa.Builder, block *ssa.BasicBlock) int {
 	if ninstr := len(block.Instrs); ninstr > 0 {
 		if isPhi(block.Instrs[0]) {
 			n := 1
-			for n < ninstr && isPhi(block.Instrs[n]) {
+			for n < ninstr && isPhi(block.Instrs[n]) { //TODO:
 				n++
 			}
 			rets := make([]llssa.Expr, n) // TODO(xsw): check to remove this
 			for i := 0; i < n; i++ {
-				iv := block.Instrs[i].(*ssa.Phi)
-				rets[i] = p.compilePhi(b, iv)
+				iv := block.Instrs[i].(*ssa.Phi) // 获得指定位置的PHI指令
+				rets[i] = p.compilePhi(b, iv)    // 编译PHI指令
 			}
-			for i := 0; i < n; i++ {
+			for i := 0; i < n; i++ { // 建立原始的go ssa和编译后的llvm phi的映射
 				iv := block.Instrs[i].(*ssa.Phi)
 				p.bvals[iv] = rets[i]
 			}
@@ -503,14 +503,14 @@ func (p *context) compilePhis(b llssa.Builder, block *ssa.BasicBlock) int {
 	return 0
 }
 
-func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) {
+func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) { //编译一个Phi指令
 	phi := b.Phi(p.prog.Type(v.Type(), llssa.InGo))
 	ret = phi.Expr
-	p.phis = append(p.phis, func() {
+	p.phis = append(p.phis, func() { // 注册一个函数
 		preds := v.Block().Preds
 		bblks := make([]llssa.BasicBlock, len(preds))
 		for i, pred := range preds {
-			bblks[i] = p.fn.Block(pred.Index)
+			bblks[i] = p.fn.Block(pred.Index) // 获得指定的前驱节点，存入llgo的llvm的phi指令中
 		}
 		edges := v.Edges
 		phi.AddIncoming(b, bblks, func(i int, blk llssa.BasicBlock) llssa.Expr {
