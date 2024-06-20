@@ -62,15 +62,14 @@ type instrOrValue interface {
 	ssa.Value
 }
 
-// 在PkgNoInit前的种类的包，都是需要执行Init的PkgNormal，PkgLLGo，PkgPyModule
 const (
-	PkgNormal     = iota // 正常的包，非LLGO包（不包含LLGoPackage常量）
-	PkgLLGo              // 一个基本的LLGo包
-	PkgPyModule          //TODO: py.<module>
-	PkgNoInit            //TODO: noinit: a package that don't need to be initialized
-	PkgDeclOnly          //TODO:(了解这里的应用) decl: a package that only have declarations
-	PkgLinkIR            //TODO: link llvm ir (.ll)
-	PkgLinkExtern        //TODO: link external object (.a/.so/.dll/.dylib/etc.)
+	PkgNormal = iota
+	PkgLLGo
+	PkgPyModule   // py.<module>
+	PkgNoInit     // noinit: a package that don't need to be initialized
+	PkgDeclOnly   // decl: a package that only have declarations
+	PkgLinkIR     // link llvm ir (.ll)
+	PkgLinkExtern // link external object (.a/.so/.dll/.dylib/etc.)
 	// PkgLinkBitCode // link bitcode (.bc)
 )
 
@@ -80,25 +79,25 @@ type pkgInfo struct {
 
 type none struct{}
 
-// 编译过程中的上下文
 type context struct {
 	prog   llssa.Program
 	pkg    llssa.Package
 	fn     llssa.Function
 	fset   *token.FileSet
 	goProg *ssa.Program
-	goTyps *types.Package //TODO: 这个goTyps是何时导入的
+	goTyps *types.Package
 	goPkg  *ssa.Package
 	pyMod  string
-	link   map[string]string           // pkgPath.nameInPkg => linkname
-	loaded map[*types.Package]*pkgInfo // package -> packageInfo(包的种类)
-	bvals  map[ssa.Value]llssa.Expr    // block values go ssa -> llvm ir
+	link   map[string]string // pkgPath.nameInPkg => linkname
+	skips  map[string]none
+	loaded map[*types.Package]*pkgInfo // loaded packages
+	bvals  map[ssa.Value]llssa.Expr    // block values
 	vargs  map[*ssa.Alloc][]llssa.Expr // varargs
 
 	patches  Patches
 	blkInfos []blocks.Info
 
-	inits []func() // 存储初始化函数,会在预先处理完全局变量，类型后执行，在处理到函数的SSA时推入，内容主要是对函数中的基本块进行处理
+	inits []func()
 	phis  []func()
 
 	state   pkgState
@@ -134,15 +133,10 @@ func (p *context) compileType(pkg llssa.Package, t *ssa.Type) {
 	if debugInstr {
 		log.Println("==> NewType", name, typ)
 	}
-	p.compileMethods(pkg, typ)                   //TODO:
-	p.compileMethods(pkg, types.NewPointer(typ)) //TODO:
+	p.compileMethods(pkg, typ)
+	p.compileMethods(pkg, types.NewPointer(typ))
 }
 
-// 编译类型时编译方法(method)
-// 对于一个type下的method，会编译值类型的method以及指针类型的method，无论其实际声明的是值类型的method还是指针类型的method
-// 通过prog.MethodValue 分别获得指针类型和值类型的方法
-// 对于值类型的方法是直接返回其函数的ssa.Function,
-// 而对于指针类型的方法是返回一个经过wrapper处理的调用了值类型方法的ssa.Function
 func (p *context) compileMethods(pkg llssa.Package, typ types.Type) {
 	prog := p.goProg
 	mthds := prog.MethodSets.MethodSet(typ)
@@ -154,7 +148,7 @@ func (p *context) compileMethods(pkg llssa.Package, typ types.Type) {
 	}
 }
 
-// 编译全局变量
+// Global variable.
 func (p *context) compileGlobal(pkg llssa.Package, gbl *ssa.Global) {
 	typ := globalType(gbl)
 	name, vtype, define := p.varName(gbl.Pkg.Pkg, gbl)
@@ -184,16 +178,15 @@ var (
 	argvTy = types.NewPointer(types.NewPointer(types.Typ[types.Int8]))
 )
 
-// 将ssa.Function编译为llssa.Function，在p.Inits中注册 编译该函数基本块的函数
 func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Function, llssa.PyObjRef, int) {
-	pkgTypes, name, ftype := p.funcName(f, true) // ftype:inGo inC
+	pkgTypes, name, ftype := p.funcName(f, true)
 	if ftype != goFunc {
 		/*
-			if ftype == pyFunc {
-				// TODO(xsw): pyMod == ""
-				fnName := pysymPrefix + p.pyMod + "." + name
-				return nil, pkg.NewPyFunc(fnName, f.Signature, call), pyFunc
-			}
+			 if ftype == pyFunc {
+				 // TODO(xsw): pyMod == ""
+				 fnName := pysymPrefix + p.pyMod + "." + name
+				 return nil, pkg.NewPyFunc(fnName, f.Signature, call), pyFunc
+			 }
 		*/
 		return nil, nil, ignoredFunc
 	}
@@ -222,17 +215,17 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		}
 	}
 	if fn == nil {
-		if name == "main" { // 对main包的main函数进行处理，添加对c的命令行参数接受
-			argc := types.NewParam(token.NoPos, pkgTypes, "", types.Typ[types.Int32]) // c:argc：命令行参数
-			argv := types.NewParam(token.NoPos, pkgTypes, "", argvTy)                 // c:argv 命令行参数数组，第一项是程序名（还未确定）
+		if name == "main" {
+			argc := types.NewParam(token.NoPos, pkgTypes, "", types.Typ[types.Int32])
+			argv := types.NewParam(token.NoPos, pkgTypes, "", argvTy)
 			params := types.NewTuple(argc, argv)
-			ret := types.NewParam(token.NoPos, pkgTypes, "", p.prog.CInt().RawType()) // c语言中main函数的返回值
+			ret := types.NewParam(token.NoPos, pkgTypes, "", p.prog.CInt().RawType())
 			results := types.NewTuple(ret)
-			sig = types.NewSignatureType(nil, nil, nil, params, results, false) // 生成函数签名
+			sig = types.NewSignatureType(nil, nil, nil, params, results, false)
 		}
 		fn = pkg.NewFuncEx(name, sig, llssa.Background(ftype), hasCtx)
 	}
-	// 对于存在函数体的函数，进行编译
+
 	if nblk := len(f.Blocks); nblk > 0 {
 		fn.MakeBlocks(nblk)   // to set fn.HasBody() = true
 		if f.Recover != nil { // set recover block
@@ -244,23 +237,23 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 			defer func() {
 				p.fn = nil
 			}()
-			p.phis = nil // TODO: 不清楚这是什么
+			p.phis = nil
 			if debugGoSSA {
 				f.WriteTo(os.Stderr)
 			}
 			if debugInstr {
 				log.Println("==> FuncBody", name)
 			}
-			b := fn.NewBuilder() // 创建一个函数的构建器
+			b := fn.NewBuilder()
 			p.bvals = make(map[ssa.Value]llssa.Expr)
-			off := make([]int, len(f.Blocks)) // 存储每一个基本块中有几个前置PHI指令
+			off := make([]int, len(f.Blocks))
 			for i, block := range f.Blocks {
-				off[i] = p.compilePhis(b, block) // 获得每个基本块的Phi指令的数量
+				off[i] = p.compilePhis(b, block)
 			}
 			p.blkInfos = blocks.Infos(f.Blocks)
 			i := 0
 			for {
-				block := f.Blocks[i] // 根据索引获得原本函数的每一个基本块
+				block := f.Blocks[i]
 				doMainInit := (i == 0 && name == "main")
 				doModInit := (i == 1 && isInit)
 				p.compileBlock(b, block, off[i], doMainInit, doModInit)
@@ -268,10 +261,10 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 					break
 				}
 			}
-			for _, phi := range p.phis { // 在函数基本块编译完成后，编译PHIS指令
+			for _, phi := range p.phis {
 				phi()
 			}
-			b.EndBuild() //TODO: 了解这个函数
+			b.EndBuild()
 		})
 		for _, af := range f.AnonFuncs {
 			p.compileFuncDecl(pkg, af)
@@ -280,74 +273,6 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 	return fn, nil, goFunc
 }
 
-type blockInfo struct {
-	kind llssa.DoAction
-	next int
-}
-
-func blockInfos(blks []*ssa.BasicBlock) []blockInfo {
-	n := len(blks)
-	infos := make([]blockInfo, n)
-	for i := range blks {
-		next := i + 1
-		if next >= n {
-			next = -1
-		}
-		infos[i] = blockInfo{kind: llssa.DeferInCond, next: next}
-	}
-	return infos
-}
-
-// funcOf returns a function by name and set ftype = goFunc, cFunc, etc.
-// or returns nil and set ftype = llgoCstr, llgoAlloca, llgoUnreachable, etc.
-func (p *context) funcOf(fn *ssa.Function) (aFn llssa.Function, pyFn llssa.PyObjRef, ftype int) {
-	pkgTypes, name, ftype := p.funcName(fn, false)
-	switch ftype {
-	case pyFunc:
-		if kind, mod := pkgKindByScope(pkgTypes.Scope()); kind == PkgPyModule {
-			pkg := p.pkg
-			fnName := pysymPrefix + mod + "." + name
-			if pyFn = pkg.PyObjOf(fnName); pyFn == nil {
-				pyFn = pkg.PyNewFunc(fnName, fn.Signature, true)
-			}
-			return
-		}
-		ftype = ignoredFunc
-	case llgoInstr:
-		switch name {
-		case "cstr":
-			ftype = llgoCstr
-		case "advance":
-			ftype = llgoAdvance
-		case "index":
-			ftype = llgoIndex
-		case "alloca":
-			ftype = llgoAlloca
-		case "allocaCStr":
-			ftype = llgoAllocaCStr
-		case "stringData":
-			ftype = llgoStringData
-		case "pyList":
-			ftype = llgoPyList
-		case "unreachable":
-			ftype = llgoUnreachable
-		default:
-			panic("unknown llgo instruction: " + name)
-		}
-	default:
-		pkg := p.pkg
-		if aFn = pkg.FuncOf(name); aFn == nil {
-			if len(fn.FreeVars) > 0 {
-				return nil, nil, ignoredFunc
-			}
-			sig := fn.Signature
-			aFn = pkg.NewFuncEx(name, sig, llssa.Background(ftype), false)
-		}
-	}
-	return
-}
-
-// 编译函数的某个基本块，对块中的每一个指令进行编译，跳过前n个phi指令
 func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, doMainInit, doModInit bool) llssa.BasicBlock {
 	var last int
 	var pyModInit bool
@@ -374,8 +299,8 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 		argv.InitNil()
 		b.Store(argc.Expr, fn.Param(0))
 		b.Store(argv.Expr, fn.Param(1))
-		callRuntimeInit(b, pkg)              // 调用运行时的初始化函数
-		b.Call(pkg.FuncOf("main.init").Expr) // 创建函数调用指令，调用main.init函数
+		callRuntimeInit(b, pkg)
+		b.Call(pkg.FuncOf("main.init").Expr)
 	}
 	for i, instr := range instrs {
 		if i == 1 && doModInit && p.state == pkgInPatch {
@@ -406,11 +331,8 @@ const (
 	RuntimeInit = llssa.PkgRuntime + ".init"
 )
 
-// 当前位置插入运行时初始化函数
 func callRuntimeInit(b llssa.Builder, pkg llssa.Package) {
-	// 在IR中声明这个函数 declare void @"github.com/goplus/llgo/internal/runtime.init"()
 	fn := pkg.NewFunc(RuntimeInit, llssa.NoArgsNoRet, llssa.InC) // don't need to convert runtime.init
-	// 当前位置调用该函数 call void @"github.com/goplus/llgo/internal/runtime.init"()
 	b.Call(fn.Expr)
 }
 
@@ -485,15 +407,15 @@ func (p *context) compilePhis(b llssa.Builder, block *ssa.BasicBlock) int {
 	if ninstr := len(block.Instrs); ninstr > 0 {
 		if isPhi(block.Instrs[0]) {
 			n := 1
-			for n < ninstr && isPhi(block.Instrs[n]) { //TODO:
+			for n < ninstr && isPhi(block.Instrs[n]) {
 				n++
 			}
 			rets := make([]llssa.Expr, n) // TODO(xsw): check to remove this
 			for i := 0; i < n; i++ {
-				iv := block.Instrs[i].(*ssa.Phi) // 获得指定位置的PHI指令
-				rets[i] = p.compilePhi(b, iv)    // 编译PHI指令
+				iv := block.Instrs[i].(*ssa.Phi)
+				rets[i] = p.compilePhi(b, iv)
 			}
-			for i := 0; i < n; i++ { // 建立原始的go ssa和编译后的llvm phi的映射
+			for i := 0; i < n; i++ {
 				iv := block.Instrs[i].(*ssa.Phi)
 				p.bvals[iv] = rets[i]
 			}
@@ -503,87 +425,21 @@ func (p *context) compilePhis(b llssa.Builder, block *ssa.BasicBlock) int {
 	return 0
 }
 
-// 编译一个Phi指令
 func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) {
 	phi := b.Phi(p.prog.Type(v.Type(), llssa.InGo))
 	ret = phi.Expr
-	p.phis = append(p.phis, func() { // 注册一个函数
+	p.phis = append(p.phis, func() {
 		preds := v.Block().Preds
 		bblks := make([]llssa.BasicBlock, len(preds))
 		for i, pred := range preds {
-			bblks[i] = p.fn.Block(pred.Index) // 获得指定的前驱节点，存入llgo的llvm的phi指令中
+			bblks[i] = p.fn.Block(pred.Index)
 		}
-		edges := v.Edges // 在一个例子中 phi指令存储了 t9 = phi [0: 0:int, 1: t4] ，表示从0这个节点转移来时，使用0:int，从1节点来使用t4的内容，所以Edge中会存储一个Const类型表示0节点对应的0常量，BinOP类型对应那个1节点所指代的二元操作符
+		edges := v.Edges
 		phi.AddIncoming(b, bblks, func(i int, blk llssa.BasicBlock) llssa.Expr {
 			b.SetBlockEx(blk, llssa.BeforeLast, false)
 			return p.compileValue(b, edges[i])
 		})
 	})
-	return
-}
-
-func (p *context) call(b llssa.Builder, act llssa.DoAction, call *ssa.CallCommon) (ret llssa.Expr) {
-	cv := call.Value
-	if mthd := call.Method; mthd != nil {
-		o := p.compileValue(b, cv)
-		fn := b.Imethod(o, mthd)
-		args := p.compileValues(b, call.Args, fnNormal)
-		ret = b.Do(act, fn, args...)
-		return
-	}
-	kind := p.funcKind(cv) // 获得调用的函数的种类
-	if kind == fnIgnore {
-		return
-	}
-	args := call.Args
-	if debugGoSSA {
-		log.Println(">>> Do", act, cv, args)
-	}
-	switch cv := cv.(type) { // 根据 call 调用的对象，执行不同的操作
-	case *ssa.Builtin: // TODO:
-		fn := cv.Name()
-		if fn == "ssa:wrapnilchk" { // TODO(xsw): check nil ptr
-			arg := args[0]
-			ret = p.compileValue(b, arg)
-		} else {
-			args := p.compileValues(b, args, kind)
-			ret = b.Do(act, llssa.Builtin(fn), args...)
-		}
-	case *ssa.Function: // 调用的是一个函数
-		aFn, pyFn, ftype := p.compileFunction(cv)
-		// TODO(xsw): check ca != llssa.Call
-		switch ftype {
-		case goFunc, cFunc:
-			args := p.compileValues(b, args, kind) // 编译参数
-			ret = b.Do(act, aFn.Expr, args...)
-		case pyFunc:
-			args := p.compileValues(b, args, kind)
-			ret = b.Do(act, pyFn.Expr, args...)
-		case llgoPyList:
-			args := p.compileValues(b, args, fnHasVArg)
-			ret = b.PyList(args...)
-		case llgoCstr:
-			ret = cstr(b, args)
-		case llgoAdvance:
-			ret = p.advance(b, args)
-		case llgoIndex:
-			ret = p.index(b, args)
-		case llgoAlloca:
-			ret = p.alloca(b, args)
-		case llgoAllocaCStr:
-			ret = p.allocaCStr(b, args)
-		case llgoStringData:
-			ret = p.stringData(b, args)
-		case llgoUnreachable: // func unreachable()
-			b.Unreachable()
-		default:
-			log.Panicln("unknown ftype:", ftype)
-		}
-	default:
-		fn := p.compileValue(b, cv)
-		args := p.compileValues(b, args, kind)
-		ret = b.Do(act, fn, args...)
-	}
 	return
 }
 
@@ -597,11 +453,11 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 	switch v := iv.(type) {
 	case *ssa.Call:
 		ret = p.call(b, llssa.Call, &v.Call)
-	case *ssa.BinOp: // 构建双目运算符
+	case *ssa.BinOp:
 		x := p.compileValue(b, v.X)
 		y := p.compileValue(b, v.Y)
 		ret = b.BinOp(v.Op, x, y)
-	case *ssa.UnOp: // 构建单目运算符
+	case *ssa.UnOp:
 		x := p.compileValue(b, v.X)
 		ret = b.UnOp(v.Op, x)
 	case *ssa.ChangeType:
@@ -623,13 +479,13 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		elem := p.prog.Type(t.Elem(), llssa.InGo)
 		ret = b.Alloc(elem, v.Heap)
 	case *ssa.IndexAddr:
-		vx := v.X                       //获得变量
-		if _, ok := p.isVArgs(vx); ok { // TODO:(了解这里是什么) varargs: this is a varargs index
+		vx := v.X
+		if _, ok := p.isVArgs(vx); ok { // varargs: this is a varargs index
 			return
 		}
-		x := p.compileValue(b, vx)        // 获得对应的全局变量 （不构建）
-		idx := p.compileValue(b, v.Index) // 获得常量表达式 （不构建）
-		ret = b.IndexAddr(x, idx)         // 获得地址访问表达式 （构建比较运算指令，数组越界指令）
+		x := p.compileValue(b, vx)
+		idx := p.compileValue(b, v.Index)
+		ret = b.IndexAddr(x, idx)
 	case *ssa.Index:
 		x := p.compileValue(b, v.X)
 		idx := p.compileValue(b, v.Index)
@@ -738,17 +594,16 @@ func (p *context) jumpTo(v *ssa.Jump) llssa.BasicBlock {
 	return fn.Block(succs[0].Index)
 }
 
-// 编译函数中的某个基本块中的指定指令
 func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
-	if iv, ok := instr.(instrOrValue); ok { //TODO: 了解这里为什么Store，Jump不符合这里类型
+	if iv, ok := instr.(instrOrValue); ok {
 		p.compileInstrOrValue(b, iv, false)
 		return
 	}
 	switch v := instr.(type) {
-	case *ssa.Store: //存储指令  ssa:*init$guard = true:bool
-		va := v.Addr // 获得对应的IndexAddr表达式，对应某个指针
+	case *ssa.Store:
+		va := v.Addr
 		if va, ok := va.(*ssa.IndexAddr); ok {
-			if args, ok := p.isVArgs(va.X); ok { //TODO: 考虑这个情况 varargs: this is a varargs store
+			if args, ok := p.isVArgs(va.X); ok { // varargs: this is a varargs store
 				idx := intVal(va.Index)
 				val := v.Val
 				if vi, ok := val.(*ssa.MakeInterface); ok {
@@ -758,9 +613,9 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 				return
 			}
 		}
-		ptr := p.compileValue(b, va)    //获取IndexAddr获得对应的指针
-		val := p.compileValue(b, v.Val) //获取常量表达式
-		b.Store(ptr, val)               //构建存储指令
+		ptr := p.compileValue(b, va)
+		val := p.compileValue(b, v.Val)
+		b.Store(ptr, val)
 	case *ssa.Jump:
 		jmpb := p.jumpTo(v)
 		b.Jump(jmpb)
@@ -769,7 +624,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		if n := len(v.Results); n > 0 {
 			results = make([]llssa.Expr, n)
 			for i, r := range v.Results {
-				results[i] = p.compileValue(b, r) // 如果返回内容的某个参数为函数形参的某一个，那么该项就会是形参的表达
+				results[i] = p.compileValue(b, r)
 			}
 		}
 		if p.inMain(instr) {
@@ -778,12 +633,12 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		}
 		b.Return(results...)
 	case *ssa.If:
-		fn := p.fn                        //获得当前正在处理的LLVM func
-		cond := p.compileValue(b, v.Cond) //获得条件表达式的结果的类型
-		succs := v.Block().Succs          //获得这个指令对应的基本块的if true 和 else的基本块
-		thenb := fn.Block(succs[0].Index) //获得if true的基本块
-		elseb := fn.Block(succs[1].Index) // 获得else的基本块
-		b.If(cond, thenb, elseb)          // 为该基本块创建对应的IF指令，此时仅仅构建了对应的块的IF跳转指令，对应块中还未生成对应的指令
+		fn := p.fn
+		cond := p.compileValue(b, v.Cond)
+		succs := v.Block().Succs
+		thenb := fn.Block(succs[0].Index)
+		elseb := fn.Block(succs[1].Index)
+		b.If(cond, thenb, elseb)
 	case *ssa.MapUpdate:
 		m := p.compileValue(b, v.Map)
 		key := p.compileValue(b, v.Key)
@@ -820,11 +675,11 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 		return p.compileInstrOrValue(b, iv, true)
 	}
 	switch v := v.(type) {
-	case *ssa.Parameter: //函数的返回值和形参都为该类型
-		fn := v.Parent() // 获得参数对应的Func
+	case *ssa.Parameter:
+		fn := v.Parent()
 		for idx, param := range fn.Params {
 			if param == v {
-				return p.fn.Param(idx) // 如果某个返回值正好与函数的形参对应，那么返回该形参（保证引用）
+				return p.fn.Param(idx)
 			}
 		}
 	case *ssa.Function:
@@ -833,9 +688,9 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 			return aFn.Expr
 		}
 		return pyFn.Expr
-	case *ssa.Global: // 从LLVM包中获得该全局变量的引用
+	case *ssa.Global:
 		return p.varOf(b, v)
-	case *ssa.Const: // 获得该常量对应的类型的表达式
+	case *ssa.Const:
 		t := types.Default(v.Type())
 		bg := llssa.InGo
 		if p.inCFunc {
@@ -887,21 +742,13 @@ type Patches = map[string]*ssa.Package
 
 // NewPackage compiles a Go package to LLVM IR package.
 func NewPackage(prog llssa.Program, pkg *ssa.Package, files []*ast.File) (ret llssa.Package, err error) {
-	type namedMember struct {
-		name string
-		val  ssa.Member
-	}
-	// pkg.Members 存放了所有的包级别的变量和函数
-	members := make([]*namedMember, 0, len(pkg.Members))
-	for name, v := range pkg.Members {
-		members = append(members, &namedMember{name, v})
-	}
-	sort.Slice(members, func(i, j int) bool {
-		return members[i].name < members[j].name
-	})
+	return NewPackageEx(prog, nil, pkg, files)
+}
 
-	pkgProg := pkg.Prog // 正在分析的go程序
-	pkgTypes := pkg.Pkg // 包中的package类型信息
+// NewPackageEx compiles a Go package to LLVM IR package.
+func NewPackageEx(prog llssa.Program, patches Patches, pkg *ssa.Package, files []*ast.File) (ret llssa.Package, err error) {
+	pkgProg := pkg.Prog
+	pkgTypes := pkg.Pkg
 	pkgName, pkgPath := pkgTypes.Name(), llssa.PathOf(pkgTypes)
 	alt, hasPatch := patches[pkgPath]
 	if hasPatch {
@@ -912,7 +759,7 @@ func NewPackage(prog llssa.Program, pkg *ssa.Package, files []*ast.File) (ret ll
 	if pkgPath == llssa.PkgRuntime {
 		prog.SetRuntime(pkgTypes)
 	}
-	ret = prog.NewPackage(pkgName, pkgPath) //初始化
+	ret = prog.NewPackage(pkgName, pkgPath)
 
 	ctx := &context{
 		prog:    prog,
@@ -981,8 +828,6 @@ func processPkg(ctx *context, ret llssa.Package, pkg *ssa.Package) {
 		member := m.val
 		switch member := member.(type) {
 		case *ssa.Function:
-			// TypeParams 是泛型函数定义中声明的类型参数，TypeArgs是调用泛型函数时传递的类型参数
-			// 暂时不处理这种情况
 			if member.TypeParams() != nil || member.TypeArgs() != nil {
 				// TODO(xsw): don't compile generic functions
 				// Do not try to build generic (non-instantiated) functions.

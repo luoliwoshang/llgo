@@ -19,7 +19,6 @@ package ssa
 import (
 	"bytes"
 	"fmt"
-	"go/token"
 	"go/types"
 	"log"
 	"strings"
@@ -58,8 +57,8 @@ func (p BasicBlock) Addr() Expr {
 // -----------------------------------------------------------------------------
 
 type aBuilder struct {
-	impl llvm.Builder // Builder示例
-	blk  BasicBlock   // 当前的基本块
+	impl llvm.Builder
+	blk  BasicBlock
 	Func Function
 	Pkg  Package
 	Prog Program
@@ -78,7 +77,7 @@ func (b Builder) Dispose() {
 	b.impl.Dispose()
 }
 
-// 为Builder设置当前的基本块 （SetBlock means SetBlockEx(blk, AtEnd, true).）
+// SetBlock means SetBlockEx(blk, AtEnd, true).
 func (b Builder) SetBlock(blk BasicBlock) Builder {
 	if debugInstr {
 		log.Printf("Block _llgo_%v:\n", blk.idx)
@@ -111,7 +110,6 @@ const (
 	afterInit
 )
 
-// 将传入的基本块设置为当前的基本块，并将插入点设置为基本块的末尾，builder后再执行指令，即会在该基本块后插入
 // SetBlockEx sets blk as current basic block and pos as its insert point.
 func (b Builder) SetBlockEx(blk BasicBlock, pos InsertPoint, setBlk bool) {
 	if b.Func != blk.fn {
@@ -157,192 +155,7 @@ func notInit(instr llvm.Value) bool {
 
 // -----------------------------------------------------------------------------
 
-const (
-	deferKey = "__llgo_defer"
-)
-
-type aDefer struct {
-	nextBit  int        // next defer bit
-	key      Expr       // pthread TLS key
-	data     Expr       // pointer to runtime.Defer
-	bitsPtr  Expr       // pointer to defer bits
-	rundPtr  Expr       // pointer to RunDefers index
-	procBlk  BasicBlock // deferProc block
-	stmts    []func(bits Expr)
-	runsNext []BasicBlock // next blocks of RunDefers
-}
-
-/*
-// func(uintptr)
-func (p Program) tyDeferFunc() *types.Signature {
-	if p.deferFnTy == nil {
-		paramUintptr := types.NewParam(token.NoPos, nil, "", p.Uintptr().raw.Type)
-		params := types.NewTuple(paramUintptr)
-		p.deferFnTy = types.NewSignatureType(nil, nil, nil, params, nil, false)
-	}
-	return p.deferFnTy
-}
-*/
-
-func (p Package) deferInit() {
-	keyVar := p.VarOf(deferKey)
-	if keyVar == nil {
-		return
-	}
-	prog := p.Prog
-	keyNil := prog.Null(prog.DeferPtrPtr())
-	keyVar.Init(keyNil)
-	keyVar.impl.SetLinkage(llvm.LinkOnceAnyLinkage)
-
-	b := p.afterBuilder()
-	eq := b.BinOp(token.EQL, b.Load(keyVar.Expr), keyNil)
-	b.IfThen(eq, func() {
-		b.pthreadKeyCreate(keyVar.Expr, prog.Null(prog.VoidPtr()))
-	})
-}
-
-func (p Package) newDeferKey() Global {
-	return p.NewVarEx(deferKey, p.Prog.DeferPtrPtr())
-}
-
-func (b Builder) deferKey() Expr {
-	return b.Load(b.Pkg.newDeferKey().Expr)
-}
-
-func (b Builder) getDefer() *aDefer {
-	self := b.Func
-	if self.defer_ == nil {
-		// TODO(xsw): if in pkg.init?
-		// 0: proc func(uintptr)
-		// 1: bits uintptr
-		// 2: link *Defer
-		// 3: rund int
-		b.SetBlockEx(b.blk, AtStart, false)
-		prog := b.Prog
-		key := b.deferKey()
-		deferfn := prog.Null(prog.VoidPtr())
-		zero := prog.Val(uintptr(0))
-		link := b.pthreadGetspecific(key)
-		ptr := b.aggregateAlloca(prog.Defer(), deferfn.impl, zero.impl, link.impl)
-		deferData := Expr{ptr, prog.DeferPtr()}
-		b.pthreadSetspecific(key, deferData)
-		b.SetBlockEx(b.blk, AtEnd, false)
-		self.defer_ = &aDefer{
-			key:     key,
-			data:    deferData,
-			bitsPtr: b.FieldAddr(deferData, 1),
-			rundPtr: b.FieldAddr(deferData, 3),
-			procBlk: self.MakeBlock(),
-		}
-	}
-	return self.defer_
-}
-
-// Defer emits a defer instruction.
-func (b Builder) Defer(kind DoAction, fn Expr, args ...Expr) {
-	if debugInstr {
-		logCall("Defer", fn, args)
-	}
-	var prog Program
-	var nextbit Expr
-	var self = b.getDefer()
-	switch kind {
-	case DeferInCond:
-		prog = b.Prog
-		next := self.nextBit
-		self.nextBit++
-		bits := b.Load(self.bitsPtr)
-		nextbit = prog.Val(uintptr(1 << next))
-		b.Store(self.bitsPtr, b.BinOp(token.OR, bits, nextbit))
-	case DeferAlways:
-		// nothing to do
-	default:
-		panic("todo: DeferInLoop is not supported")
-	}
-	self.stmts = append(self.stmts, func(bits Expr) {
-		switch kind {
-		case DeferInCond:
-			zero := prog.Val(uintptr(0))
-			has := b.BinOp(token.NEQ, b.BinOp(token.AND, bits, nextbit), zero)
-			b.IfThen(has, func() {
-				b.Call(fn, args...)
-			})
-		case DeferAlways:
-			b.Call(fn, args...)
-		}
-	})
-}
-
-// RunDefers emits instructions to run deferred instructions.
-func (b Builder) RunDefers() {
-	prog := b.Prog
-	self := b.getDefer()
-	b.Store(self.rundPtr, prog.Val(len(self.runsNext)))
-	b.Jump(self.procBlk)
-
-	blk := b.Func.MakeBlock()
-	self.runsNext = append(self.runsNext, blk)
-
-	b.SetBlockEx(blk, AtEnd, false)
-	b.blk.last = blk.last
-}
-
-func (p Function) endDefer(b Builder) {
-	self := p.defer_
-	if self == nil {
-		return
-	}
-	nexts := self.runsNext
-	n := len(nexts)
-	if n == 0 {
-		return
-	}
-	b.SetBlockEx(self.procBlk, AtEnd, true)
-	bits := b.Load(self.bitsPtr)
-	stmts := self.stmts
-	for i := len(stmts) - 1; i >= 0; i-- {
-		stmts[i](bits)
-	}
-
-	link := b.getField(b.Load(self.data), 2)
-	b.pthreadSetspecific(self.key, link)
-
-	prog := b.Prog
-	rund := b.Load(self.rundPtr)
-	sw := b.impl.CreateSwitch(rund.impl, nexts[0].first, n-1)
-	for i := 1; i < n; i++ {
-		sw.AddCase(prog.Val(i).impl, nexts[i].first)
-	}
-}
-
-// -----------------------------------------------------------------------------
-
-/*
-// Recover emits a recover instruction.
-func (b Builder) Recover() (v Expr) {
-	if debugInstr {
-		log.Println("Recover")
-	}
-	prog := b.Prog
-	return prog.Zero(prog.Eface())
-}
-*/
-
-// Panic emits a panic instruction.
-func (b Builder) Panic(v Expr) {
-	if debugInstr {
-		log.Printf("Panic %v\n", v.impl)
-	}
-	b.Call(b.Pkg.rtFunc("TracePanic"), v)
-	b.impl.CreateUnreachable()
-}
-
-// Unreachable emits an unreachable instruction.
-func (b Builder) Unreachable() {
-	b.impl.CreateUnreachable()
-}
-
-// 根据返回内容的长度，构建出对应的返回指令（void,Ret,AggregateRet) Return emits a return instruction.
+// Return emits a return instruction.
 func (b Builder) Return(results ...Expr) {
 	if debugInstr {
 		var b bytes.Buffer
@@ -357,15 +170,14 @@ func (b Builder) Return(results ...Expr) {
 	}
 	switch n := len(results); n {
 	case 0:
-		b.impl.CreateRetVoid() // 没有返回值
+		b.impl.CreateRetVoid()
 	case 1:
-		raw := b.Func.raw.Type.(*types.Signature).Results().At(0).Type() // 获得原始的类型
-		ret := checkExpr(results[0], raw, b)                             // 获得LLVM表达式
-		b.impl.CreateRet(ret.impl)                                       // 创建返回指令
-		// 当调用 CreateRet 方法时,它会将 ret 指令添加到当前基本块的末尾。 b.blk.last
-	default: // 多个返回值
-		tret := b.Func.raw.Type.(*types.Signature).Results()       // 返回值是个元组，其中包含了函数的多个返回值
-		b.impl.CreateAggregateRet(llvmParams(0, results, tret, b)) // 创建一个聚合返回指令
+		raw := b.Func.raw.Type.(*types.Signature).Results().At(0).Type()
+		ret := checkExpr(results[0], raw, b)
+		b.impl.CreateRet(ret.impl)
+	default:
+		tret := b.Func.raw.Type.(*types.Signature).Results()
+		b.impl.CreateAggregateRet(llvmParams(0, results, tret, b))
 	}
 }
 
@@ -385,7 +197,7 @@ func (b Builder) Extract(x Expr, i int) (ret Expr) {
 	return b.getField(x, i)
 }
 
-// 构建一个跳转指令（Jump emits a jump instruction）
+// Jump emits a jump instruction.
 func (b Builder) Jump(jmpb BasicBlock) {
 	if b.Func != jmpb.fn {
 		panic("mismatched function")
@@ -431,43 +243,43 @@ func (b Builder) IfThen(cond Expr, then func()) {
 
 // -----------------------------------------------------------------------------
 /*
-type caseStmt struct {
-	v   llvm.Value
-	blk llvm.BasicBlock
-}
+ type caseStmt struct {
+	 v   llvm.Value
+	 blk llvm.BasicBlock
+ }
 
-type aSwitch struct {
-	v     llvm.Value
-	def   llvm.BasicBlock
-	cases []caseStmt
-}
+ type aSwitch struct {
+	 v     llvm.Value
+	 def   llvm.BasicBlock
+	 cases []caseStmt
+ }
 
-// Switch represents a switch statement.
-type Switch = *aSwitch
+ // Switch represents a switch statement.
+ type Switch = *aSwitch
 
-// Case emits a case instruction.
-func (p Switch) Case(v Expr, blk BasicBlock) {
-	if debugInstr {
-		log.Printf("Case %v, _llgo_%v\n", v.impl, blk.idx)
-	}
-	p.cases = append(p.cases, caseStmt{v.impl, blk.first})
-}
+ // Case emits a case instruction.
+ func (p Switch) Case(v Expr, blk BasicBlock) {
+	 if debugInstr {
+		 log.Printf("Case %v, _llgo_%v\n", v.impl, blk.idx)
+	 }
+	 p.cases = append(p.cases, caseStmt{v.impl, blk.first})
+ }
 
-// End ends a switch statement.
-func (p Switch) End(b Builder) {
-	sw := b.impl.CreateSwitch(p.v, p.def, len(p.cases))
-	for _, c := range p.cases {
-		sw.AddCase(c.v, c.blk)
-	}
-}
+ // End ends a switch statement.
+ func (p Switch) End(b Builder) {
+	 sw := b.impl.CreateSwitch(p.v, p.def, len(p.cases))
+	 for _, c := range p.cases {
+		 sw.AddCase(c.v, c.blk)
+	 }
+ }
 
-// Switch starts a switch statement.
-func (b Builder) Switch(v Expr, defb BasicBlock) Switch {
-	if debugInstr {
-		log.Printf("Switch %v, _llgo_%v\n", v.impl, defb.idx)
-	}
-	return &aSwitch{v.impl, defb.first, nil}
-}
+ // Switch starts a switch statement.
+ func (b Builder) Switch(v Expr, defb BasicBlock) Switch {
+	 if debugInstr {
+		 log.Printf("Switch %v, _llgo_%v\n", v.impl, defb.idx)
+	 }
+	 return &aSwitch{v.impl, defb.first, nil}
+ }
 */
 // -----------------------------------------------------------------------------
 
@@ -485,7 +297,7 @@ func (p Phi) AddIncoming(b Builder, preds []BasicBlock, f func(i int, blk BasicB
 		val := f(iblk, blk)
 		vals[iblk] = checkExpr(val, raw, b).impl
 	}
-	p.impl.AddIncoming(vals, bs) //通过寄存器列表和Blocks列表生成实际的PHI指令
+	p.impl.AddIncoming(vals, bs)
 }
 
 func llvmPredBlocks(preds []BasicBlock) []llvm.BasicBlock {

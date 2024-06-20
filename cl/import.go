@@ -460,8 +460,7 @@ const (
 	pyVar      = int(llssa.InPython)
 )
 
-// 获得全局变量的完整名称
-func (p *context) varName(pkg *types.Package, v *ssa.Global) (vName string, vtype int) {
+func (p *context) varName(pkg *types.Package, v *ssa.Global) (vName string, vtype int, define bool) {
 	name := llssa.FullName(pkg, v.Name())
 	if v, ok := p.link[name]; ok {
 		if pos := strings.IndexByte(v, '.'); pos >= 0 {
