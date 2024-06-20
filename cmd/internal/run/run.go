@@ -62,8 +62,9 @@ func runCmdEx(cmd *base.Command, args []string, mode build.Mode) {
 	build.Do(args, conf)
 }
 
+// 以标志分割为两部分，切分为标志前（包括标志）以及标志后的参数
 func parseRunArgs(args []string) ([]string, []string, error) {
-	n := build.SkipFlagArgs(args)
+	n := build.SkipFlagArgs(args) //获得剩余的非标志参数（-o之类的就是标识参数，如果除了标志参数没别的，那么也不能运行，抛出没有文件的错误）
 	if n < 0 {
 		return nil, nil, errNoProj
 	}
@@ -76,7 +77,7 @@ func parseRunArgs(args []string) ([]string, []string, error) {
 		}
 		return args[:n], args[n:], nil
 	}
-	return args[:n+1], args[n+1:], nil
+	return args[:n+1], args[n+1:], nil //以标志分割为两部分，切分为标志前（包括标志）以及标志后的参数
 }
 
 func isGoFile(fname string) bool {

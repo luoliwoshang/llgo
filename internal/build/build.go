@@ -62,24 +62,24 @@ func needLLFile(mode Mode) bool {
 }
 
 type Config struct {
-	BinPath string
+	BinPath string   // 存放构建后的产物的路径
 	AppExt  string   // ".exe" on Windows, empty on Unix
 	OutFile string   // only valid for ModeBuild when len(pkgs) == 1
-	RunArgs []string // only valid for ModeRun
+	RunArgs []string //TODO: only valid for ModeRun
 	Mode    Mode
 }
 
 func NewDefaultConf(mode Mode) *Config {
 	bin := os.Getenv("GOBIN")
 	if bin == "" {
-		gopath, err := envGOPATH()
+		gopath, err := envGOPATH() // 获得GOPATH的路径
 		if err != nil {
 			panic(fmt.Errorf("cannot get GOPATH: %v", err))
 		}
 		bin = filepath.Join(gopath, "bin")
 	}
 	conf := &Config{
-		BinPath: bin,
+		BinPath: bin, // 获得GOPATH/bin 作为编译的二进制文件存放的路径
 		Mode:    mode,
 		AppExt:  DefaultAppExt(),
 	}
@@ -114,9 +114,9 @@ const (
 )
 
 func Do(args []string, conf *Config) {
-	flags, patterns, verbose := ParseArgs(args, buildFlags)
+	flags, patterns, verbose := ParseArgs(args, buildFlags) //llgo run -v . -> flags:[-v] patterns:[.] verbose:true
 	cfg := &packages.Config{
-		Mode:       loadSyntax | packages.NeedDeps | packages.NeedModule | packages.NeedExportFile,
+		Mode:       loadSyntax | packages.NeedDeps | packages.NeedModule | packages.NeedExportFile, //TODO:
 		BuildFlags: flags,
 		Fset:       token.NewFileSet(),
 	}
@@ -133,12 +133,12 @@ func Do(args []string, conf *Config) {
 
 	prog := llssa.NewProgram(nil)
 	sizes := prog.TypeSizes
-	dedup := packages.NewDeduper()
+	dedup := packages.NewDeduper() //TODO:
 
-	if patterns == nil {
+	if patterns == nil { //默认为执行 .
 		patterns = []string{"."}
 	}
-	initial, err := packages.LoadEx(dedup, sizes, cfg, patterns...)
+	initial, err := packages.LoadEx(dedup, sizes, cfg, patterns...) //TODO:
 	check(err)
 
 	mode := conf.Mode
@@ -155,11 +155,11 @@ func Do(args []string, conf *Config) {
 		return
 	}
 
-	altPkgPaths := altPkgs(initial, llssa.PkgRuntime)
-	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...)
+	altPkgPaths := altPkgs(initial, llssa.PkgRuntime)                  //TODO: 转换一些Pkg?，比如 "github.com/goplus/llgo/internal/lib/errors"  "github.com/goplus/llgo/internal/runtime"
+	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...) // 加载指定路径的包
 	check(err)
 
-	noRt := 1
+	noRt := 1 //TODO:
 	prog.SetRuntime(func() *types.Package {
 		noRt = 0
 		return altPkgs[0].Types
@@ -168,11 +168,13 @@ func Do(args []string, conf *Config) {
 		return dedup.Check(llssa.PkgPython).Types
 	})
 
-	progSSA := ssa.NewProgram(initial[0].Fset, ssaBuildMode)
-	patches := make(cl.Patches, len(altPkgPaths))
-	altSSAPkgs(progSSA, patches, altPkgs[1:], verbose)
+	progSSA := ssa.NewProgram(initial[0].Fset, ssaBuildMode) // 初始化一个ssa程序（go），但是不执行build
+	patches := make(cl.Patches, len(altPkgPaths))            //TODO:
+	altSSAPkgs(progSSA, patches, altPkgs[1:], verbose)       // 执行ssa.Program的build，并遍历所有的包，获得其中需要打补丁（patch）的包
 
 	ctx := &context{progSSA, prog, dedup, patches, make(map[string]none), initial, mode}
+
+	//构建所有包
 	pkgs := buildAllPkgs(ctx, initial, verbose)
 
 	var llFiles []string
@@ -183,10 +185,10 @@ func Do(args []string, conf *Config) {
 		}
 		llFiles = append(llFiles, pkg.ExportFile)
 	}
-	if mode != ModeBuild {
+	if mode != ModeBuild { //如果不只是构建
 		nErr := 0
 		for _, pkg := range initial {
-			if pkg.Name == "main" {
+			if pkg.Name == "main" { //对main包进行链接
 				nErr += linkMainPkg(pkg, pkgs, llFiles, conf, mode, verbose)
 			}
 		}
@@ -219,11 +221,11 @@ const (
 )
 
 type context struct {
-	progSSA *ssa.Program
-	prog    llssa.Program
-	dedup   packages.Deduper
-	patches cl.Patches
-	built   map[string]none
+	progSSA *ssa.Program     //go的ssa.Program
+	prog    llssa.Program    //llgo的ssa program
+	dedup   packages.Deduper //TODO:
+	patches cl.Patches       //一个go程序中需要打补丁的包 string -> ssa.Package
+	built   map[string]none  //TODO:
 	initial []*packages.Package
 	mode    Mode
 }
@@ -302,19 +304,19 @@ func buildAllPkgs(ctx *context, initial []*packages.Package, verbose bool) (pkgs
 }
 
 func linkMainPkg(pkg *packages.Package, pkgs []*aPackage, llFiles []string, conf *Config, mode Mode, verbose bool) (nErr int) {
-	pkgPath := pkg.PkgPath
-	name := path.Base(pkgPath)
-	app := conf.OutFile
+	pkgPath := pkg.PkgPath     // 被编译的那个包的路径
+	name := path.Base(pkgPath) // 名字
+	app := conf.OutFile        //TODO: 什么时候这里会有OutFile不为空
 	if app == "" {
 		app = filepath.Join(conf.BinPath, name+conf.AppExt)
-	}
+	} //获得编译的程序的位置
 	const N = 6
-	args := make([]string, N, len(pkg.Imports)+len(llFiles)+(N+1))
+	args := make([]string, N, len(pkg.Imports)+len(llFiles)+(N+1)) //一个ll文件需要占用一个args，并且还有其他额外的链接的文件
 	args[0] = "-o"
-	args[1] = app
-	args[2] = "-Wno-override-module"
-	args[3] = "-Xlinker"
-	if runtime.GOOS == "darwin" { // ld64.lld (macOS)
+	args[1] = app                    //输出文件的位置及名称
+	args[2] = "-Wno-override-module" //TODO:
+	args[3] = "-Xlinker"             //TODO:
+	if runtime.GOOS == "darwin" {    // ld64.lld (macOS)  TODO: 下面两个参数是干啥的
 		args[4] = "-dead_strip"
 		args[5] = "" // It's ok to leave it empty, as we can assume libpthread is built-in on macOS.
 	} else { // ld.lld (Unix), lld-link (Windows), wasm-ld (WebAssembly)
@@ -324,10 +326,10 @@ func linkMainPkg(pkg *packages.Package, pkgs []*aPackage, llFiles []string, conf
 	//args[6] = "-fuse-ld=lld" // TODO(xsw): to check lld exists or not
 	//args[7] = "-O2"
 	needRuntime := false
-	needPyInit := false
+	needPyInit := false //pkg的export file为 "/Users/zhangzhiyang/Library/Caches/go-build/f1/f1034b28cafe60f86ff5c134f28d99bd8403810da0f706763be089151c0ec43a-d.ll"
 	packages.Visit([]*packages.Package{pkg}, nil, func(p *packages.Package) {
 		if p.ExportFile != "" { // skip packages that only contain declarations
-			args = appendLinkFiles(args, p.ExportFile)
+			args = appendLinkFiles(args, p.ExportFile) //TODO:
 			need1, need2 := isNeedRuntimeOrPyInit(p)
 			if !needRuntime {
 				needRuntime = need1
@@ -338,7 +340,7 @@ func linkMainPkg(pkg *packages.Package, pkgs []*aPackage, llFiles []string, conf
 		}
 	})
 
-	var aPkg *aPackage
+	var aPkg *aPackage // 获得编译的那个包对应的llgo的包
 	for _, v := range pkgs {
 		if v.Package == pkg { // found this package
 			aPkg = v
@@ -346,10 +348,10 @@ func linkMainPkg(pkg *packages.Package, pkgs []*aPackage, llFiles []string, conf
 		}
 	}
 
-	dirty := false
-	if needRuntime && llFiles != nil {
+	dirty := false                     //TODO:
+	if needRuntime && llFiles != nil { // 需要链接runtime链接
 		for _, file := range llFiles {
-			args = appendLinkFiles(args, file)
+			args = appendLinkFiles(args, file) // 将需要编译和链接的文件添加到参数中
 		}
 	} else {
 		dirty = true
@@ -368,17 +370,17 @@ func linkMainPkg(pkg *packages.Package, pkgs []*aPackage, llFiles []string, conf
 	if verbose || mode != ModeRun {
 		fmt.Fprintln(os.Stderr, "#", pkgPath)
 	}
-	defer func() {
+	defer func() { // 在执行完成后，返回link时候的错误
 		if e := recover(); e != nil {
 			nErr = 1
 		}
 	}()
 
 	// TODO(xsw): show work
-	if verbose {
+	if verbose { // 输出clang编译的参数
 		fmt.Fprintln(os.Stderr, "clang", args)
 	}
-	err := clang.New("").Exec(args...)
+	err := clang.New("").Exec(args...) //新建一个clang的处理，并且执行对应参数
 	check(err)
 
 	switch mode {
@@ -447,16 +449,16 @@ func altPkgs(initial []*packages.Package, alts ...string) []string {
 	return alts
 }
 
-func altSSAPkgs(prog *ssa.Program, patches cl.Patches, alts []*packages.Package, verbose bool) {
+func altSSAPkgs(prog *ssa.Program, patches cl.Patches, alts []*packages.Package, verbose bool) { //TODO: patches 代表?
 	packages.Visit(alts, nil, func(p *packages.Package) {
 		if p.Types != nil && !p.IllTyped {
 			if debugBuild || verbose {
 				log.Println("==> BuildSSA", p.PkgPath)
 			}
-			pkgSSA := prog.CreatePackage(p.Types, p.Syntax, p.TypesInfo, true)
-			if strings.HasPrefix(p.PkgPath, altPkgPathPrefix) {
-				path := p.PkgPath[len(altPkgPathPrefix):]
-				patches[path] = pkgSSA
+			pkgSSA := prog.CreatePackage(p.Types, p.Syntax, p.TypesInfo, true) //go工具链的ssa表达
+			if strings.HasPrefix(p.PkgPath, altPkgPathPrefix) {                // PatchPathPrefix = "github.com/goplus/llgo/internal/lib/"
+				path := p.PkgPath[len(altPkgPathPrefix):] // "github.com/goplus/llgo/internal/lib/internal/bytealg"
+				patches[path] = pkgSSA                    //lib后的路径
 				if debugBuild || verbose {
 					log.Println("==> Patching", path)
 				}
@@ -467,10 +469,10 @@ func altSSAPkgs(prog *ssa.Program, patches cl.Patches, alts []*packages.Package,
 }
 
 type aPackage struct {
-	*packages.Package
-	SSA    *ssa.Package
-	AltPkg *packages.Cached
-	LPkg   llssa.Package
+	*packages.Package // "/Users/zhangzhiyang/Library/Caches/go-build/9a/9a87da144dcfb1906be0685b4aafe0fbe907b74c3d794f9e62d0e270eadcce44-d.ll"
+	SSA               *ssa.Package
+	AltPkg            *packages.Cached
+	LPkg              llssa.Package
 }
 
 func allPkgs(ctx *context, initial []*packages.Package, verbose bool) (all []*aPackage, errs []*packages.Package) {
@@ -528,14 +530,15 @@ var (
 	}
 )
 
+// 以标识为切割，比如llgo run -v .   run会在一开始在main函数中就处理掉了，而剩下的-v 和 .会被该函数处理为flags 和 patterns
 func ParseArgs(args []string, swflags map[string]bool) (flags, patterns []string, verbose bool) {
 	n := len(args)
 	for i := 0; i < n; i++ {
 		arg := args[i]
-		if strings.HasPrefix(arg, "-") {
+		if strings.HasPrefix(arg, "-") { // 处理标志
 			checkFlag(arg, &i, &verbose, swflags)
 		} else {
-			flags, patterns = args[:i], args[i:]
+			flags, patterns = args[:i], args[i:] //以标志为切割
 			return
 		}
 	}
@@ -547,7 +550,7 @@ func SkipFlagArgs(args []string) int {
 	n := len(args)
 	for i := 0; i < n; i++ {
 		arg := args[i]
-		if strings.HasPrefix(arg, "-") {
+		if strings.HasPrefix(arg, "-") { //TODO:
 			checkFlag(arg, &i, nil, buildFlags)
 		} else {
 			return i
@@ -576,7 +579,7 @@ var (
 	rootDir string
 )
 
-func llgoRoot() string {
+func llgoRoot() string { //TODO: 了解这个变量有啥用
 	if rootDir == "" {
 		root := os.Getenv("LLGOROOT")
 		if root == "" {
@@ -591,7 +594,7 @@ func appendLinkFiles(args []string, file string) []string {
 	if isSingleLinkFile(file) {
 		return append(args, file)
 	}
-	return append(args, strings.Split(file[1:], " ")...)
+	return append(args, strings.Split(file[1:], " ")...) // -L/opt/homebrew/Cellar/bdw-gc/8.2.6/lib -lgc -lpthread /Users/zhangzhiyang/Documents/Code/goplus/llgo/c/bdwgc/llgo_autogen.ll
 }
 
 func isSingleLinkFile(ret string) bool {

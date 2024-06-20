@@ -37,8 +37,8 @@ func mainUsage() {
 	os.Exit(2)
 }
 
-func init() {
-	flag.Usage = mainUsage
+func init() { // main 函数执行之前完成
+	flag.Usage = mainUsage //  flag.Usage 用于打印命令行参数的使用方法
 	base.Llgo.Commands = []*base.Command{
 		build.Cmd,
 		install.Cmd,
@@ -49,14 +49,16 @@ func init() {
 }
 
 func main() {
-	flag.Parse()
+	// 标志（Flags）：
+	// 标志通常以 - 或 -- 开头。它们用于指定配置选项或开关某些功能。例如，在命令行工具中，你可能会看到类似 -v 或 --verbose 这样的标志，用来启动详细模式。
+	flag.Parse() //当使用 flag.Parse() 函数解析命令行输入后，所有被识别的标志（和它们的值）都会从命令行输入中去除，剩下的就是非标志参数
 	args := flag.Args()
 	if len(args) < 1 {
-		flag.Usage()
+		flag.Usage() //当没有提供任何参数时，flag.Usage() 函数会打印出命令行工具的使用方法
 	}
-	log.SetFlags(log.Ldefault &^ log.LstdFlags)
+	log.SetFlags(log.Ldefault &^ log.LstdFlags) //TODO: 设置日志级别
 
-	base.CmdName = args[0] // for error messages
+	base.CmdName = args[0] // for error messages 移除标志后的第一个参数即为命令
 	if args[0] == "help" {
 		help.Help(os.Stderr, args[1:])
 		return
@@ -68,8 +70,8 @@ BigCmdLoop:
 			if cmd.Name() != args[0] {
 				continue
 			}
-			args = args[1:]
-			if len(cmd.Commands) > 0 {
+			args = args[1:]            //获得命令后的所有参数
+			if len(cmd.Commands) > 0 { //TODO: 什么时候会有子命令
 				bigCmd = cmd
 				if len(args) == 0 {
 					help.PrintUsage(os.Stderr, bigCmd)
@@ -85,7 +87,7 @@ BigCmdLoop:
 			if !cmd.Runnable() {
 				continue
 			}
-			cmd.Run(cmd, args)
+			cmd.Run(cmd, args) // 调用对应的指令，并且传递参数
 			return
 		}
 		helpArg := ""
