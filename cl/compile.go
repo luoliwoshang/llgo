@@ -503,7 +503,8 @@ func (p *context) compilePhis(b llssa.Builder, block *ssa.BasicBlock) int {
 	return 0
 }
 
-func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) { //编译一个Phi指令
+// 编译一个Phi指令
+func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) {
 	phi := b.Phi(p.prog.Type(v.Type(), llssa.InGo))
 	ret = phi.Expr
 	p.phis = append(p.phis, func() { // 注册一个函数
@@ -512,7 +513,7 @@ func (p *context) compilePhi(b llssa.Builder, v *ssa.Phi) (ret llssa.Expr) { //�
 		for i, pred := range preds {
 			bblks[i] = p.fn.Block(pred.Index) // 获得指定的前驱节点，存入llgo的llvm的phi指令中
 		}
-		edges := v.Edges
+		edges := v.Edges // 在一个例子中 phi指令存储了 t9 = phi [0: 0:int, 1: t4] ，表示从0这个节点转移来时，使用0:int，从1节点来使用t4的内容，所以Edge中会存储一个Const类型表示0节点对应的0常量，BinOP类型对应那个1节点所指代的二元操作符
 		phi.AddIncoming(b, bblks, func(i int, blk llssa.BasicBlock) llssa.Expr {
 			b.SetBlockEx(blk, llssa.BeforeLast, false)
 			return p.compileValue(b, edges[i])

@@ -479,13 +479,13 @@ type Phi struct {
 // AddIncoming adds incoming values to a phi node.
 func (p Phi) AddIncoming(b Builder, preds []BasicBlock, f func(i int, blk BasicBlock) Expr) {
 	raw := p.raw.Type
-	bs := llvmPredBlocks(preds)
+	bs := llvmPredBlocks(preds) // 获得LLVM(底层)的Block列表
 	vals := make([]llvm.Value, len(preds))
 	for iblk, blk := range preds {
 		val := f(iblk, blk)
 		vals[iblk] = checkExpr(val, raw, b).impl
 	}
-	p.impl.AddIncoming(vals, bs)
+	p.impl.AddIncoming(vals, bs) //通过寄存器列表和Blocks列表生成实际的PHI指令
 }
 
 func llvmPredBlocks(preds []BasicBlock) []llvm.BasicBlock {
