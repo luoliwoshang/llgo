@@ -99,13 +99,17 @@ func Initialize(flags InitFlags) {
 // -----------------------------------------------------------------------------
 
 type aProgram struct {
-	ctx   llvm.Context
-	typs  typeutil.Map // rawType -> Type(包含LLVM类型和原始类型)
-	sizes types.Sizes  // provided by Go compiler
+	ctx llvm.Context
+
+	// rawType -> Type(包含LLVM类型和原始类型)
+	typs  typeutil.Map
+	sizes types.Sizes // provided by Go compiler
 	gocvt goTypes
 
-	rt    *types.Package
-	rtget func() *types.Package // 以匿名函数定义的运行时
+	//运行时的包 TODO:何时使用
+	rt *types.Package
+	// 获得运行时的函数
+	rtget func() *types.Package
 
 	py    *types.Package
 	pyget func() *types.Package
@@ -116,7 +120,8 @@ type aProgram struct {
 	named   map[string]llvm.Type
 	fnnamed map[string]int
 
-	intType   llvm.Type // LLVM的int类型，会在创建类型的时候，动态的赋值，防止不必要的性能损耗
+	// LLVM的int类型，会在创建类型的时候，动态的赋值，防止不必要的性能损耗
+	intType   llvm.Type
 	int1Type  llvm.Type
 	int8Type  llvm.Type
 	int16Type llvm.Type
@@ -190,7 +195,8 @@ type aProgram struct {
 
 	ptrSize int
 
-	NeedRuntime bool // 是否需要运行时
+	// 是否需要运行时
+	NeedRuntime bool
 	NeedPyInit  bool
 	is32Bits    bool
 }

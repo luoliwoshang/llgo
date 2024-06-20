@@ -37,9 +37,11 @@ func New(app string) *Cmd {
 	if app == "" {
 		app = "clang"
 	}
+	// 例如，当你在程序中使用 fmt.Println() 或 fmt.Printf() 等函数时，除非另外指定，否则输出默认是发送到 os.Stdout。
 	return &Cmd{app, os.Stdout, os.Stderr}
 }
 
+// 执行指定指令
 func (p *Cmd) Exec(args ...string) error {
 	cmd := exec.Command(p.app, args...)
 	cmd.Stdout = p.Stdout
