@@ -103,6 +103,7 @@ type loader struct {
 	requestedMode LoadMode
 }
 
+// TODO:
 type Cached struct {
 	Types     *types.Package
 	TypesInfo *types.Info
@@ -110,6 +111,8 @@ type Cached struct {
 }
 
 type aDeduper struct {
+	// TODO: 为什么是sync.Map
+	// 存储pkgpath->Cached信息
 	cache sync.Map
 }
 
@@ -119,6 +122,7 @@ func NewDeduper() Deduper {
 	return &aDeduper{}
 }
 
+// 检查是否存在某个路径，有的话就返回具体的内容 Cached
 func (p Deduper) Check(pkgPath string) *Cached {
 	if v, ok := p.cache.Load(pkgPath); ok {
 		return v.(*Cached)
@@ -688,22 +692,35 @@ func refineEx(dedup Deduper, ld *loader, response *packages.DriverResponse) ([]*
 // return an error. Clients may need to handle such errors before
 // proceeding with further analysis. The PrintErrors function is
 // provided for convenient display of all errors.
+// dedup: 一个去重器接口，用于确保在加载过程中不会重复处理相同的包。
+// TODO: sizes: 一个函数，用于调整或定义类型的尺寸信息。这对编译时类型安全和资源分配非常关键。
+// sizes 函数的作用是允许调用者提供一个自定义函数来修改或替换默认的类型大小信息
+
+// TODO: cfg
+// TODO: patterns
 func LoadEx(dedup Deduper, sizes func(types.Sizes) types.Sizes, cfg *Config, patterns ...string) ([]*Package, error) {
+	// 基于提供的配置创建一个新的加载器实例。
 	ld := newLoader(cfg)
+	// TODO: 使用默认的驱动程序来加载指定模式的包。这可能涉及到文件查找、依赖解析等。
 	response, external, err := defaultDriver(&ld.Config, patterns...)
 	if err != nil {
 		return nil, err
 	}
 
+	//go工具链：根据编译器和架构设置类型尺寸
 	ld.sizes = types.SizesFor(response.Compiler, response.Arch)
+
+	//  如果获得的loader没有尺寸信息，并且是NeedTypes，NeedTypesSizes，NeedTypesInfo其中一个，则尝试提供备用方案
 	if ld.sizes == nil && ld.Config.Mode&(NeedTypes|NeedTypesSizes|NeedTypesInfo) != 0 {
 		// Type size information is needed but unavailable.
 		if external {
 			// An external driver may fail to populate the Compiler/GOARCH fields,
 			// especially since they are relatively new (see #63700).
 			// Provide a sensible fallback in this case.
+			// TODO:
 			ld.sizes = types.SizesFor("gc", runtime.GOARCH)
 			if ld.sizes == nil { // gccgo-only arch
+				// TODO:
 				ld.sizes = types.SizesFor("gc", "amd64")
 			}
 		} else {

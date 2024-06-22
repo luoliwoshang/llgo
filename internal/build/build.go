@@ -120,9 +120,13 @@ const (
 )
 
 func Do(args []string, conf *Config) {
-	flags, patterns, verbose := ParseArgs(args, buildFlags) //llgo run -v . -> flags:[-v] patterns:[.] verbose:true
+
+	//解析一些运行时的参数
+	//llgo run -v . -> flags:[-v] patterns:[.] verbose:true
+	flags, patterns, verbose := ParseArgs(args, buildFlags)
 	cfg := &packages.Config{
-		Mode:       loadSyntax | packages.NeedDeps | packages.NeedModule | packages.NeedExportFile, //TODO:
+		// TODO:
+		Mode:       loadSyntax | packages.NeedDeps | packages.NeedModule | packages.NeedExportFile,
 		BuildFlags: flags,
 		Fset:       token.NewFileSet(),
 	}

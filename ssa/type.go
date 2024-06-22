@@ -95,14 +95,16 @@ func (p *goProgram) Alignof(T types.Type) int64 {
 // Offsetsof returns the offsets of the given struct fields, in bytes.
 // Offsetsof must implement the offset guarantees required by the spec.
 // A negative entry in the result indicates that the struct is too large.
+// 在获得偏移量时，LLGO额外根据LLGO中的类型进行偏移量的更新
 func (p *goProgram) Offsetsof(fields []*types.Var) (ret []int64) {
 	prog := Program(p)
+	// 获得指针的大小
 	ptrSize := int64(prog.PointerSize())
 	extra := int64(0)
 	ret = p.sizes.Offsetsof(fields)
 	for i, f := range fields {
-		ret[i] += extra
-		extra += extraSize(f.Type(), ptrSize)
+		ret[i] += extra                       //偏移量
+		extra += extraSize(f.Type(), ptrSize) // 计算每个类型的额外大小（llgo）
 	}
 	return
 }
@@ -153,6 +155,7 @@ func (t Type) RawType() types.Type {
 }
 
 // TypeSizes returns the sizes of the types.
+// TypeSizes返回类型的大小
 func (p Program) TypeSizes(sizes types.Sizes) types.Sizes {
 	p.sizes = sizes
 	return (*goProgram)(p)

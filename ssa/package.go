@@ -122,8 +122,10 @@ type aProgram struct {
 	ctx llvm.Context
 
 	// rawType -> Type(包含LLVM类型和原始类型)
-	typs  typeutil.Map
-	sizes types.Sizes // provided by Go compiler
+	typs typeutil.Map
+
+	// TODO: provided by Go compiler
+	sizes types.Sizes
 	gocvt goTypes
 
 	//运行时的包 TODO:何时使用
