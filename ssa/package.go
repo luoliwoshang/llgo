@@ -85,6 +85,8 @@ func Initialize(flags InitFlags) {
 
 	// 检查的是，flags 中是否设置了 InitAllTargetInfos 这个选项。
 	// 比如Flags为InitAll，那么其InitAllTargetInfos那一位也是存在的，那么结果一定不为0，所以即能执行初始化TargetInfo
+	// 如果是InitNative，那么InitAllTargetInfos那一位是不存在的，
+	// 如果InitNative为0110，而InitAllTargetInfo为0001，那么执行与操作后结果为0
 	if flags&InitAllTargetInfos != 0 {
 		llvm.InitializeAllTargetInfos()
 	}
