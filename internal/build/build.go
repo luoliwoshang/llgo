@@ -62,7 +62,8 @@ func needLLFile(mode Mode) bool {
 }
 
 type Config struct {
-	BinPath string   // 存放构建后的产物的路径
+	// 存放构建后的产物的路径
+	BinPath string
 	AppExt  string   // ".exe" on Windows, empty on Unix
 	OutFile string   // only valid for ModeBuild when len(pkgs) == 1
 	RunArgs []string //TODO: only valid for ModeRun
@@ -79,7 +80,8 @@ func NewDefaultConf(mode Mode) *Config {
 		bin = filepath.Join(gopath, "bin")
 	}
 	conf := &Config{
-		BinPath: bin, // 获得GOPATH/bin 作为编译的二进制文件存放的路径
+		// 获得GOPATH/bin 作为编译的二进制文件存放的路径
+		BinPath: bin,
 		Mode:    mode,
 		AppExt:  DefaultAppExt(),
 	}
@@ -133,12 +135,17 @@ func Do(args []string, conf *Config) {
 
 	prog := llssa.NewProgram(nil)
 	sizes := prog.TypeSizes
-	dedup := packages.NewDeduper() //TODO:
 
-	if patterns == nil { //默认为执行 .
+	//TODO:
+	dedup := packages.NewDeduper()
+
+	//默认为执行 .
+	if patterns == nil {
 		patterns = []string{"."}
 	}
-	initial, err := packages.LoadEx(dedup, sizes, cfg, patterns...) //TODO:
+
+	//TODO:
+	initial, err := packages.LoadEx(dedup, sizes, cfg, patterns...)
 	check(err)
 
 	mode := conf.Mode
@@ -159,7 +166,8 @@ func Do(args []string, conf *Config) {
 	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...) // 加载指定路径的包
 	check(err)
 
-	noRt := 1 //TODO:
+	//TODO:
+	noRt := 1
 	prog.SetRuntime(func() *types.Package {
 		noRt = 0
 		return altPkgs[0].Types
