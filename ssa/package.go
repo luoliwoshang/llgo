@@ -88,20 +88,26 @@ func Initialize(flags InitFlags) {
 	// 如果是InitNative，那么InitAllTargetInfos那一位是不存在的，
 	// 如果InitNative为0110，而InitAllTargetInfo为0001，那么执行与操作后结果为0
 	if flags&InitAllTargetInfos != 0 {
+		// 这样做可以确保无论你的程序需要支持哪些硬件架构，它都能够访问到必要的信息来生成有效、优化的代码。
 		llvm.InitializeAllTargetInfos()
 	}
 	if flags&InitAllTargets != 0 {
+		// 确保了无论后续的编译或链接步骤需要支持哪种硬件架构，程序都已经准备好了相应的资源。
 		llvm.InitializeAllTargets()
 	}
 	if flags&InitAllTargetMCs != 0 {
+		// 确保LLVM后端为这些架构提供了必要的机器码生成支持
 		llvm.InitializeAllTargetMCs()
 	}
 	if flags&InitAllAsmParsers != 0 {
+		// 通过初始化所有支持的汇编语言解析器，确保 LLVM 能够处理针对其支持的所有目标架构的汇编代码。
 		llvm.InitializeAllAsmParsers()
 	}
 	if flags&InitAllAsmPrinters != 0 {
 		llvm.InitializeAllAsmPrinters()
 	}
+
+	//TODO: InitNative
 	if flags&InitNativeTarget != 0 {
 		llvm.InitializeNativeTarget()
 	}
