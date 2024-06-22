@@ -82,6 +82,9 @@ const (
 
 // Initialize initializes the LLVM library.
 func Initialize(flags InitFlags) {
+
+	// 检查的是，flags 中是否设置了 InitAllTargetInfos 这个选项。
+	// 比如Flags为InitAll，那么其InitAllTargetInfos那一位也是存在的，那么结果一定不为0，所以即能执行初始化TargetInfo
 	if flags&InitAllTargetInfos != 0 {
 		llvm.InitializeAllTargetInfos()
 	}
