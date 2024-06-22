@@ -179,6 +179,19 @@ func Do(args []string, conf *Config) {
 		return
 	}
 
+	// 生成了一个包含替代包路径的列表,并且再加载那些包的路径，通过LoadEx加载
+	// 这里altPkgPaths会和pattern一样的方式进行加载
+	// TODO: 为什么是这些包被转换了？
+	// [
+	// 	"github.com/goplus/llgo/internal/runtime",
+	// 	"github.com/goplus/llgo/internal/lib/internal/bytealg",
+	// 	"github.com/goplus/llgo/internal/lib/runtime",
+	// 	"github.com/goplus/llgo/internal/lib/sync/atomic",
+	// 	"github.com/goplus/llgo/internal/lib/sync",
+	// 	"github.com/goplus/llgo/internal/lib/internal/reflectlite",
+	// 	"github.com/goplus/llgo/internal/lib/errors",
+	// 	"github.com/goplus/llgo/internal/lib/syscall"
+	// ]
 	altPkgPaths := altPkgs(initial, llssa.PkgRuntime)                  //TODO: 转换一些Pkg?，比如 "github.com/goplus/llgo/internal/lib/errors"  "github.com/goplus/llgo/internal/runtime"
 	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...) // 加载指定路径的包
 	check(err)
@@ -501,6 +514,9 @@ const (
 	altPkgPathPrefix = abi.PatchPathPrefix
 )
 
+// TODO: 1.如何选择和确定替代包。
+// TODO: 2.替代包路径是如何构建的。
+// TODO: 3.在 llgo 的上下文中，这些替代包如何被用来影响编译过程。
 func altPkgs(initial []*packages.Package, alts ...string) []string {
 	packages.Visit(initial, nil, func(p *packages.Package) {
 		if p.Types != nil && !p.IllTyped {
