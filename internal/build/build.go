@@ -181,7 +181,7 @@ func Do(args []string, conf *Config) {
 
 	// 生成了一个包含替代包路径的列表,并且再加载那些包的路径，通过LoadEx加载
 	// 这里altPkgPaths会和pattern一样的方式进行加载
-	// TODO: 为什么是这些包被转换了？
+	// TODO: 为什么是这些包被转换了？AltPkg怎么得出这个结果的
 	// [
 	// 	"github.com/goplus/llgo/internal/runtime",
 	// 	"github.com/goplus/llgo/internal/lib/internal/bytealg",
@@ -514,11 +514,11 @@ const (
 	altPkgPathPrefix = abi.PatchPathPrefix
 )
 
-// TODO: 1.如何选择和确定替代包。
-// TODO: 2.替代包路径是如何构建的。
-// TODO: 3.在 llgo 的上下文中，这些替代包如何被用来影响编译过程。
+// 通过packages.Visit来访问当前编译的包通过DFS搜索到的直接和间接的依赖包，并将其中能进行替换的包返回出来
 func altPkgs(initial []*packages.Package, alts ...string) []string {
+	// 遍历一个包以及它的所有直接和间接依赖
 	packages.Visit(initial, nil, func(p *packages.Package) {
+		// 存在类型并且不包含类型错误：p.IllTyped = true
 		if p.Types != nil && !p.IllTyped {
 			if _, ok := hasAltPkg[p.PkgPath]; ok {
 				alts = append(alts, altPkgPathPrefix+p.PkgPath)
@@ -822,6 +822,7 @@ func canSkipToBuild(pkgPath string) bool {
 
 type none struct{}
 
+// 需要进行转换的lib包名，会被转换为 "github.com/goplus/llgo/internal/lib/" + pkgPath
 var hasAltPkg = map[string]none{
 	"errors":               {},
 	"internal/abi":         {},
