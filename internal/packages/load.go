@@ -110,6 +110,7 @@ type Cached struct {
 	Syntax    []*ast.File
 }
 
+// 去重器
 type aDeduper struct {
 	// TODO: 为什么是sync.Map
 	// 存储pkgpath->Cached信息
@@ -130,6 +131,8 @@ func (p Deduper) Check(pkgPath string) *Cached {
 	return nil
 }
 
+// TODO:缓存的类型
+// 设置缓存
 func (p Deduper) set(pkgPath string, cp *Cached) {
 	if DebugPackagesLoad {
 		log.Println("==> Import", pkgPath)
@@ -183,6 +186,8 @@ func loadPackageEx(dedup Deduper, ld *loader, lpkg *loaderPackage) {
 		}
 		defer func() {
 			if !lpkg.IllTyped && lpkg.needtypes && lpkg.needsrc {
+				// TODO: 存储的是什么？
+				// 设置缓存
 				dedup.set(lpkg.PkgPath, &Cached{
 					Types:     lpkg.Types,
 					TypesInfo: lpkg.TypesInfo,
@@ -472,6 +477,9 @@ func loadRecursiveEx(dedup Deduper, ld *loader, lpkg *loaderPackage) {
 	})
 }
 
+// TODO:
+// 使用深度优先搜索（DFS）算法遍历和确认包的导入依赖，同时处理可能的导入错误，如循环依赖和缺失包。
+// 确保了通过 LoadEx 加载的包可以被正确编译和使用，确保了包数据的完整性和正确性
 func refineEx(dedup Deduper, ld *loader, response *packages.DriverResponse) ([]*Package, error) {
 	roots := response.Roots
 	rootMap := make(map[string]int, len(roots))
@@ -693,11 +701,22 @@ func refineEx(dedup Deduper, ld *loader, response *packages.DriverResponse) ([]*
 // proceeding with further analysis. The PrintErrors function is
 // provided for convenient display of all errors.
 // dedup: 一个去重器接口，用于确保在加载过程中不会重复处理相同的包。
-// TODO: sizes: 一个函数，用于调整或定义类型的尺寸信息。这对编译时类型安全和资源分配非常关键。
+// sizes: 一个函数，用于调整或定义类型的尺寸信息。这对编译时类型安全和资源分配非常关键。
 // sizes 函数的作用是允许调用者提供一个自定义函数来修改或替换默认的类型大小信息
-
-// TODO: cfg
-// TODO: patterns
+// 1. 包加载
+// LoadEx 负责根据提供的模式（例如文件路径或包名称）加载相应的 Go 包。这包括解析包的源代码文件、依赖项和其他相关数据。
+// 2. 依赖解析
+// 除了加载指定的包，LoadEx 还递归地解析这些包的依赖关系。这意味着它需要找出所有被导入的包，并加载这些包，以确保编译过程中所有需要的代码和资源都被正确处理。
+// 3. 配置处理
+// LoadEx 根据传入的配置（Config 对象）处理各种编译选项，如是否需要加载包的类型信息、语法树、导出文件等。这些选项影响了函数的行为，例如，决定了是否需要从源代码构建类型信息，或者是否可以直接使用预编译的数据。
+// 4. 错误和异常处理
+// 此函数还负责处理在加载和解析过程中可能出现的错误，如找不到包、循环依赖等问题。这包括记录错误详情并在适当的情况下停止进一步的加载操作。
+// 5. 性能优化
+// 通过使用去重策略（例如通过 Deduper 接口），LoadEx 避免了重复加载相同的包，这在大型项目中有助于提高性能和效率。
+// 6. 类型和内存信息处理
+// LoadEx 可以通过 sizes 函数自定义类型的内存布局信息，这对于跨平台编译或特定硬件优化尤为重要。
+// 7. 后续处理
+// 在加载和解析完所有必要的包之后，LoadEx 通常还需要执行一些后处理，如 refineEx 函数中所做的，这包括构建导入图、加载必要的源代码和类型信息等。
 func LoadEx(dedup Deduper, sizes func(types.Sizes) types.Sizes, cfg *Config, patterns ...string) ([]*Package, error) {
 	// 基于提供的配置创建一个新的加载器实例。
 	ld := newLoader(cfg)
@@ -731,6 +750,7 @@ func LoadEx(dedup Deduper, sizes func(types.Sizes) types.Sizes, cfg *Config, pat
 		}
 	}
 
+	// 更新loader的类型尺寸信息
 	if sizes != nil {
 		ld.sizes = sizes(ld.sizes)
 	}

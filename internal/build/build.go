@@ -143,9 +143,10 @@ func Do(args []string, conf *Config) {
 	llssa.Initialize(llssa.InitAll)
 
 	prog := llssa.NewProgram(nil)
+	// 获得类型对应的一些尺寸信息
 	sizes := prog.TypeSizes
 
-	//TODO:
+	//设置一个缓存器
 	dedup := packages.NewDeduper()
 
 	//默认为执行 .
@@ -153,16 +154,23 @@ func Do(args []string, conf *Config) {
 		patterns = []string{"."}
 	}
 
-	//TODO:
+	// 为每个包加载依赖，处理类型内存信息等（go工具链）
+	// 获得的initial包含的包就是编译过程的入口
 	initial, err := packages.LoadEx(dedup, sizes, cfg, patterns...)
 	check(err)
+	// initial[0].ExportFile是 "/Users/zhangzhiyang/Library/Caches/go-build/49/49972779d0e9962d2935ca4-d"
+	// 指向包含了编译后的包类型信息的文件的路径。这个文件是在编译过程中生成的，包含了包的公开接口信息但不包含实现细节。它使得其他包在编译时可以仅依据这个文件进行，而不需要包含完整的源代码。
 
+	// CompiledGoFiles是 "/Users/zhangzhiyang/Documents/Code/goplus/llgo/_demo/hello/hello.go"
+	// CompiledGoFiles考虑了实际参与编译的go文件，比如有的时候在某些平台会忽略的文件，GoFile会包含这些文件，而CompiledGoFiles只包含参与编译的go文件
 	mode := conf.Mode
 	if len(initial) == 1 && len(initial[0].CompiledGoFiles) > 0 {
+		//TODO: 为什么要这么处理
 		if mode == ModeBuild {
 			mode = ModeInstall
 		}
 	} else if mode == ModeRun {
+		// 如果没有包，并且没有进行编译的go文件，那么就报错
 		if len(initial) > 1 {
 			fmt.Fprintln(os.Stderr, "cannot run multiple packages")
 		} else {
