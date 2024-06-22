@@ -64,16 +64,20 @@ func needLLFile(mode Mode) bool {
 type Config struct {
 	// 存放构建后的产物的路径
 	BinPath string
-	AppExt  string   // ".exe" on Windows, empty on Unix
-	OutFile string   // only valid for ModeBuild when len(pkgs) == 1
-	RunArgs []string //TODO: only valid for ModeRun
+	AppExt  string // ".exe" on Windows, empty on Unix
+	OutFile string // only valid for ModeBuild when len(pkgs) == 1
+
+	//TODO: only valid for ModeRun
+	RunArgs []string
 	Mode    Mode
 }
 
 func NewDefaultConf(mode Mode) *Config {
 	bin := os.Getenv("GOBIN")
 	if bin == "" {
-		gopath, err := envGOPATH() // 获得GOPATH的路径
+
+		// 获得GOPATH的路径
+		gopath, err := envGOPATH()
 		if err != nil {
 			panic(fmt.Errorf("cannot get GOPATH: %v", err))
 		}
@@ -123,6 +127,7 @@ func Do(args []string, conf *Config) {
 		Fset:       token.NewFileSet(),
 	}
 
+	// TODO:
 	if len(overlayFiles) > 0 {
 		cfg.Overlay = make(map[string][]byte)
 		for file, src := range overlayFiles {

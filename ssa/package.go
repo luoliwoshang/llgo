@@ -57,16 +57,25 @@ func SetDebug(dbgFlags dbgFlags) {
 type InitFlags int
 
 const (
+	// 1 << 0 0000001
 	InitNativeTarget InitFlags = 1 << iota
+	// 1 << 1 0000010
 	InitAllTargets
+	// 1 << 2 0000100
 	InitAllTargetInfos
+	// 1 << 3 0001000
 	InitAllTargetMCs
 
+	// 1 << 4 0010000
 	InitNativeAsmPrinter
+	// 1 << 5 0100000
 	InitAllAsmPrinters
 
+	// 1 << 6 1000000
 	InitAllAsmParsers
 
+	// InitNativeTarget | InitNativeAsmPrinter
+	// ->  0000001 与 0010000 进行位或运算，组合成一个也是唯一的标志
 	InitNative = InitNativeTarget | InitNativeAsmPrinter
 	InitAll    = InitAllTargets | InitAllAsmParsers | InitAllAsmPrinters | InitAllTargetInfos | InitAllTargetMCs
 )
