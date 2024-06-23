@@ -179,6 +179,9 @@ func Do(args []string, conf *Config) {
 		return
 	}
 
+	// initial : "github.com/goplus/llgo/_demo/hello"
+	altPkgPaths := altPkgs(initial, llssa.PkgRuntime)
+
 	// 生成了一个包含替代包路径的列表,并且再加载那些包的路径，通过LoadEx加载
 	// 这里altPkgPaths会和pattern一样的方式进行加载
 	// TODO: 为什么是这些包被转换了？AltPkg怎么得出这个结果的
@@ -192,32 +195,30 @@ func Do(args []string, conf *Config) {
 	// 	"github.com/goplus/llgo/internal/lib/errors",
 	// 	"github.com/goplus/llgo/internal/lib/syscall"
 	// ]
-	altPkgPaths := altPkgs(initial, llssa.PkgRuntime)                  //TODO: 转换一些Pkg?，比如 "github.com/goplus/llgo/internal/lib/errors"  "github.com/goplus/llgo/internal/runtime"
-	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...) // 加载指定路径的包
+	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...) // 加载指定路径的包，并获得依赖的包
 	check(err)
 
-	//TODO:
 	noRt := 1
 	prog.SetRuntime(func() *types.Package {
 		noRt = 0
-		return altPkgs[0].Types
+		return altPkgs[0].Types // github.com/goplus/llgo/internal/runtime
 	})
 	prog.SetPython(func() *types.Package {
 		return dedup.Check(llssa.PkgPython).Types
 	})
 
-	// 初始化一个ssa程序（go），但是不执行build
+	// 初始化一个ssa程序(go),但是不执行build
 	progSSA := ssa.NewProgram(initial[0].Fset, ssaBuildMode)
 
-	//TODO:
+	// 打补丁的列表
 	patches := make(cl.Patches, len(altPkgPaths))
 
-	// 执行ssa.Program的build，并遍历所有的包，获得其中需要打补丁（patch）的包
+	// 执行ssa.Program的build，并遍历所有的包，获得其中需要打补丁（patch）的包，并构建ssa.Package到patches中
 	altSSAPkgs(progSSA, patches, altPkgs[1:], verbose)
 
 	ctx := &context{progSSA, prog, dedup, patches, make(map[string]none), initial, mode}
 
-	//构建所有包
+	//构建以inital包为根节点的所有包，并且返回所有的包
 	pkgs := buildAllPkgs(ctx, initial, verbose)
 
 	var llFiles []string
@@ -563,6 +564,7 @@ type aPackage struct {
 	LPkg   llssa.Package
 }
 
+// 以根包为其实，遍历其每一个直接和间接依赖的包，并且返回所有的包
 func allPkgs(ctx *context, initial []*packages.Package, verbose bool) (all []*aPackage, errs []*packages.Package) {
 	prog := ctx.progSSA
 	built := ctx.built
@@ -573,7 +575,7 @@ func allPkgs(ctx *context, initial []*packages.Package, verbose bool) (all []*aP
 				return
 			}
 			var altPkg *packages.Cached
-			var ssaPkg = createSSAPkg(prog, p, verbose)
+			var ssaPkg = createSSAPkg(prog, p, verbose) // 从prog中获得ssaPkg，如果有就直接返回，否则创建并且构建
 			if _, ok := hasAltPkg[pkgPath]; ok {
 				if altPkg = ctx.dedup.Check(altPkgPathPrefix + pkgPath); altPkg == nil {
 					return
@@ -587,6 +589,7 @@ func allPkgs(ctx *context, initial []*packages.Package, verbose bool) (all []*aP
 	return
 }
 
+// 创建SSA包，如果已经存在，那么直接返回，否则创建并且构建
 func createSSAPkg(prog *ssa.Program, p *packages.Package, verbose bool) *ssa.Package {
 	pkgSSA := prog.ImportedPackage(p.PkgPath)
 	if pkgSSA == nil {
