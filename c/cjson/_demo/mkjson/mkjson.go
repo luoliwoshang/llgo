@@ -38,4 +38,5 @@ func main() {
 	// printf("%s\n", cJSON_PrintUnformatted(mod))
 
 	mod.Delete()
+	// cJSON_Delete(mod);
 }
