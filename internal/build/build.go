@@ -198,6 +198,7 @@ func Do(args []string, conf *Config) {
 	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...) // 加载指定路径的包，并获得依赖的包
 	check(err)
 
+	// runtime 包结束的位置
 	noRt := 1
 	prog.SetRuntime(func() *types.Package {
 		noRt = 0
@@ -219,10 +220,13 @@ func Do(args []string, conf *Config) {
 	ctx := &context{progSSA, prog, dedup, patches, make(map[string]none), initial, mode}
 
 	//构建以inital包为根节点的所有包，并且返回所有的包
+	//TODO: 这里的pkgs，和下方的dpkg有什么区别
 	pkgs := buildAllPkgs(ctx, initial, verbose)
-
+	//pkgs: internal/goarch,internal/goos,runtime/internal/sys,internal/race,internal/abi,internal/cpu，internal/bytealg
 	var llFiles []string
+	//TODO: 这里的pkgs，和上方的pkgs有什么区别
 	dpkg := buildAllPkgs(ctx, altPkgs[noRt:], verbose)
+	// github.com/goplus/llgo/c/bdwgc,"github.com/goplus/llgo/c/bitcast","github.com/goplus/llgo/c/pthread","github.com/goplus/llgo/internal/abi"，"github.com/goplus/llgo/internal/runtime"，"github.com/goplus/llgo/c/time"，"github.com/goplus/llgo/c/pthread/sync"，"github.com/goplus/llgo/c/os"
 	for _, pkg := range dpkg {
 		if !strings.HasSuffix(pkg.ExportFile, ".ll") {
 			continue
@@ -292,7 +296,7 @@ func buildAllPkgs(ctx *context, initial []*packages.Package, verbose bool) (pkgs
 	for _, aPkg := range pkgs {
 		//获得ssa的包
 		pkg := aPkg.Package
-		//如果在built中，那么就不需要生成导出文件了
+		//如果在built中已经加载过了，那么就不需要生成导出文件了
 		if _, ok := built[pkg.PkgPath]; ok {
 			pkg.ExportFile = ""
 			continue
@@ -556,7 +560,8 @@ func altSSAPkgs(prog *ssa.Program, patches cl.Patches, alts []*packages.Package,
 }
 
 type aPackage struct {
-
+	// Package.ID=00 代表不需要运行时也不需要python的初始化，第一位代表运行时，第二位代表python的初始化
+	// Package.ExportFile 部分包会在构建的过程中移除
 	// 存在 export file "/Users/zhangzhiyang/Library/Caches/go-build/9a/9a87da144dcfb1906be0685b4aafe0fbe907b74c3d794f9e62d0e270eadcce44-d.ll"
 	*packages.Package
 	SSA    *ssa.Package
@@ -575,7 +580,8 @@ func allPkgs(ctx *context, initial []*packages.Package, verbose bool) (all []*aP
 				return
 			}
 			var altPkg *packages.Cached
-			var ssaPkg = createSSAPkg(prog, p, verbose) // 从prog中获得ssaPkg，如果有就直接返回，否则创建并且构建
+			// 从prog中获得ssaPkg，如果有就直接返回，否则创建并且构建
+			var ssaPkg = createSSAPkg(prog, p, verbose)
 			if _, ok := hasAltPkg[pkgPath]; ok {
 				if altPkg = ctx.dedup.Check(altPkgPathPrefix + pkgPath); altPkg == nil {
 					return
@@ -810,6 +816,7 @@ func pkgExists(initial []*packages.Package, pkg *packages.Package) bool {
 	return false
 }
 
+// TODO: 为什么internal和runtime/internal 可以跳过
 func canSkipToBuild(pkgPath string) bool {
 	if _, ok := hasAltPkg[pkgPath]; ok {
 		return false

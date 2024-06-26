@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.tmpl": "html",
+        "cjson.h": "c",
+        "zlib.h": "c"
+    }
+}
