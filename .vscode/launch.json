@@ -27,6 +27,19 @@
                 "CC": "/usr/bin/cc",
                 "CXX": "/usr/bin/c++",
             }
+        },
+        {
+            "name": "debug cjson！",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "/Users/zhangzhiyang/Documents/Code/goplus/llgo/cmd/llgo",// 执行的程序的目录
+            "cwd":"/Users/zhangzhiyang/Documents/Code/goplus/llgo/c/cjson/_demo/mkjson", //模拟执行命令的目录
+            "args": ["run","-v", "."],// 执行指令时携带的参数
+            "env": {
+                "CC": "/usr/bin/cc",
+                "CXX": "/usr/bin/c++",
+            }
         }
     ]
 }
