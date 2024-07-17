@@ -2,6 +2,8 @@
 
 ### Add Dependencies & Build Configuration
 
+> Take csv_wrapper library as an example
+
 Edit `Cargo.toml` to include necessary dependencies and configuration:
 
 ```toml
@@ -11,6 +13,9 @@ csv = "1.1"
 
 [lib]
 crate-type = ["cdylib"] # The generated dynamic library will conform to the C standard
+
+[build-dependencies]
+cbindgen = "0.26.0"
 ```
 
 ### Import C Language Types
@@ -75,17 +80,15 @@ pub extern "C" fn free_string(s: *mut c_char) {
 }
 ```
 
-### Compilation and Installation
-
-Build the dynamic library and use `dylib-installer` to install it to the system path:
-
-```sh
-cargo build --release
-cargo install --git https://github.com/hackerchai/dylib-installer
-sudo dylib_installer ./target/release/
-```
-
 ### Generate Header File
+
+Edit `cbindgen.toml` to configure the header file generation rules:
+
+```toml
+# See https://github.com/mozilla/cbindgen/blob/master/docs.md#cbindgentoml for
+# a list of possible configuration values.
+language = "C"
+```
 
 Use cbindgen to generate a C header file, automating this process through a `build.rs` script:
 
@@ -94,7 +97,16 @@ fn main() {
     let config = cbindgen::Config::from_file("cbindgen.toml").expect("Config file not found.");
     cbindgen::generate_with_config(&crate_dir, config).unwrap().write_to_file("target/include/csv_wrapper.h");
 }
+```
 
+### Compilation and Installation
+
+Build the dynamic library and use `dylib-installer` to install it to the system path:
+
+```sh
+cargo build --release
+cargo install --git https://github.com/hackerchai/dylib-installer
+sudo dylib_installer ./target/release/
 ```
 
 ### LLGO Package Mapping
