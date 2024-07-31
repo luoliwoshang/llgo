@@ -4,17 +4,24 @@ import "errors"
 
 func main() {
 	syms := []int{}
-	m := make(map[int]bool) // 添加 map
+	m := make(map[int]bool)
 
-	err := errors.New("failed to read symbol table")
+	// Uncommenting the following will prevent llgo run . from crashing
+	// for i := range syms {
+	// 	_ = i
+	// }
+
+	err := errors.New("failed to read")
 
 	check(err)
 
 	// comment to prevent error
 	for _, s := range syms {
-		v, ok := m[s]
+		_, ok := m[s]
+
+		// comment to prevent error
 		if ok {
-			println(v)
+			println("ok")
 		}
 	}
 
