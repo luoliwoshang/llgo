@@ -5,6 +5,7 @@ import "errors"
 func main() {
 	syms := []int{}
 	m := make(map[int]bool)
+	// m[0] = true // also with error
 
 	// Uncommenting the following will prevent llgo run . from crashing
 	// for i := range syms {
@@ -22,8 +23,8 @@ func main() {
 	check(err)
 
 	// comment to prevent error
-	for _, s := range syms {
-		_, ok := m[s]
+	for range syms {
+		_, ok := m[0]
 
 		// comment to prevent error
 		if ok {
