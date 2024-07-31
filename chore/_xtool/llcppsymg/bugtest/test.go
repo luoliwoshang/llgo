@@ -11,8 +11,14 @@ func main() {
 	// 	_ = i
 	// }
 
-	err := errors.New("failed to read")
+	err := errors.New("expect error")
 
+	// Normal execution
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// Erroneous execution (uncomment to simulate error)
 	check(err)
 
 	// comment to prevent error
