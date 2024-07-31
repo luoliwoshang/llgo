@@ -3,26 +3,25 @@ package main
 import "errors"
 
 func main() {
-	syms := []string{"sym1"}
-	m := make(map[string]bool)
+	syms := []int{}
+	m := make(map[int]bool) // 添加 map
 
 	err := errors.New("failed to read symbol table")
 
-	// 正常运行
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// 错误运行（取消注释以模拟错误）
 	check(err)
 
-	for i := range syms {
-		if _, ok := m[syms[i]]; ok {
-			println(syms[i])
+	// comment to prevent error
+	for _, s := range syms {
+		v, ok := m[s]
+		if ok {
+			println(v)
 		}
 	}
 
+	// comment to prevent error
 	defer println("bye")
 
+	// comment to prevent error
 	for _, sym := range syms {
 		_ = sym
 	}
