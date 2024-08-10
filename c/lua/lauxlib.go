@@ -14,6 +14,10 @@ import (
 
 // /* key, in the registry, for table of preloaded loaders */
 
+// LUALIB_API int (luaL_error) (lua_State *L, const char *fmt, ...);
+// llgo:link (*State).LError C.luaL_error
+func (L *State) LError(format *c.Char, __llgo_va_list ...any) c.Int { return 0 }
+
 // /* predefined references */
 
 // llgo:link (*State).Loadfilex C.luaL_loadfilex
