@@ -300,6 +300,7 @@ func (*Macro) ppdNode() {}
 // ------------------------------------------------
 
 type File struct {
+	Path     string     `json:"path"`
 	Decls    []Decl     `json:"decls"`
 	Includes []*Include `json:"includes,omitempty"`
 	Macros   []*Macro   `json:"macros,omitempty"`
