@@ -1494,7 +1494,7 @@ const (
  */
 type Type struct {
 	Kind TypeKind
-	data [2]c.Pointer
+	Data [2]c.Pointer
 }
 
 /**
@@ -1878,6 +1878,20 @@ func (t *Type) wrapPointeeType(ret *Type) { return }
 
 func (t Type) PointeeType() (ret Type) {
 	t.wrapPointeeType(&ret)
+	return
+}
+
+/**
+ * Return the element type of an array, complex, or vector type.
+ *
+ * If a type is passed in that is not an array, complex, or vector type,
+ * an invalid type is returned.
+ */
+// llgo:link (*Type).wrapElementType C.wrap_clang_getElementType
+func (t *Type) wrapElementType(ret *Type) { return }
+
+func (t Type) ElementType() (ret Type) {
+	t.wrapElementType(&ret)
 	return
 }
 

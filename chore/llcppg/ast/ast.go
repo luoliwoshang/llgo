@@ -41,6 +41,37 @@ type PPD interface { // preprocessing directive
 	ppdNode()
 }
 
+type Token uint
+
+const (
+	/**
+	 * A token that contains some kind of punctuation.
+	 */
+	PunctuationToken Token = iota
+	/**
+	 * A language keyword.
+	 */
+	KeywordToken
+
+	/**
+	 * An identifier (that is not a keyword).
+	 */
+	IdentifierToken
+	/**
+	 * A numeric, string, or character literal.
+	 */
+	LiteralToken
+	/**
+	 * A comment.
+	 */
+	CommentToken
+)
+
+type TokenInfo struct {
+	Token Token
+	Lit   string
+}
+
 // =============================================================================
 // Expressions (Types are also expressions)
 
@@ -63,11 +94,18 @@ func (*BasicLit) exprNode() {}
 type TypeKind uint
 
 const (
-	Int TypeKind = iota
-	Char
-	Float
-	Complex
+	Void TypeKind = iota
 	Bool
+	Char
+	Char16
+	Char32
+	WChar
+	Int
+	Int128
+	Float
+	Float16
+	Float128
+	Complex
 )
 
 type TypeFlag uint
@@ -293,6 +331,8 @@ func (*Include) ppdNode() {}
 // ------------------------------------------------
 
 type Macro struct {
+	Name *TokenInfo
+	Body []*TokenInfo
 }
 
 func (*Macro) ppdNode() {}
