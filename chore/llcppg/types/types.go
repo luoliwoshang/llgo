@@ -16,6 +16,13 @@
 
 package types
 
+type Language string
+
+const (
+	C   Language = "C"
+	CPP Language = "CPP"
+)
+
 // Config represents a configuration for the llcppg tool.
 type Config struct {
 	Name         string   `json:"name"`
@@ -23,6 +30,7 @@ type Config struct {
 	Libs         string   `json:"libs"`
 	Include      []string `json:"include"`
 	TrimPrefixes []string `json:"trimPrefixes"`
+	Language     Language `json:"language"`
 }
 
 type SymbolInfo struct {
