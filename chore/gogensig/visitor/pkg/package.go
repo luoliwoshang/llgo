@@ -34,5 +34,32 @@ func (p *Package) Write() error {
 }
 
 func toSigniture(funcType *ast.FuncType) (*types.Signature, error) {
-	return nil, fmt.Errorf("%s", "todo toSigniture")
+	params := fieldListToParams(funcType.Params)
+	return types.NewSignatureType(nil, nil, nil, params, nil, false), nil
+}
+
+func fieldListToParams(params *ast.FieldList) *types.Tuple {
+	var vars []*types.Var
+	if params != nil {
+		for _, field := range params.List {
+			vars = append(vars, fieldToVar(field))
+		}
+	}
+	return types.NewTuple(vars...)
+}
+
+func fieldToVar(field *ast.Field) *types.Var {
+	return types.NewVar(token.NoPos, nil, field.Names[0].Name, toType(field.Type))
+}
+
+func toType(expr ast.Expr) types.Type {
+	switch t := expr.(type) {
+	case *ast.BuiltinType:
+		return toBuiltinType(t)
+	}
+	return nil
+}
+
+func toBuiltinType(typ *ast.BuiltinType) types.Type {
+	return nil
 }
