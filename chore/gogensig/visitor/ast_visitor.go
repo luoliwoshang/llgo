@@ -3,20 +3,20 @@ package visitor
 import (
 	"fmt"
 
-	"github.com/goplus/llgo/chore/gogensig/visitor/docset"
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
 type DocVisitor interface {
-	Visit(doc docset.ADoc, _Type string, node ast.Node)
+	Visit(_Type string, node ast.Node, docPath string)
 	VisitFuncDecl(*ast.FuncDecl)
 	VisitTypeDecl(*ast.TypeDecl)
-	VisitDone(DocVisitor)
+	VisitDone()
+	DocPath() string
 }
 
 type BaseDocVisitor struct {
+	docPath string
 	DocVisitor
-	docset.ADoc
 }
 
 func NewBaseDocVisitor(Visitor DocVisitor) *BaseDocVisitor {
@@ -34,8 +34,8 @@ func (p *BaseDocVisitor) visitNode(decl ast.Node) {
 	}
 }
 
-func (p *BaseDocVisitor) Visit(doc docset.ADoc, _Type string, node ast.Node) {
-	p.ADoc = doc
+func (p *BaseDocVisitor) Visit(_Type string, node ast.Node, docPath string) {
+	p.docPath = docPath
 	switch v := node.(type) {
 	case *ast.File:
 		for _, decl := range v.Decls {
@@ -47,6 +47,10 @@ func (p *BaseDocVisitor) Visit(doc docset.ADoc, _Type string, node ast.Node) {
 	p.visitDone(p.DocVisitor)
 }
 
+func (p *BaseDocVisitor) DocPath() string {
+	return p.docPath
+}
+
 func (p *BaseDocVisitor) visitFuncDecl(funcDecl *ast.FuncDecl) {
 	p.VisitFuncDecl(funcDecl)
 }
@@ -56,5 +60,5 @@ func (p *BaseDocVisitor) visitTypeDecl(typeDecl *ast.TypeDecl) {
 }
 
 func (p *BaseDocVisitor) visitDone(visitor DocVisitor) {
-	visitor.VisitDone(visitor)
+	visitor.VisitDone()
 }
