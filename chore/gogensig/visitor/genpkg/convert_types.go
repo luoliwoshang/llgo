@@ -1,13 +1,12 @@
-package pkg
+package genpkg
 
 import (
 	"go/token"
 	"go/types"
 	"os"
 
-	"github.com/goplus/llgo/chore/llcppg/ast"
-
 	"github.com/goplus/gogen"
+	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
 type Package struct {
