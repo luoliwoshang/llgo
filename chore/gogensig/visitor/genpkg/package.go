@@ -66,7 +66,7 @@ func (p *Package) GetGogenPackage() *gogen.Package {
 
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	// todo(zzy) accept the name of llcppg.symb.json
-	sig, err := p.toSigniture(funcDecl.Type)
+	sig, err := p.toSignature(funcDecl.Type)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	return nil
 }
 
-func (p *Package) toSigniture(funcType *ast.FuncType) (*types.Signature, error) {
+func (p *Package) toSignature(funcType *ast.FuncType) (*types.Signature, error) {
 	params := p.fieldListToParams(funcType.Params)
 	results := p.retToResult(funcType.Ret)
 	return types.NewSignatureType(nil, nil, nil, params, results, false), nil
@@ -93,6 +93,7 @@ func (p *Package) fieldListToParams(params *ast.FieldList) *types.Tuple {
 	return types.NewTuple(vars...)
 }
 
+// Execute the ret in FuncType
 func (p *Package) retToResult(ret ast.Expr) *types.Tuple {
 	if ret == nil {
 		return types.NewTuple()
@@ -105,6 +106,7 @@ func (p *Package) fieldToVar(field *ast.Field) *types.Var {
 	return types.NewVar(token.NoPos, nil, field.Names[0].Name, p.ToType(field.Type))
 }
 
+// Convert ast.Expr to types.Type
 func (p *Package) ToType(expr ast.Expr) types.Type {
 	switch t := expr.(type) {
 	case *ast.BuiltinType:
