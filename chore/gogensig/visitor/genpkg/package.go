@@ -38,8 +38,7 @@ func (p *Package) getCType(typ string) types.Type {
 func (p *Package) initBuiltinTypeMap() {
 	// todo(zzy): int128/uint128  half(float16),long double,float 128
 	p.builtinTypeMap = map[ast.BuiltinType]types.Type{
-		// considerations for void type should be more rigorous
-		{Kind: ast.Void}:                                    types.Typ[types.Invalid],
+		{Kind: ast.Void}:                                    types.Typ[types.Invalid],    // For a invalid type
 		{Kind: ast.Bool}:                                    types.Typ[types.Bool],       // Bool
 		{Kind: ast.Char, Flags: ast.Signed}:                 p.getCType("Char"),          // Char_S
 		{Kind: ast.Char, Flags: ast.Unsigned}:               p.getCType("Char"),          // Char_U
@@ -72,7 +71,8 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 		return err
 	}
 	goFuncName := toGoFuncName(funcDecl.Name.Name)
-	p.p.NewFuncDecl(token.NoPos, goFuncName, sig).SetComments(p.p, NewFuncDocComments(funcDecl.Name.Name, goFuncName))
+	decl := p.p.NewFuncDecl(token.NoPos, goFuncName, sig)
+	decl.SetComments(p.p, NewFuncDocComments(funcDecl.Name.Name, goFuncName))
 	return nil
 }
 
@@ -119,7 +119,7 @@ func (p *Package) toBuiltinType(typ *ast.BuiltinType) types.Type {
 	if ok {
 		return t
 	}
-	return nil
+	return p.builtinTypeMap[ast.BuiltinType{Kind: ast.Void}]
 }
 
 func (p *Package) Write(curName string) error {
