@@ -1,10 +1,12 @@
 package genpkg
 
 import (
+	"fmt"
 	"go/token"
 	"go/types"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/goplus/gogen"
@@ -19,6 +21,8 @@ type Package struct {
 
 	typeBlock *gogen.TypeDefs // type decls block.
 
+	// todo(zzy):refine array type in func or struct's context
+	inStruct bool // flag to indicate if currently processing a struct
 }
 
 func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
@@ -91,6 +95,8 @@ func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
 }
 
 func (p *Package) recordTypeToStruct(recordType *ast.RecordType) types.Type {
+	p.inStruct = true
+	defer func() { p.inStruct = false }()
 	fields := p.fieldListToVars(recordType.Fields)
 	return types.NewStruct(fields, nil)
 }
@@ -152,7 +158,19 @@ func (p *Package) ToType(expr ast.Expr) types.Type {
 		}
 		return types.NewPointer(typ)
 	case *ast.ArrayType:
-		// todo(zzy):array in struct
+		if p.inStruct {
+			if t.Len == nil {
+				fmt.Fprintln(os.Stderr, "unsupport field with array without length")
+				return nil
+			}
+			elemType := p.ToType(t.Elt)
+			len, ok := p.evaluateArrayLength(t.Len)
+			if !ok {
+				fmt.Fprintln(os.Stderr, "can't determine the array length")
+				return nil
+			}
+			return types.NewArray(elemType, len)
+		}
 		// array in the parameter,ignore the len,convert as pointer
 		return types.NewPointer(p.ToType(t.Elt))
 	default:
@@ -165,7 +183,21 @@ func (p *Package) toBuiltinType(typ *ast.BuiltinType) types.Type {
 	if ok {
 		return t
 	}
+	fmt.Fprintln(os.Stderr, "unsupported type:", typ)
 	return nil
+}
+
+func (p *Package) evaluateArrayLength(expr ast.Expr) (int64, bool) {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind == ast.IntLit {
+			length, err := strconv.ParseInt(e.Value, 10, 64)
+			if err == nil {
+				return length, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func (p *Package) Write(curName string) error {

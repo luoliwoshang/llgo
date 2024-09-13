@@ -438,6 +438,52 @@ type Foo struct {
 	c *bool
 	d unsafe.Pointer
 }`},
+		{
+			name: "struct array field",
+			decl: &ast.TypeDecl{
+				Name: &ast.Ident{Name: "Foo"},
+				Type: &ast.RecordType{
+					Tag: ast.Struct,
+					Fields: &ast.FieldList{
+						List: []*ast.Field{
+							{
+								Names: []*ast.Ident{{Name: "a"}},
+								Type: &ast.ArrayType{
+									Elt: &ast.BuiltinType{
+										Kind:  ast.Char,
+										Flags: ast.Signed,
+									},
+									Len: &ast.BasicLit{
+										Kind:  ast.IntLit,
+										Value: "4",
+									},
+								},
+							},
+							{
+								Names: []*ast.Ident{{Name: "b"}},
+								Type: &ast.ArrayType{
+									Elt: &ast.ArrayType{
+										Elt: &ast.BuiltinType{
+											Kind: ast.Int,
+										},
+										Len: &ast.BasicLit{Kind: ast.IntLit, Value: "4"},
+									},
+									Len: &ast.BasicLit{Kind: ast.IntLit, Value: "3"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: `
+package testpkg
+
+import "github.com/goplus/llgo/c"
+
+type Foo struct {
+	a [4]int8
+	b [3][4]c.Int
+}`},
 	}
 
 	for _, tc := range testCases {
