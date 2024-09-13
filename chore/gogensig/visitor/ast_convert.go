@@ -27,7 +27,7 @@ func (p *AstConvert) setupSymbleTableFile(fileName string) error {
 	if err != nil {
 		return err
 	}
-	p.pkg.SetsymbolTable(symbTable)
+	p.pkg.SetSymbolTable(symbTable)
 	return nil
 }
 

@@ -13,14 +13,14 @@ type CppNameType string
 
 type GoNameType string
 
-type symbolntry struct {
+type SymbolEntry struct {
 	MangleName MangleNameType `json:"mangle"`
 	CppName    CppNameType    `json:"c++"`
 	GoName     GoNameType     `json:"go"`
 }
 
 type SymbolTable struct {
-	t map[MangleNameType]symbolntry
+	t map[MangleNameType]SymbolEntry
 }
 
 func NewSymbolTable(filePath string) (*SymbolTable, error) {
@@ -28,20 +28,20 @@ func NewSymbolTable(filePath string) (*SymbolTable, error) {
 	if err != nil {
 		return nil, err
 	}
-	var symbs []symbolntry
+	var symbs []SymbolEntry
 	err = json.Unmarshal(bytes, &symbs)
 	if err != nil {
 		return nil, err
 	}
 	var symbolTable SymbolTable
-	symbolTable.t = make(map[MangleNameType]symbolntry)
+	symbolTable.t = make(map[MangleNameType]SymbolEntry)
 	for _, symb := range symbs {
 		symbolTable.t[symb.MangleName] = symb
 	}
 	return &symbolTable, nil
 }
 
-func (t *SymbolTable) LookupSymbol(name MangleNameType) (*symbolntry, error) {
+func (t *SymbolTable) LookupSymbol(name MangleNameType) (*SymbolEntry, error) {
 	symbol, ok := t.t[name]
 	if ok {
 		return &symbol, nil

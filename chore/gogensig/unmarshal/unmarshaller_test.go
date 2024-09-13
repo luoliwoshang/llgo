@@ -1,6 +1,5 @@
 package unmarshal_test
 
-// TODO to improve test case
 import (
 	"testing"
 

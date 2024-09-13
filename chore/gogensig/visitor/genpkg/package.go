@@ -38,7 +38,7 @@ func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
 	return pkg
 }
 
-func (p *Package) SetsymbolTable(symbolTable *symb.SymbolTable) {
+func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
 	p.symbolTable = symbolTable
 }
 
