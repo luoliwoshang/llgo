@@ -17,11 +17,6 @@ type DocVisitor interface {
 
 type BaseDocVisitor struct {
 	DocVisitor
-	SymbolTable map[string]struct {
-		mangleName string
-		cppName    string
-		goName     string
-	}
 }
 
 func NewBaseDocVisitor(Visitor DocVisitor) *BaseDocVisitor {
