@@ -16,6 +16,9 @@ type Package struct {
 	p              *gogen.Package
 	clib           gogen.PkgRef
 	builtinTypeMap map[ast.BuiltinType]types.Type
+
+	typeBlock *gogen.TypeDefs // type decls block.
+
 }
 
 func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
@@ -33,6 +36,13 @@ func (p *Package) getCType(typ string) types.Type {
 		p.clib = p.p.Import("github.com/goplus/llgo/c")
 	}
 	return p.clib.Ref(typ).Type()
+}
+
+func (p *Package) getTypeBlock() *gogen.TypeDefs {
+	if p.typeBlock == nil {
+		p.typeBlock = p.p.NewTypeDefs()
+	}
+	return p.typeBlock
 }
 
 func (p *Package) initBuiltinTypeMap() {
@@ -66,44 +76,66 @@ func (p *Package) GetGogenPackage() *gogen.Package {
 
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	// todo(zzy) accept the name of llcppg.symb.json
-	sig, err := p.toSignature(funcDecl.Type)
-	if err != nil {
-		return err
-	}
+	sig := p.toSignature(funcDecl.Type)
 	goFuncName := toGoFuncName(funcDecl.Name.Name)
 	decl := p.p.NewFuncDecl(token.NoPos, goFuncName, sig)
 	decl.SetComments(p.p, NewFuncDocComments(funcDecl.Name.Name, goFuncName))
 	return nil
 }
 
-func (p *Package) toSignature(funcType *ast.FuncType) (*types.Signature, error) {
-	params := p.fieldListToParams(funcType.Params)
-	results := p.retToResult(funcType.Ret)
-	return types.NewSignatureType(nil, nil, nil, params, results, false), nil
+func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
+	decl := p.getTypeBlock().NewType(typeDecl.Name.Name)
+	structType := p.recordTypeToStruct(typeDecl.Type)
+	decl.InitType(p.p, structType)
+	return nil
 }
 
+func (p *Package) recordTypeToStruct(recordType *ast.RecordType) types.Type {
+	fields := p.fieldListToVars(recordType.Fields)
+	return types.NewStruct(fields, nil)
+}
+
+func (p *Package) toSignature(funcType *ast.FuncType) *types.Signature {
+	params := p.fieldListToParams(funcType.Params)
+	results := p.retToResult(funcType.Ret)
+	return types.NewSignatureType(nil, nil, nil, params, results, false)
+}
+
+// Convert ast.FieldList to types.Tuple (Function Param)
 func (p *Package) fieldListToParams(params *ast.FieldList) *types.Tuple {
 	if params == nil {
 		return types.NewTuple()
 	}
+	return types.NewTuple(p.fieldListToVars(params)...)
+}
+
+// Convert ast.FieldList to []types.Var
+func (p *Package) fieldListToVars(params *ast.FieldList) []*types.Var {
+	if params == nil || params.List == nil {
+		return nil
+	}
+
 	var vars []*types.Var
 	for _, field := range params.List {
 		vars = append(vars, p.fieldToVar(field))
 	}
-	return types.NewTuple(vars...)
+	return vars
 }
 
 // Execute the ret in FuncType
 func (p *Package) retToResult(ret ast.Expr) *types.Tuple {
-	typ := p.ToType(ret)
-	if typ == nil || typ == p.builtinTypeMap[ast.BuiltinType{Kind: ast.Void}] {
-		return types.NewTuple()
+	if typ := p.ToType(ret); typ != nil && typ != p.builtinTypeMap[ast.BuiltinType{Kind: ast.Void}] {
+		// in c havent multiple return
+		return types.NewTuple(types.NewVar(token.NoPos, p.p.Types, "", typ))
 	}
-	return types.NewTuple(types.NewVar(token.NoPos, nil, "", p.ToType(ret)))
+	return types.NewTuple()
 }
 
 func (p *Package) fieldToVar(field *ast.Field) *types.Var {
-	return types.NewVar(token.NoPos, nil, field.Names[0].Name, p.ToType(field.Type))
+	if field == nil {
+		return nil
+	}
+	return types.NewVar(token.NoPos, p.p.Types, field.Names[0].Name, p.ToType(field.Type))
 }
 
 // Convert ast.Expr to types.Type
