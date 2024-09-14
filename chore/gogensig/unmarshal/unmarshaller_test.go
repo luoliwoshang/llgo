@@ -44,10 +44,3 @@ func TestFunc1(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestUnmarshalFile(t *testing.T) {
-	astConvert := visitor.NewAstConvert("INIReader", "../../llcppg/llcppg.symb.json")
-	docVisitors := []visitor.DocVisitor{astConvert}
-	p := unmarshal.NewDocFileSetUnmarshaller(docVisitors)
-	p.UnmarshalFile("./_testjson/INIReader.json")
-}

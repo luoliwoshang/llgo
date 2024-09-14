@@ -81,22 +81,6 @@ func NewDocFileSetUnmarshaller(docVisitorList []visitor.DocVisitor) *DocFileSetU
 }
 
 func (p *DocFileSetUnmarshaller) UnmarshalBytes(raw []byte) error {
-	var filesWrapper []RawDocFile
-	if err := json.Unmarshal(raw, &filesWrapper); err != nil {
-		return fmt.Errorf("error unmarshalling FilesWithPath: %w", err)
-	}
-	for _, fileData := range filesWrapper {
-		docVisitor := NewDocFileUnmarshaller(p.docVisitorList)
-		docVisitor.UnmarshalRawDocFile(&fileData)
-	}
-	return nil
-}
-
-func (p *DocFileSetUnmarshaller) UnmarshalFile(jsonFilePath string) error {
-	raw, err := file.ReadFile(jsonFilePath)
-	if err != nil {
-		return err
-	}
 	var filesWrapper map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &filesWrapper); err != nil {
 		return fmt.Errorf("error unmarshalling FilesWithPath: %w", err)
@@ -106,4 +90,12 @@ func (p *DocFileSetUnmarshaller) UnmarshalFile(jsonFilePath string) error {
 		docVisitor.UnmarshalBytes(fileData, filePath)
 	}
 	return nil
+}
+
+func (p *DocFileSetUnmarshaller) UnmarshalFile(jsonFilePath string) error {
+	raw, err := file.ReadFile(jsonFilePath)
+	if err != nil {
+		return err
+	}
+	return p.UnmarshalBytes(raw)
 }
