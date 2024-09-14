@@ -8,9 +8,10 @@ import (
 
 type DocVisitor interface {
 	Visit(_Type string, node ast.Node)
-	VisitFuncDecl(*ast.FuncDecl)
-	VisitTypeDecl(*ast.TypeDecl)
+	VisitFuncDecl(funcDecl *ast.FuncDecl)
 	VisitDone(docPath string)
+	VisitClass(className *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl)
+	VisitMethod(className *ast.Ident, method *ast.FuncDecl, typeDecl *ast.TypeDecl)
 }
 
 type BaseDocVisitor struct {
@@ -48,5 +49,19 @@ func (p *BaseDocVisitor) visitFuncDecl(funcDecl *ast.FuncDecl) {
 }
 
 func (p *BaseDocVisitor) visitTypeDecl(typeDecl *ast.TypeDecl) {
-	p.VisitTypeDecl(typeDecl)
+	if typeDecl.Type.Tag == ast.Class {
+		//todo new struct and convert fields
+		p.visitClass(typeDecl.Name, typeDecl.Type.Fields, typeDecl)
+		for _, method := range typeDecl.Type.Methods {
+			p.visitMethod(typeDecl.Name, method, typeDecl)
+		}
+	}
+}
+
+func (p *BaseDocVisitor) visitClass(className *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl) {
+	p.VisitClass(className, fields, typeDecl)
+}
+
+func (p *BaseDocVisitor) visitMethod(className *ast.Ident, method *ast.FuncDecl, typeDecl *ast.TypeDecl) {
+	p.VisitMethod(className, method, typeDecl)
 }

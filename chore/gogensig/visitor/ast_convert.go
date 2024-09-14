@@ -13,10 +13,10 @@ type AstConvert struct {
 	pkg *genpkg.Package
 }
 
-func NewAstConvert(name string, symbFile string) *AstConvert {
+func NewAstConvert(pkgName string, symbFile string) *AstConvert {
 	p := new(AstConvert)
 	p.BaseDocVisitor = NewBaseDocVisitor(p)
-	pkg := genpkg.NewPackage(".", name, nil)
+	pkg := genpkg.NewPackage(".", pkgName, nil)
 	p.pkg = pkg
 	p.setupSymbleTableFile(symbFile)
 	return p
@@ -35,8 +35,12 @@ func (p *AstConvert) VisitFuncDecl(funcDecl *ast.FuncDecl) {
 	p.pkg.NewFuncDecl(funcDecl)
 }
 
-func (p *AstConvert) VisitTypeDecl(typeDecl *ast.TypeDecl) {
-	fmt.Println(typeDecl.Name.Name)
+func (p *AstConvert) VisitClass(className *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl) {
+	fmt.Printf("visit class %s\n", className.Name)
+}
+
+func (p *AstConvert) VisitMethod(className *ast.Ident, method *ast.FuncDecl, typeDecl *ast.TypeDecl) {
+	fmt.Printf("visit method %s of %s\n", method.Name.Name, className.Name)
 }
 
 func (p *AstConvert) VisitDone(docPath string) {
