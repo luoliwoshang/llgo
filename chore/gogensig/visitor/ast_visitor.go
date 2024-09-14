@@ -62,7 +62,7 @@ func (p *BaseDocVisitor) visitTypeDecl(typeDecl *ast.TypeDecl) {
 	} else if typeDecl.Type.Tag == ast.Enum {
 		p.visitEnum(typeDecl.Name, typeDecl.Type.Fields, typeDecl)
 	} else if typeDecl.Type.Tag == ast.Union {
-
+		p.visitUnion(typeDecl.Name, typeDecl.Type.Fields, typeDecl)
 	}
 }
 
