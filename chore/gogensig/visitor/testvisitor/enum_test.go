@@ -9,7 +9,7 @@ import (
 )
 
 func TestSpectrum(t *testing.T) {
-	docPath := "./_testjson/_enumtest/spectrum.h"
+	docPath := "./_testinput/_enumtest/spectrum.h"
 	astConvert := visitor.NewAstConvert("spectrum", docPath)
 	docVisitors := []visitor.DocVisitor{astConvert}
 	p := unmarshal.NewDocFileSetUnmarshaller(docVisitors)
