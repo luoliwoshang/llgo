@@ -12,6 +12,9 @@ type DocVisitor interface {
 	VisitDone(docPath string)
 	VisitClass(className *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl)
 	VisitMethod(className *ast.Ident, method *ast.FuncDecl, typeDecl *ast.TypeDecl)
+	VisitStruct(structName *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl)
+	VisitEnum(enumName *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl)
+	VisitUnion(unionName *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl)
 }
 
 type BaseDocVisitor struct {
@@ -50,11 +53,16 @@ func (p *BaseDocVisitor) visitFuncDecl(funcDecl *ast.FuncDecl) {
 
 func (p *BaseDocVisitor) visitTypeDecl(typeDecl *ast.TypeDecl) {
 	if typeDecl.Type.Tag == ast.Class {
-		//todo new struct and convert fields
 		p.visitClass(typeDecl.Name, typeDecl.Type.Fields, typeDecl)
 		for _, method := range typeDecl.Type.Methods {
 			p.visitMethod(typeDecl.Name, method, typeDecl)
 		}
+	} else if typeDecl.Type.Tag == ast.Struct {
+		p.visitStruct(typeDecl.Name, typeDecl.Type.Fields, typeDecl)
+	} else if typeDecl.Type.Tag == ast.Enum {
+		p.visitEnum(typeDecl.Name, typeDecl.Type.Fields, typeDecl)
+	} else if typeDecl.Type.Tag == ast.Union {
+
 	}
 }
 
@@ -64,4 +72,16 @@ func (p *BaseDocVisitor) visitClass(className *ast.Ident, fields *ast.FieldList,
 
 func (p *BaseDocVisitor) visitMethod(className *ast.Ident, method *ast.FuncDecl, typeDecl *ast.TypeDecl) {
 	p.VisitMethod(className, method, typeDecl)
+}
+
+func (p *BaseDocVisitor) visitStruct(structName *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl) {
+	p.VisitStruct(structName, fields, typeDecl)
+}
+
+func (p *BaseDocVisitor) visitEnum(enumName *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl) {
+	p.VisitEnum(enumName, fields, typeDecl)
+}
+
+func (p *BaseDocVisitor) visitUnion(unionName *ast.Ident, fields *ast.FieldList, typeDecl *ast.TypeDecl) {
+	p.VisitUnion(unionName, fields, typeDecl)
 }
