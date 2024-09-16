@@ -32,34 +32,33 @@ func TestBasicLitOK(t *testing.T) {
 			expr: &ast.BasicLit{Kind: ast.StringLit, Value: "abcd"},
 			want: "abcd",
 		},
-		/* todo
 		{
 			name: "ToChar",
 			expr: &ast.BasicLit{Kind: ast.CharLit, Value: "98"},
-			want: 98,
-		},*/
+			want: (int8)(98),
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run("convert "+tc.name, func(t *testing.T) {
 			if tc.name == "ToInt" {
 				result, err := convert.NewExpr(tc.expr).ToInt()
-				CheckResult(t, result, err, tc.want)
+				checkResult(t, result, err, tc.want)
 			} else if tc.name == "ToFloat" {
 				result, err := convert.NewExpr(tc.expr).ToFloat(64)
-				CheckResult(t, result, err, tc.want)
+				checkResult(t, result, err, tc.want)
 			} else if tc.name == "ToChar" {
 				result, err := convert.NewExpr(tc.expr).ToChar()
-				CheckResult(t, result, err, tc.want)
+				checkResult(t, result, err, tc.want)
 			} else if tc.name == "ToString" {
 				result, err := convert.NewExpr(tc.expr).ToString()
-				CheckResult(t, result, err, tc.want)
+				checkResult(t, result, err, tc.want)
 			}
 		})
 	}
 }
 
-func CheckResult(t *testing.T, result any, err error, want any) {
+func checkResult(t *testing.T, result any, err error, want any) {
 	t.Helper()
 	if err != nil {
 		t.Error(err)
