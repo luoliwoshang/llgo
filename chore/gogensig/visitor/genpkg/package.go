@@ -42,7 +42,7 @@ func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	// todo(zzy) accept the name of llcppg.symb.json
 	sig := p.cvt.ToSignature(funcDecl.Type)
-	goFuncName, err := p.cvt.ToGoFuncName(symb.MangleNameType(funcDecl.MangledName))
+	goFuncName, err := p.cvt.LookupSymbol(symb.MangleNameType(funcDecl.MangledName))
 	if err != nil {
 		goFuncName = convert.ToGoFuncName(funcDecl.Name.Name)
 	}

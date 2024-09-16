@@ -133,7 +133,7 @@ func (p *TypeConv) RecordTypeToStruct(recordType *ast.RecordType) types.Type {
 	return types.NewStruct(fields, nil)
 }
 
-func (p *TypeConv) ToGoFuncName(mangleName symb.MangleNameType) (symb.GoNameType, error) {
+func (p *TypeConv) LookupSymbol(mangleName symb.MangleNameType) (symb.GoNameType, error) {
 	e, err := p.symbolTable.LookupSymbol(mangleName)
 	if err != nil {
 		return "", err
