@@ -84,6 +84,34 @@ func (p *Expr) ToPointerType(m *typmap.BuiltinTypeMap) (types.Type, error) {
 	return nil, fmt.Errorf("%s", "is not a pointer type")
 }
 
+func (p *Expr) ToArrayType(m *typmap.BuiltinTypeMap) (types.Type, error) {
+	t, ok := p.Expr.(*ast.ArrayType)
+	if !ok {
+		return nil, fmt.Errorf("expr is not a ArrayType")
+	}
+	if t.Len == nil {
+		// in param handle
+		eltType, err := NewExpr(t.Elt).ToType(m)
+		if err != nil {
+			return nil, err
+		}
+		// array in the parameter,ignore the len,convert as pointer
+		return types.NewPointer(eltType), nil
+	}
+	if t.Len == nil {
+		return nil, fmt.Errorf("%s", "unsupport field with array without length")
+	}
+	elemType, err := NewExpr(t.Elt).ToType(m)
+	if err != nil {
+		return nil, err
+	}
+	len, err := NewExpr(t.Len).ToInt()
+	if err != nil {
+		return nil, fmt.Errorf("%s", "can't determine the array length")
+	}
+	return types.NewArray(elemType, int64(len)), nil
+}
+
 func (p *Expr) ToType(m *typmap.BuiltinTypeMap) (types.Type, error) {
 	switch t := p.Expr.(type) {
 	case *ast.BuiltinType:
@@ -91,31 +119,9 @@ func (p *Expr) ToType(m *typmap.BuiltinTypeMap) (types.Type, error) {
 	case *ast.PointerType:
 		return p.ToPointerType(m)
 	case *ast.ArrayType:
-		if t.Len == nil {
-			eltType, err := NewExpr(t.Elt).ToType(m)
-			if err != nil {
-				return nil, err
-			}
-			// array in the parameter,ignore the len,convert as pointer
-			return types.NewPointer(eltType), nil
-		}
-		if t.Len == nil {
-			return nil, fmt.Errorf("%s", "unsupport field with array without length")
-		}
-		elemType, err := NewExpr(t.Elt).ToType(m)
-		if err != nil {
-			return nil, err
-		}
-		len, err := NewExpr(t.Len).ToInt()
-		if err != nil {
-			return nil, fmt.Errorf("%s", "can't determine the array length")
-		}
-		return types.NewArray(elemType, int64(len)), nil
-		/*
-			case *ast.FuncType:
-				return p.toSignature(t)*/
+		return p.ToArrayType(m)
 	default:
-		return nil, fmt.Errorf("%s", "unexpected type")
+		return nil, fmt.Errorf("unexpected type %T", t)
 	}
 }
 
