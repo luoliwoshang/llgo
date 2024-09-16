@@ -7,18 +7,24 @@ import (
 	"os"
 
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
+	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
 type TypeConv struct {
-	types   *types.Package
-	typeMap *typmap.BuiltinTypeMap
+	symbolTable *symb.SymbolTable
+	types       *types.Package
+	typeMap     *typmap.BuiltinTypeMap
 	// todo(zzy):refine array type in func or param's context
 	inParam bool // flag to indicate if currently processing a param
 }
 
 func NewConv(types *types.Package, typeMap *typmap.BuiltinTypeMap) *TypeConv {
 	return &TypeConv{types: types, typeMap: typeMap}
+}
+
+func (p *TypeConv) SetSymbolTable(symbolTable *symb.SymbolTable) {
+	p.symbolTable = symbolTable
 }
 
 // Convert ast.Expr to types.Type
@@ -119,4 +125,9 @@ func (p *TypeConv) fieldToVar(field *ast.Field) *types.Var {
 		return nil
 	}
 	return types.NewVar(token.NoPos, p.types, field.Names[0].Name, p.ToType(field.Type))
+}
+
+func (p *TypeConv) RecordTypeToStruct(recordType *ast.RecordType) types.Type {
+	fields := p.fieldListToVars(recordType.Fields)
+	return types.NewStruct(fields, nil)
 }

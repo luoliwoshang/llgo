@@ -16,11 +16,10 @@ import (
 )
 
 type Package struct {
-	name        string
-	p           *gogen.Package
-	cvt         *convert.TypeConv
-	typeBlock   *gogen.TypeDefs // type decls block.
-	symbolTable *symb.SymbolTable
+	name      string
+	p         *gogen.Package
+	cvt       *convert.TypeConv
+	typeBlock *gogen.TypeDefs // type decls block.
 }
 
 func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
@@ -35,7 +34,7 @@ func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
 }
 
 func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
-	p.symbolTable = symbolTable
+	p.cvt.SetSymbolTable(symbolTable)
 }
 
 func (p *Package) getTypeBlock() *gogen.TypeDefs {
@@ -56,7 +55,7 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 
 func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
 	decl := p.getTypeBlock().NewType(typeDecl.Name.Name)
-	structType := p.recordTypeToStruct(typeDecl.Type)
+	structType := p.cvt.RecordTypeToStruct(typeDecl.Type)
 	decl.InitType(p.p, structType)
 	return nil
 }
@@ -66,35 +65,6 @@ func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
 	typ := p.ToType(typedefDecl.Type)
 	decl.InitType(p.p, typ)
 	return nil
-}
-
-func (p *Package) recordTypeToStruct(recordType *ast.RecordType) types.Type {
-	fields := p.fieldListToVars(recordType.Fields)
-	return types.NewStruct(fields, nil)
-}
-
-// Convert ast.FieldList to []types.Var
-func (p *Package) fieldListToVars(params *ast.FieldList) []*types.Var {
-	var vars []*types.Var
-	if params == nil || params.List == nil {
-		return vars
-	}
-	for _, field := range params.List {
-		fieldVar := p.fieldToVar(field)
-		if fieldVar != nil {
-			vars = append(vars, fieldVar)
-		} else {
-			//todo handle field _Type=Variadic case
-		}
-	}
-	return vars
-}
-
-func (p *Package) fieldToVar(field *ast.Field) *types.Var {
-	if field == nil || len(field.Names) <= 0 {
-		return nil
-	}
-	return types.NewVar(token.NoPos, p.p.Types, field.Names[0].Name, p.ToType(field.Type))
 }
 
 // Convert ast.Expr to types.Type
