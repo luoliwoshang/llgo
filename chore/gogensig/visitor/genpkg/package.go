@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/goplus/gogen"
+	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/convert"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
@@ -235,7 +236,7 @@ func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 	if len(enumTypeDecl.Type.Items) > 0 {
 		for _, item := range enumTypeDecl.Type.Items {
 			name := toTitle(enumTypeDecl.Name.Name) + "_" + item.Name.Name
-			val, err := NewExpr(item.Value).ToInt()
+			val, err := convert.NewExpr(item.Value).ToInt()
 			if err != nil {
 				continue
 			}

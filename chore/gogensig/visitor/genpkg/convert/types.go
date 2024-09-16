@@ -1,4 +1,4 @@
-package genpkg
+package convert
 
 import (
 	"fmt"
