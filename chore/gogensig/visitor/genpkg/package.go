@@ -131,7 +131,7 @@ func (p *Package) fieldToVar(field *ast.Field) *types.Var {
 
 // Convert ast.Expr to types.Type
 func (p *Package) ToType(expr ast.Expr) types.Type {
-	e := convert.NewConvertExpr(expr)
+	e := convert.Expr(expr)
 	switch t := expr.(type) {
 	case *ast.BuiltinType:
 		typ, _ := e.ToBuiltinType(p.typeMap)
@@ -149,7 +149,7 @@ func (p *Package) ToType(expr ast.Expr) types.Type {
 			return nil
 		}
 		elemType := p.ToType(t.Elt)
-		len, err := convert.NewConvertExpr(t.Len).ToInt()
+		len, err := convert.Expr(t.Len).ToInt()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "can't determine the array length")
 			return nil
@@ -182,7 +182,7 @@ func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 	if len(enumTypeDecl.Type.Items) > 0 {
 		for _, item := range enumTypeDecl.Type.Items {
 			name := toTitle(enumTypeDecl.Name.Name) + "_" + item.Name.Name
-			val, err := convert.NewConvertExpr(item.Value).ToInt()
+			val, err := convert.Expr(item.Value).ToInt()
 			if err != nil {
 				continue
 			}
