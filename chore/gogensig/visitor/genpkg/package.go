@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/goplus/gogen"
+	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/comment"
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/convert"
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
@@ -39,9 +40,9 @@ func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	// todo(zzy) accept the name of llcppg.symb.json
 	sig := p.cvt.ToSignature(funcDecl.Type)
-	goFuncName := toGoFuncName(funcDecl.Name.Name)
+	goFuncName := convert.ToGoFuncName(funcDecl.Name.Name)
 	decl := p.p.NewFuncDecl(token.NoPos, goFuncName, sig)
-	decl.SetComments(p.p, NewFuncDocComments(funcDecl.Name.Name, goFuncName))
+	decl.SetComments(p.p, comment.NewFuncDocComments(funcDecl.Name.Name, goFuncName))
 	return nil
 }
 
@@ -69,7 +70,7 @@ func (p *Package) ToType(expr ast.Expr) types.Type {
 func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 	if len(enumTypeDecl.Type.Items) > 0 {
 		for _, item := range enumTypeDecl.Type.Items {
-			name := toTitle(enumTypeDecl.Name.Name) + "_" + item.Name.Name
+			name := convert.ToTitle(enumTypeDecl.Name.Name) + "_" + item.Name.Name
 			val, err := convert.Expr(item.Value).ToInt()
 			if err != nil {
 				continue

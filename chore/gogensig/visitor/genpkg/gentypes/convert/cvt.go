@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"strings"
 
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
@@ -130,4 +131,25 @@ func (p *TypeConv) fieldToVar(field *ast.Field) *types.Var {
 func (p *TypeConv) RecordTypeToStruct(recordType *ast.RecordType) types.Type {
 	fields := p.fieldListToVars(recordType.Fields)
 	return types.NewStruct(fields, nil)
+}
+
+func (p *TypeConv) ToGoFuncName(mangleName symb.MangleNameType) (symb.GoNameType, error) {
+	e, err := p.symbolTable.LookupSymbol(mangleName)
+	if err != nil {
+		return "", err
+	}
+	return e.GoName, nil
+}
+
+func ToTitle(s string) string {
+	return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
+}
+
+func ToGoFuncName(funcName string) string {
+	subs := strings.Split(string(funcName), "_")
+	name := ""
+	for _, sub := range subs {
+		name += ToTitle(sub)
+	}
+	return name
 }
