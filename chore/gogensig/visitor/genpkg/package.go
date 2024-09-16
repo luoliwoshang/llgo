@@ -16,10 +16,9 @@ import (
 )
 
 type Package struct {
-	name      string
-	p         *gogen.Package
-	cvt       *convert.TypeConv
-	typeBlock *gogen.TypeDefs // type decls block.
+	name string
+	p    *gogen.Package
+	cvt  *convert.TypeConv
 }
 
 func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
@@ -37,13 +36,6 @@ func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
 	p.cvt.SetSymbolTable(symbolTable)
 }
 
-func (p *Package) getTypeBlock() *gogen.TypeDefs {
-	if p.typeBlock == nil {
-		p.typeBlock = p.p.NewTypeDefs()
-	}
-	return p.typeBlock
-}
-
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	// todo(zzy) accept the name of llcppg.symb.json
 	sig := p.cvt.ToSignature(funcDecl.Type)
@@ -54,14 +46,16 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 }
 
 func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
-	decl := p.getTypeBlock().NewType(typeDecl.Name.Name)
+	typeBlock := p.p.NewTypeDefs()
+	decl := typeBlock.NewType(typeDecl.Name.Name)
 	structType := p.cvt.RecordTypeToStruct(typeDecl.Type)
 	decl.InitType(p.p, structType)
 	return nil
 }
 
 func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
-	decl := p.getTypeBlock().NewType(typedefDecl.Name.Name)
+	typeBlock := p.p.NewTypeDefs()
+	decl := typeBlock.NewType(typedefDecl.Name.Name)
 	typ := p.ToType(typedefDecl.Type)
 	decl.InitType(p.p, typ)
 	return nil
@@ -86,8 +80,23 @@ func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 }
 
 func (p *Package) Write(docPath string) error {
+	fnMakeDir := func(dir string) (string, error) {
+		if len(dir) <= 0 {
+			dir = "."
+		}
+		curDir, err := filepath.Abs(dir)
+		if err != nil {
+			return "", err
+		}
+		path := filepath.Join(curDir, p.name)
+		err = os.MkdirAll(path, 0755)
+		if err != nil {
+			return "", err
+		}
+		return path, nil
+	}
 	_, fileName := filepath.Split(docPath)
-	dir, err := p.makePackageDir("")
+	dir, err := fnMakeDir("")
 	if err != nil {
 		return err
 	}
@@ -105,20 +114,4 @@ func (p *Package) Write(docPath string) error {
 
 func (p *Package) WriteToBuffer(buf *bytes.Buffer) error {
 	return p.p.WriteTo(buf)
-}
-
-func (p *Package) makePackageDir(dir string) (string, error) {
-	if len(dir) <= 0 {
-		dir = "."
-	}
-	curDir, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(curDir, p.name)
-	err = os.MkdirAll(path, 0755)
-	if err != nil {
-		return "", err
-	}
-	return path, nil
 }
