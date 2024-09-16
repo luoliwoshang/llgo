@@ -41,7 +41,7 @@ func TestBasicLitOK(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run("BasicLit convert ok: "+tc.name, func(t *testing.T) {
+		t.Run("convert "+tc.name, func(t *testing.T) {
 			if tc.name == "ToInt" {
 				result, err := convert.NewExpr(tc.expr).ToInt()
 				CheckResult(t, result, err, tc.want)
