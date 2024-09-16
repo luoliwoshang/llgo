@@ -6,48 +6,37 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/goplus/gogen"
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/convert"
+	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
 type Package struct {
-	name           string
-	p              *gogen.Package
-	clib           gogen.PkgRef
-	builtinTypeMap map[ast.BuiltinType]types.Type
-
+	name      string
+	p         *gogen.Package
+	typeMap   *typmap.BuiltinTypeMap
 	typeBlock *gogen.TypeDefs // type decls block.
-
 	// todo(zzy):refine array type in func or param's context
-	inParam bool // flag to indicate if currently processing a param
-
+	inParam     bool // flag to indicate if currently processing a param
 	symbolTable *symb.SymbolTable
 }
 
 func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
-	pkg := &Package{
-		p:              gogen.NewPackage(pkgPath, name, conf),
-		builtinTypeMap: make(map[ast.BuiltinType]types.Type),
+	p := &Package{
+		p: gogen.NewPackage(pkgPath, name, conf),
 	}
-	pkg.initBuiltinTypeMap()
-	pkg.name = name
-	return pkg
+	clib := p.p.Import("github.com/goplus/llgo/c")
+	p.typeMap = typmap.NewBuiltinTypeMap(clib)
+	p.name = name
+	return p
 }
 
 func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
 	p.symbolTable = symbolTable
-}
-
-func (p *Package) getCType(typ string) types.Type {
-	if p.clib.Types == nil {
-		p.clib = p.p.Import("github.com/goplus/llgo/c")
-	}
-	return p.clib.Ref(typ).Type()
 }
 
 func (p *Package) getTypeBlock() *gogen.TypeDefs {
@@ -55,31 +44,6 @@ func (p *Package) getTypeBlock() *gogen.TypeDefs {
 		p.typeBlock = p.p.NewTypeDefs()
 	}
 	return p.typeBlock
-}
-
-func (p *Package) initBuiltinTypeMap() {
-	// todo(zzy): int128/uint128  half(float16),long double,float 128
-	p.builtinTypeMap = map[ast.BuiltinType]types.Type{
-		{Kind: ast.Void}:                                    types.Typ[types.UntypedNil], // For a invalid type
-		{Kind: ast.Bool}:                                    types.Typ[types.Bool],       // Bool
-		{Kind: ast.Char, Flags: ast.Signed}:                 p.getCType("Char"),          // Char_S
-		{Kind: ast.Char, Flags: ast.Unsigned}:               p.getCType("Char"),          // Char_U
-		{Kind: ast.WChar}:                                   types.Typ[types.Int16],      // WChar
-		{Kind: ast.Char16}:                                  types.Typ[types.Int16],      // Char16
-		{Kind: ast.Char32}:                                  types.Typ[types.Int32],      // Char32
-		{Kind: ast.Int, Flags: ast.Short}:                   types.Typ[types.Int16],      // Short
-		{Kind: ast.Int, Flags: ast.Short | ast.Unsigned}:    types.Typ[types.Uint16],     // UShort
-		{Kind: ast.Int}:                                     p.getCType("Int"),           // Int
-		{Kind: ast.Int, Flags: ast.Unsigned}:                p.getCType("Uint"),          // UInt
-		{Kind: ast.Int, Flags: ast.Long}:                    p.getCType("Long"),          // Long
-		{Kind: ast.Int, Flags: ast.Long | ast.Unsigned}:     p.getCType("Ulong"),         // Ulong
-		{Kind: ast.Int, Flags: ast.LongLong}:                p.getCType("LongLong"),      // LongLong
-		{Kind: ast.Int, Flags: ast.LongLong | ast.Unsigned}: p.getCType("UlongLong"),     // ULongLong
-		{Kind: ast.Float}:                                   p.getCType("Float"),         // Float
-		{Kind: ast.Float, Flags: ast.Double}:                p.getCType("Double"),        // Double
-		{Kind: ast.Complex}:                                 types.Typ[types.Complex64],  // ComplexFloat
-		{Kind: ast.Complex, Flags: ast.Double}:              types.Typ[types.Complex128], // ComplexDouble
-	}
 }
 
 func (p *Package) GetGogenPackage() *gogen.Package {
@@ -150,7 +114,8 @@ func (p *Package) fieldListToVars(params *ast.FieldList) []*types.Var {
 
 // Execute the ret in FuncType
 func (p *Package) retToResult(ret ast.Expr) *types.Tuple {
-	if typ := p.ToType(ret); typ != nil && typ != p.builtinTypeMap[ast.BuiltinType{Kind: ast.Void}] {
+	typ := p.ToType(ret)
+	if typ != nil && !p.typeMap.IsVoidType(typ) {
 		// in c havent multiple return
 		return types.NewTuple(types.NewVar(token.NoPos, p.p.Types, "", typ))
 	}
@@ -166,11 +131,14 @@ func (p *Package) fieldToVar(field *ast.Field) *types.Var {
 
 // Convert ast.Expr to types.Type
 func (p *Package) ToType(expr ast.Expr) types.Type {
+	e := convert.NewConvertExpr(expr)
 	switch t := expr.(type) {
 	case *ast.BuiltinType:
-		return p.toBuiltinType(t)
+		typ, _ := e.ToBuiltinType(p.typeMap)
+		return typ
 	case *ast.PointerType:
-		return p.handlePointerType(t)
+		typ := p.handlePointerType(t)
+		return typ
 	case *ast.ArrayType:
 		if p.inParam {
 			// array in the parameter,ignore the len,convert as pointer
@@ -181,12 +149,12 @@ func (p *Package) ToType(expr ast.Expr) types.Type {
 			return nil
 		}
 		elemType := p.ToType(t.Elt)
-		len, ok := p.evaluateArrayLength(t.Len)
-		if !ok {
+		len, err := convert.NewConvertExpr(t.Len).ToInt()
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "can't determine the array length")
 			return nil
 		}
-		return types.NewArray(elemType, len)
+		return types.NewArray(elemType, int64(len))
 	case *ast.FuncType:
 		return p.toSignature(t)
 	default:
@@ -201,8 +169,8 @@ func (p *Package) handlePointerType(t *ast.PointerType) types.Type {
 	baseType := p.ToType(t.X)
 	// void * -> c.Pointer
 	// todo(zzy):alias visit the origin type unsafe.Pointer,c.Pointer is better
-	if baseType == p.builtinTypeMap[ast.BuiltinType{Kind: ast.Void}] {
-		return p.getCType("Pointer")
+	if p.typeMap.IsVoidType(baseType) {
+		return p.typeMap.CType("Pointer")
 	}
 	if baseFuncType, ok := baseType.(*types.Signature); ok {
 		return baseFuncType
@@ -210,33 +178,11 @@ func (p *Package) handlePointerType(t *ast.PointerType) types.Type {
 	return types.NewPointer(baseType)
 }
 
-func (p *Package) toBuiltinType(typ *ast.BuiltinType) types.Type {
-	t, ok := p.builtinTypeMap[*typ]
-	if ok {
-		return t
-	}
-	fmt.Fprintln(os.Stderr, "unsupported type:", typ)
-	return nil
-}
-
-func (p *Package) evaluateArrayLength(expr ast.Expr) (int64, bool) {
-	switch e := expr.(type) {
-	case *ast.BasicLit:
-		if e.Kind == ast.IntLit {
-			length, err := strconv.ParseInt(e.Value, 10, 64)
-			if err == nil {
-				return length, true
-			}
-		}
-	}
-	return 0, false
-}
-
 func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 	if len(enumTypeDecl.Type.Items) > 0 {
 		for _, item := range enumTypeDecl.Type.Items {
 			name := toTitle(enumTypeDecl.Name.Name) + "_" + item.Name.Name
-			val, err := convert.NewExpr(item.Value).ToInt()
+			val, err := convert.NewConvertExpr(item.Value).ToInt()
 			if err != nil {
 				continue
 			}

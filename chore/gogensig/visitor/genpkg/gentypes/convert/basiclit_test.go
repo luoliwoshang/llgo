@@ -42,16 +42,16 @@ func TestBasicLitOK(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("convert "+tc.name, func(t *testing.T) {
 			if tc.name == "ToInt" {
-				result, err := convert.NewExpr(tc.expr).ToInt()
+				result, err := convert.NewConvertExpr(tc.expr).ToInt()
 				checkResult(t, result, err, tc.want)
 			} else if tc.name == "ToFloat" {
-				result, err := convert.NewExpr(tc.expr).ToFloat(64)
+				result, err := convert.NewConvertExpr(tc.expr).ToFloat(64)
 				checkResult(t, result, err, tc.want)
 			} else if tc.name == "ToChar" {
-				result, err := convert.NewExpr(tc.expr).ToChar()
+				result, err := convert.NewConvertExpr(tc.expr).ToChar()
 				checkResult(t, result, err, tc.want)
 			} else if tc.name == "ToString" {
-				result, err := convert.NewExpr(tc.expr).ToString()
+				result, err := convert.NewConvertExpr(tc.expr).ToString()
 				checkResult(t, result, err, tc.want)
 			}
 		})

@@ -10,51 +10,51 @@ import (
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
-type Expr struct {
-	ast.Expr
+type ConvertExpr struct {
+	e ast.Expr
 }
 
-func NewExpr(e ast.Expr) *Expr {
-	return &Expr{Expr: e}
+func NewConvertExpr(e ast.Expr) *ConvertExpr {
+	return &ConvertExpr{e: e}
 }
 
-func (p *Expr) ToInt() (int, error) {
-	v, ok := p.Expr.(*ast.BasicLit)
+func (p *ConvertExpr) ToInt() (int, error) {
+	v, ok := p.e.(*ast.BasicLit)
 	if ok && v.Kind == ast.IntLit {
 		return strconv.Atoi(v.Value)
 	}
-	return 0, fmt.Errorf("%v can't convert to int", p.Expr)
+	return 0, fmt.Errorf("%v can't convert to int", p.e)
 }
 
-func (p *Expr) ToFloat(bitSize int) (float64, error) {
-	v, ok := p.Expr.(*ast.BasicLit)
+func (p *ConvertExpr) ToFloat(bitSize int) (float64, error) {
+	v, ok := p.e.(*ast.BasicLit)
 	if ok && v.Kind == ast.FloatLit {
 		return strconv.ParseFloat(v.Value, bitSize)
 	}
 	return 0, fmt.Errorf("%v can't convert to float", v)
 }
 
-func (p *Expr) ToString() (string, error) {
-	v, ok := p.Expr.(*ast.BasicLit)
+func (p *ConvertExpr) ToString() (string, error) {
+	v, ok := p.e.(*ast.BasicLit)
 	if ok && v.Kind == ast.StringLit {
 		return v.Value, nil
 	}
 	return "", fmt.Errorf("%v can't convert to string", v)
 }
 
-func (p *Expr) ToChar() (int8, error) {
-	v, ok := p.Expr.(*ast.BasicLit)
+func (p *ConvertExpr) ToChar() (int8, error) {
+	v, ok := p.e.(*ast.BasicLit)
 	if ok && v.Kind == ast.CharLit {
 		iV, err := strconv.Atoi(v.Value)
 		if err == nil {
 			return int8(iV), nil
 		}
 	}
-	return 0, fmt.Errorf("%v can't convert to char", p.Expr)
+	return 0, fmt.Errorf("%v can't convert to char", p.e)
 }
 
-func (p *Expr) ToBuiltinType(m *typmap.BuiltinTypeMap) (types.Type, error) {
-	builtinType, ok := p.Expr.(*ast.BuiltinType)
+func (p *ConvertExpr) ToBuiltinType(m *typmap.BuiltinTypeMap) (types.Type, error) {
+	builtinType, ok := p.e.(*ast.BuiltinType)
 	if ok {
 		return m.FindBuiltinType(*builtinType)
 	}
@@ -64,10 +64,10 @@ func (p *Expr) ToBuiltinType(m *typmap.BuiltinTypeMap) (types.Type, error) {
 // - void* -> c.Pointer
 // - Function pointers -> Function types (pointer removed)
 // - Other cases -> Pointer to the base type
-func (p *Expr) ToPointerType(m *typmap.BuiltinTypeMap) (types.Type, error) {
-	pointerType, ok := p.Expr.(*ast.PointerType)
+func (p *ConvertExpr) ToPointerType(m *typmap.BuiltinTypeMap) (types.Type, error) {
+	pointerType, ok := p.e.(*ast.PointerType)
 	if ok {
-		baseType, err := NewExpr(pointerType.X).ToType(m)
+		baseType, err := NewConvertExpr(pointerType.X).ToType(m)
 		if err != nil {
 			return nil, err
 		}
@@ -84,14 +84,14 @@ func (p *Expr) ToPointerType(m *typmap.BuiltinTypeMap) (types.Type, error) {
 	return nil, fmt.Errorf("%s", "is not a pointer type")
 }
 
-func (p *Expr) ToArrayType(m *typmap.BuiltinTypeMap) (types.Type, error) {
-	t, ok := p.Expr.(*ast.ArrayType)
+func (p *ConvertExpr) ToArrayType(m *typmap.BuiltinTypeMap) (types.Type, error) {
+	t, ok := p.e.(*ast.ArrayType)
 	if !ok {
 		return nil, fmt.Errorf("expr is not a ArrayType")
 	}
 	if t.Len == nil {
 		// in param handle
-		eltType, err := NewExpr(t.Elt).ToType(m)
+		eltType, err := NewConvertExpr(t.Elt).ToType(m)
 		if err != nil {
 			return nil, err
 		}
@@ -101,19 +101,19 @@ func (p *Expr) ToArrayType(m *typmap.BuiltinTypeMap) (types.Type, error) {
 	if t.Len == nil {
 		return nil, fmt.Errorf("%s", "unsupport field with array without length")
 	}
-	elemType, err := NewExpr(t.Elt).ToType(m)
+	elemType, err := NewConvertExpr(t.Elt).ToType(m)
 	if err != nil {
 		return nil, err
 	}
-	len, err := NewExpr(t.Len).ToInt()
+	len, err := NewConvertExpr(t.Len).ToInt()
 	if err != nil {
 		return nil, fmt.Errorf("%s", "can't determine the array length")
 	}
 	return types.NewArray(elemType, int64(len)), nil
 }
 
-func (p *Expr) ToType(m *typmap.BuiltinTypeMap) (types.Type, error) {
-	switch t := p.Expr.(type) {
+func (p *ConvertExpr) ToType(m *typmap.BuiltinTypeMap) (types.Type, error) {
+	switch t := p.e.(type) {
 	case *ast.BuiltinType:
 		return p.ToBuiltinType(m)
 	case *ast.PointerType:
@@ -125,7 +125,7 @@ func (p *Expr) ToType(m *typmap.BuiltinTypeMap) (types.Type, error) {
 	}
 }
 
-func (p *Expr) ToTuple(typesPacakge *types.Package, m *typmap.BuiltinTypeMap) (*types.Tuple, error) {
+func (p *ConvertExpr) ToTuple(typesPacakge *types.Package, m *typmap.BuiltinTypeMap) (*types.Tuple, error) {
 	typ, err := p.ToType(m)
 	if err == nil && !m.IsVoidType(typ) {
 		// in c havent multiple return
@@ -134,12 +134,12 @@ func (p *Expr) ToTuple(typesPacakge *types.Package, m *typmap.BuiltinTypeMap) (*
 	return types.NewTuple(), nil
 }
 
-func (p *Expr) ToSignature(typesPacakge *types.Package, m *typmap.BuiltinTypeMap) (*types.Signature, error) {
-	funcType, ok := p.Expr.(*ast.FuncType)
+func (p *ConvertExpr) ToSignature(typesPacakge *types.Package, m *typmap.BuiltinTypeMap) (*types.Signature, error) {
+	funcType, ok := p.e.(*ast.FuncType)
 	if ok {
-		fieldList := NewFieldList(funcType.Params)
+		fieldList := NewConvertFieldList(funcType.Params)
 		params, _ := fieldList.ToTuple(typesPacakge, m)
-		ret := NewExpr(funcType.Ret)
+		ret := NewConvertExpr(funcType.Ret)
 		results, _ := ret.ToTuple(typesPacakge, m)
 		return types.NewSignatureType(nil, nil, nil, params, results, false), nil
 	}
