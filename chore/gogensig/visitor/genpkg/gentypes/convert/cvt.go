@@ -1,0 +1,122 @@
+package convert
+
+import (
+	"fmt"
+	"go/token"
+	"go/types"
+	"os"
+
+	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
+	"github.com/goplus/llgo/chore/llcppg/ast"
+)
+
+type TypeConv struct {
+	types   *types.Package
+	typeMap *typmap.BuiltinTypeMap
+	// todo(zzy):refine array type in func or param's context
+	inParam bool // flag to indicate if currently processing a param
+}
+
+func NewConv(types *types.Package, typeMap *typmap.BuiltinTypeMap) *TypeConv {
+	return &TypeConv{types: types, typeMap: typeMap}
+}
+
+// Convert ast.Expr to types.Type
+func (p *TypeConv) ToType(expr ast.Expr) types.Type {
+	e := Expr(expr)
+	switch t := expr.(type) {
+	case *ast.BuiltinType:
+		typ, _ := e.ToBuiltinType(p.typeMap)
+		return typ
+	case *ast.PointerType:
+		typ := p.handlePointerType(t)
+		return typ
+	case *ast.ArrayType:
+		if p.inParam {
+			// array in the parameter,ignore the len,convert as pointer
+			return types.NewPointer(p.ToType(t.Elt))
+		}
+		if t.Len == nil {
+			fmt.Fprintln(os.Stderr, "unsupport field with array without length")
+			return nil
+		}
+		elemType := p.ToType(t.Elt)
+		len, err := Expr(t.Len).ToInt()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "can't determine the array length")
+			return nil
+		}
+		return types.NewArray(elemType, int64(len))
+	case *ast.FuncType:
+		return p.ToSignature(t)
+	default:
+		return nil
+	}
+}
+
+// - void* -> c.Pointer
+// - Function pointers -> Function types (pointer removed)
+// - Other cases -> Pointer to the base type
+func (p *TypeConv) handlePointerType(t *ast.PointerType) types.Type {
+	baseType := p.ToType(t.X)
+	// void * -> c.Pointer
+	// todo(zzy):alias visit the origin type unsafe.Pointer,c.Pointer is better
+	if p.typeMap.IsVoidType(baseType) {
+		return p.typeMap.CType("Pointer")
+	}
+	if baseFuncType, ok := baseType.(*types.Signature); ok {
+		return baseFuncType
+	}
+	return types.NewPointer(baseType)
+}
+
+func (p *TypeConv) ToSignature(funcType *ast.FuncType) *types.Signature {
+	beforeInParam := p.inParam
+	p.inParam = true
+	defer func() { p.inParam = beforeInParam }()
+	params := p.fieldListToParams(funcType.Params)
+	results := p.retToResult(funcType.Ret)
+	return types.NewSignatureType(nil, nil, nil, params, results, false)
+}
+
+// Convert ast.FieldList to types.Tuple (Function Param)
+func (p *TypeConv) fieldListToParams(params *ast.FieldList) *types.Tuple {
+	if params == nil {
+		return types.NewTuple()
+	}
+	return types.NewTuple(p.fieldListToVars(params)...)
+}
+
+// Execute the ret in FuncType
+func (p *TypeConv) retToResult(ret ast.Expr) *types.Tuple {
+	typ := p.ToType(ret)
+	if typ != nil && !p.typeMap.IsVoidType(typ) {
+		// in c havent multiple return
+		return types.NewTuple(types.NewVar(token.NoPos, p.types, "", typ))
+	}
+	return types.NewTuple()
+}
+
+// Convert ast.FieldList to []types.Var
+func (p *TypeConv) fieldListToVars(params *ast.FieldList) []*types.Var {
+	var vars []*types.Var
+	if params == nil || params.List == nil {
+		return vars
+	}
+	for _, field := range params.List {
+		fieldVar := p.fieldToVar(field)
+		if fieldVar != nil {
+			vars = append(vars, fieldVar)
+		} else {
+			//todo handle field _Type=Variadic case
+		}
+	}
+	return vars
+}
+
+func (p *TypeConv) fieldToVar(field *ast.Field) *types.Var {
+	if field == nil || len(field.Names) <= 0 {
+		return nil
+	}
+	return types.NewVar(token.NoPos, p.types, field.Names[0].Name, p.ToType(field.Type))
+}

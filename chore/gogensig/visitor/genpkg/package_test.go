@@ -741,9 +741,8 @@ type name [5]int8`,
 // compares the output of a gogen.Package with the expected
 func comparePackageOutput(t *testing.T, pkg *genpkg.Package, expect string) {
 	t.Helper()
-	gogenPkg := pkg.GetGogenPackage()
 	var buf bytes.Buffer
-	err := gogenPkg.WriteTo(&buf)
+	err := pkg.WriteToBuffer(&buf)
 	if err != nil {
 		t.Fatalf("WriteTo failed: %v", err)
 	}

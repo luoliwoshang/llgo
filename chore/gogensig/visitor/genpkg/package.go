@@ -1,7 +1,7 @@
 package genpkg
 
 import (
-	"fmt"
+	"bytes"
 	"go/token"
 	"go/types"
 	"os"
@@ -16,12 +16,10 @@ import (
 )
 
 type Package struct {
-	name      string
-	p         *gogen.Package
-	typeMap   *typmap.BuiltinTypeMap
-	typeBlock *gogen.TypeDefs // type decls block.
-	// todo(zzy):refine array type in func or param's context
-	inParam     bool // flag to indicate if currently processing a param
+	name        string
+	p           *gogen.Package
+	cvt         *convert.TypeConv
+	typeBlock   *gogen.TypeDefs // type decls block.
 	symbolTable *symb.SymbolTable
 }
 
@@ -30,7 +28,8 @@ func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
 		p: gogen.NewPackage(pkgPath, name, conf),
 	}
 	clib := p.p.Import("github.com/goplus/llgo/c")
-	p.typeMap = typmap.NewBuiltinTypeMap(clib)
+	typeMap := typmap.NewBuiltinTypeMap(clib)
+	p.cvt = convert.NewConv(p.p.Types, typeMap)
 	p.name = name
 	return p
 }
@@ -46,13 +45,9 @@ func (p *Package) getTypeBlock() *gogen.TypeDefs {
 	return p.typeBlock
 }
 
-func (p *Package) GetGogenPackage() *gogen.Package {
-	return p.p
-}
-
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	// todo(zzy) accept the name of llcppg.symb.json
-	sig := p.toSignature(funcDecl.Type)
+	sig := p.cvt.ToSignature(funcDecl.Type)
 	goFuncName := toGoFuncName(funcDecl.Name.Name)
 	decl := p.p.NewFuncDecl(token.NoPos, goFuncName, sig)
 	decl.SetComments(p.p, NewFuncDocComments(funcDecl.Name.Name, goFuncName))
@@ -66,15 +61,6 @@ func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
 	return nil
 }
 
-func (p *Package) toSignature(funcType *ast.FuncType) *types.Signature {
-	beforeInParam := p.inParam
-	p.inParam = true
-	defer func() { p.inParam = beforeInParam }()
-	params := p.fieldListToParams(funcType.Params)
-	results := p.retToResult(funcType.Ret)
-	return types.NewSignatureType(nil, nil, nil, params, results, false)
-}
-
 func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
 	decl := p.getTypeBlock().NewType(typedefDecl.Name.Name)
 	typ := p.ToType(typedefDecl.Type)
@@ -85,14 +71,6 @@ func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
 func (p *Package) recordTypeToStruct(recordType *ast.RecordType) types.Type {
 	fields := p.fieldListToVars(recordType.Fields)
 	return types.NewStruct(fields, nil)
-}
-
-// Convert ast.FieldList to types.Tuple (Function Param)
-func (p *Package) fieldListToParams(params *ast.FieldList) *types.Tuple {
-	if params == nil {
-		return types.NewTuple()
-	}
-	return types.NewTuple(p.fieldListToVars(params)...)
 }
 
 // Convert ast.FieldList to []types.Var
@@ -112,16 +90,6 @@ func (p *Package) fieldListToVars(params *ast.FieldList) []*types.Var {
 	return vars
 }
 
-// Execute the ret in FuncType
-func (p *Package) retToResult(ret ast.Expr) *types.Tuple {
-	typ := p.ToType(ret)
-	if typ != nil && !p.typeMap.IsVoidType(typ) {
-		// in c havent multiple return
-		return types.NewTuple(types.NewVar(token.NoPos, p.p.Types, "", typ))
-	}
-	return types.NewTuple()
-}
-
 func (p *Package) fieldToVar(field *ast.Field) *types.Var {
 	if field == nil || len(field.Names) <= 0 {
 		return nil
@@ -131,51 +99,7 @@ func (p *Package) fieldToVar(field *ast.Field) *types.Var {
 
 // Convert ast.Expr to types.Type
 func (p *Package) ToType(expr ast.Expr) types.Type {
-	e := convert.Expr(expr)
-	switch t := expr.(type) {
-	case *ast.BuiltinType:
-		typ, _ := e.ToBuiltinType(p.typeMap)
-		return typ
-	case *ast.PointerType:
-		typ := p.handlePointerType(t)
-		return typ
-	case *ast.ArrayType:
-		if p.inParam {
-			// array in the parameter,ignore the len,convert as pointer
-			return types.NewPointer(p.ToType(t.Elt))
-		}
-		if t.Len == nil {
-			fmt.Fprintln(os.Stderr, "unsupport field with array without length")
-			return nil
-		}
-		elemType := p.ToType(t.Elt)
-		len, err := convert.Expr(t.Len).ToInt()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "can't determine the array length")
-			return nil
-		}
-		return types.NewArray(elemType, int64(len))
-	case *ast.FuncType:
-		return p.toSignature(t)
-	default:
-		return nil
-	}
-}
-
-// - void* -> c.Pointer
-// - Function pointers -> Function types (pointer removed)
-// - Other cases -> Pointer to the base type
-func (p *Package) handlePointerType(t *ast.PointerType) types.Type {
-	baseType := p.ToType(t.X)
-	// void * -> c.Pointer
-	// todo(zzy):alias visit the origin type unsafe.Pointer,c.Pointer is better
-	if p.typeMap.IsVoidType(baseType) {
-		return p.typeMap.CType("Pointer")
-	}
-	if baseFuncType, ok := baseType.(*types.Signature); ok {
-		return baseFuncType
-	}
-	return types.NewPointer(baseType)
+	return p.cvt.ToType(expr)
 }
 
 func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
@@ -207,6 +131,10 @@ func (p *Package) Write(docPath string) error {
 	fileName = fileName + ".go"
 	p.p.WriteFile(filepath.Join(dir, fileName))
 	return nil
+}
+
+func (p *Package) WriteToBuffer(buf *bytes.Buffer) error {
+	return p.p.WriteTo(buf)
 }
 
 func (p *Package) makePackageDir(dir string) (string, error) {
