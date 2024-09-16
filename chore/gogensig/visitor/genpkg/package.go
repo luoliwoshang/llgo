@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/goplus/gogen"
-	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/convert"
+	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/convert"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )

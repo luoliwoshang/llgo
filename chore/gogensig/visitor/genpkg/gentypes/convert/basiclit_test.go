@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/convert"
+	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/convert"
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
