@@ -317,10 +317,11 @@ func (*EnumTypeDecl) declNode() {}
 // Ret Name(Params);
 type FuncDecl struct {
 	DeclBase
-	Name     *Ident
-	Type     *FuncType
-	IsInline bool
-	IsStatic bool
+	Name        *Ident
+	MangledName string
+	Type        *FuncType
+	IsInline    bool
+	IsStatic    bool
 
 	// Class method specific fields
 	IsConst       bool // const member function

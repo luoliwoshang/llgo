@@ -145,11 +145,11 @@ func ToTitle(s string) string {
 	return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
 }
 
-func ToGoFuncName(funcName string) string {
+func ToGoFuncName(funcName string) symb.GoNameType {
 	subs := strings.Split(string(funcName), "_")
 	name := ""
 	for _, sub := range subs {
 		name += ToTitle(sub)
 	}
-	return name
+	return symb.GoNameType(name)
 }

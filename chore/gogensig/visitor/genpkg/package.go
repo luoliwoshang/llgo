@@ -40,9 +40,12 @@ func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	// todo(zzy) accept the name of llcppg.symb.json
 	sig := p.cvt.ToSignature(funcDecl.Type)
-	goFuncName := convert.ToGoFuncName(funcDecl.Name.Name)
-	decl := p.p.NewFuncDecl(token.NoPos, goFuncName, sig)
-	decl.SetComments(p.p, comment.NewFuncDocComments(funcDecl.Name.Name, goFuncName))
+	goFuncName, err := p.cvt.ToGoFuncName(symb.MangleNameType(funcDecl.MangledName))
+	if err != nil {
+		goFuncName = convert.ToGoFuncName(funcDecl.Name.Name)
+	}
+	decl := p.p.NewFuncDecl(token.NoPos, string(goFuncName), sig)
+	decl.SetComments(p.p, comment.NewFuncDocComments(funcDecl.Name.Name, string(goFuncName)))
 	return nil
 }
 
