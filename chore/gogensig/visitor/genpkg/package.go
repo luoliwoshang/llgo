@@ -20,6 +20,7 @@ type Package struct {
 	name string
 	p    *gogen.Package
 	cvt  *convert.TypeConv
+	dels []any
 }
 
 func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
@@ -30,6 +31,7 @@ func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
 	typeMap := typmap.NewBuiltinTypeMap(clib)
 	p.cvt = convert.NewConv(p.p.Types, typeMap)
 	p.name = name
+	p.dels = make([]any, 0)
 	return p
 }
 
@@ -54,7 +56,12 @@ func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
 	decl := typeBlock.NewType(typeDecl.Name.Name)
 	structType := p.cvt.RecordTypeToStruct(typeDecl.Type)
 	decl.InitType(p.p, structType)
+	p.AddToDelete(decl)
 	return nil
+}
+
+func (p *Package) AddToDelete(node ast.Node) {
+	p.dels = append(p.dels, node)
 }
 
 func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
@@ -62,6 +69,7 @@ func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
 	decl := typeBlock.NewType(typedefDecl.Name.Name)
 	typ := p.ToType(typedefDecl.Type)
 	decl.InitType(p.p, typ)
+	p.AddToDelete(typeBlock)
 	return nil
 }
 
@@ -79,6 +87,15 @@ func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 				continue
 			}
 			p.p.CB().NewConstStart(types.Typ[types.Int], name).Val(val).EndInit(1)
+		}
+	}
+}
+
+func (p *Package) Delete() {
+	for _, del := range p.dels {
+		switch v := del.(type) {
+		case *gogen.TypeDecl:
+			v.Delete()
 		}
 	}
 }
@@ -113,9 +130,12 @@ func (p *Package) Write(docPath string) error {
 	}
 	fileName = fileName + ".go"
 	p.p.WriteFile(filepath.Join(dir, fileName))
+	p.Delete()
 	return nil
 }
 
 func (p *Package) WriteToBuffer(buf *bytes.Buffer) error {
-	return p.p.WriteTo(buf)
+	err := p.p.WriteTo(buf)
+	p.Delete()
+	return err
 }
