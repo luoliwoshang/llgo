@@ -233,33 +233,19 @@ func (p *Package) evaluateArrayLength(expr ast.Expr) (int64, bool) {
 
 func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 	if len(enumTypeDecl.Type.Items) > 0 {
-		fnGet := func(e ast.Expr) (types.Type, int, error) {
-			typ, ok := e.(*ast.BasicLit)
-			if ok {
-				if typ.Kind == ast.IntLit {
-					v, err := strconv.Atoi(typ.Value)
-					if err != nil {
-						return nil, 0, err
-					}
-					return types.Typ[types.Int], v, nil
-				}
-			}
-			return nil, 0, fmt.Errorf("%s", "lit is not int")
-		}
-		pkg := p.p
 		for _, item := range enumTypeDecl.Type.Items {
 			name := toTitle(enumTypeDecl.Name.Name) + "_" + item.Name.Name
-			typ, val, err := fnGet(item.Value)
+			val, err := NewExpr(item.Value).ToInt()
 			if err != nil {
 				continue
 			}
-			pkg.CB().NewConstStart(typ, name).Val(val).EndInit(1)
+			p.p.CB().NewConstStart(types.Typ[types.Int], name).Val(val).EndInit(1)
 		}
 	}
 }
 
-func (p *Package) Write(curName string) error {
-	_, fileName := filepath.Split(curName)
+func (p *Package) Write(docPath string) error {
+	_, fileName := filepath.Split(docPath)
 	dir, err := p.makePackageDir("")
 	if err != nil {
 		return err

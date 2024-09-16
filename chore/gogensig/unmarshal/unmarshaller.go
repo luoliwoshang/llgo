@@ -27,9 +27,9 @@ func NewDocFileUnmarshaller(visitorList []visitor.DocVisitor) *DocFileUnmarshall
 }
 
 func (p *DocFileUnmarshaller) visit(_Type string, node ast.Node, docPath string) bool {
-	for _, visitor := range p.VisitorList {
-		visitor.Visit(_Type, node)
-		visitor.VisitDone(docPath)
+	for _, v := range p.VisitorList {
+		v.Visit(_Type, node)
+		v.VisitDone(docPath)
 	}
 	return true
 }
