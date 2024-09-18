@@ -55,6 +55,8 @@ func (p *TypeConv) ToType(expr ast.Expr) types.Type {
 		return types.NewArray(elemType, int64(len))
 	case *ast.FuncType:
 		return p.ToSignature(t)
+	case *ast.Ident, *ast.ScopingExpr, *ast.TagExpr:
+		return p.handleIdentRefer(expr)
 	default:
 		return nil
 	}
@@ -74,6 +76,23 @@ func (p *TypeConv) handlePointerType(t *ast.PointerType) types.Type {
 		return baseFuncType
 	}
 	return types.NewPointer(baseType)
+}
+
+func (p *TypeConv) handleIdentRefer(t ast.Expr) types.Type {
+	switch t := t.(type) {
+	case *ast.Ident:
+		// todo(zzy):find coresponding define
+		obj := p.types.Scope().Lookup(t.Name)
+		if typ, ok := obj.Type().(*types.Named); ok {
+			return typ
+		}
+		return nil
+	case *ast.ScopingExpr:
+		// todo(zzy)
+	case *ast.TagExpr:
+		// todo(zzy)
+	}
+	return nil
 }
 
 func (p *TypeConv) ToSignature(funcType *ast.FuncType) *types.Signature {
