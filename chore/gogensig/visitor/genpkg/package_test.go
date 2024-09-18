@@ -613,7 +613,7 @@ func TestTypedefFunc(t *testing.T) {
 package testpkg
 
 import "github.com/goplus/llgo/c"
-
+// llgo:type C
 type Foo func(a c.Int, b c.Int) c.Int`,
 		},
 	}

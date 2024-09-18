@@ -65,11 +65,14 @@ func (p *Package) AddToDelete(node ast.Node) {
 }
 
 func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
-	typeBlock := p.p.NewTypeDefs()
-	decl := typeBlock.NewType(typedefDecl.Name.Name)
+	genDecl := p.p.NewTypeDefs()
+	typeSpecdecl := genDecl.NewType(typedefDecl.Name.Name)
 	typ := p.ToType(typedefDecl.Type)
-	decl.InitType(p.p, typ)
-	p.AddToDelete(typeBlock)
+	typeSpecdecl.InitType(p.p, typ)
+	if _, ok := typ.(*types.Signature); ok {
+		genDecl.SetComments(comment.NewTypecDocComments())
+	}
+	p.AddToDelete(genDecl)
 	return nil
 }
 
