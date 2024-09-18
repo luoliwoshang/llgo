@@ -30,10 +30,9 @@ func (p *TypeConv) SetSymbolTable(symbolTable *symb.SymbolTable) {
 
 // Convert ast.Expr to types.Type
 func (p *TypeConv) ToType(expr ast.Expr) types.Type {
-	e := Expr(expr)
 	switch t := expr.(type) {
 	case *ast.BuiltinType:
-		typ, _ := e.ToBuiltinType(p.typeMap)
+		typ, _ := p.typeMap.FindBuiltinType(*t)
 		return typ
 	case *ast.PointerType:
 		typ := p.handlePointerType(t)

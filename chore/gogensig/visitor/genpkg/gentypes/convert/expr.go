@@ -2,10 +2,8 @@ package convert
 
 import (
 	"fmt"
-	"go/types"
 	"strconv"
 
-	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
@@ -50,12 +48,4 @@ func (p *ConvertExpr) ToChar() (int8, error) {
 		}
 	}
 	return 0, fmt.Errorf("%v can't convert to char", p.e)
-}
-
-func (p *ConvertExpr) ToBuiltinType(m *typmap.BuiltinTypeMap) (types.Type, error) {
-	builtinType, ok := p.e.(*ast.BuiltinType)
-	if ok {
-		return m.FindBuiltinType(*builtinType)
-	}
-	return nil, fmt.Errorf("unsupported type %v", builtinType)
 }
