@@ -91,6 +91,11 @@ func (p *TypeConv) handleIdentRefer(t ast.Expr) types.Type {
 		// todo(zzy)
 	case *ast.TagExpr:
 		// todo(zzy)
+		if ident, ok := t.Name.(*ast.Ident); ok {
+			return p.types.Scope().Lookup(ident.Name).Type()
+		} else {
+			panic("todo:scoping expr")
+		}
 	}
 	return nil
 }

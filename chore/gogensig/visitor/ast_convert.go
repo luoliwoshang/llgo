@@ -65,6 +65,10 @@ func (p *AstConvert) VisitEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
 	p.pkg.NewEnumTypeDecl(enumTypeDecl)
 }
 
+func (p *AstConvert) VisitTypedefDecl(typedefDecl *ast.TypedefDecl) {
+	p.pkg.NewTypedefDecl(typedefDecl)
+}
+
 func (p *AstConvert) VisitDone(docPath string) {
 	p.pkg.Write(docPath)
 }

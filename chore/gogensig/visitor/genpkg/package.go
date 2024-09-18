@@ -67,8 +67,15 @@ func (p *Package) AddToDelete(node ast.Node) {
 
 func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
 	genDecl := p.p.NewTypeDefs()
-	typeSpecdecl := genDecl.NewType(typedefDecl.Name.Name)
 	typ := p.ToType(typedefDecl.Type)
+	if named, ok := typ.(*types.Named); ok {
+		// Compare the type name with typedefDecl.Name.Name
+		if named.Obj().Name() == typedefDecl.Name.Name {
+			// If they're the same, don't create a new typedef
+			return nil
+		}
+	}
+	typeSpecdecl := genDecl.NewType(typedefDecl.Name.Name)
 	typeSpecdecl.InitType(p.p, typ)
 	if _, ok := typ.(*types.Signature); ok {
 		genDecl.SetComments(comment.NewTypecDocComments())
