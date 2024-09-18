@@ -51,6 +51,7 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	return nil
 }
 
+// todo(zzy): for class,union,struct
 func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
 	typeBlock := p.p.NewTypeDefs()
 	decl := typeBlock.NewType(typeDecl.Name.Name)

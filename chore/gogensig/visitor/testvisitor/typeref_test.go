@@ -37,3 +37,26 @@ int ExecuteFoo(int a,Foo b);
 	// //go:linkname Executefoo C.ExecuteFoo
 	// func Executefoo(a c.Int, b Foo) c.Int
 }
+
+// struct Foo { int a; double b; bool c; }
+
+func TestStructDeclRef10086(t *testing.T) {
+	astConvert := visitor.NewAstConvert("typeref", "")
+	docVisitors := []visitor.DocVisitor{astConvert}
+	p := unmarshal.NewDocFileSetUnmarshaller(docVisitors)
+	orginCode :=
+		`
+struct lua_State;
+`
+	bytes, err := util.Llcppsigfetch(orginCode, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.UnmarshalBytes(bytes)
+	// todo(zzy) compare test
+	// package typeref
+
+	// type lua_State struct {
+	// 	Unused [8]uint8
+	// }
+}

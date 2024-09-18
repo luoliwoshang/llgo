@@ -139,6 +139,12 @@ func (p *TypeConv) fieldListToVars(params *ast.FieldList) []*types.Var {
 	return vars
 }
 
+func (p *TypeConv) defaultRecordField() []*types.Var {
+	return []*types.Var{
+		types.NewVar(token.NoPos, p.types, "Unused", types.NewArray(types.Typ[types.Byte], 8)),
+	}
+}
+
 func (p *TypeConv) fieldToVar(field *ast.Field) *types.Var {
 	if field == nil || len(field.Names) <= 0 {
 		return nil
@@ -147,7 +153,13 @@ func (p *TypeConv) fieldToVar(field *ast.Field) *types.Var {
 }
 
 func (p *TypeConv) RecordTypeToStruct(recordType *ast.RecordType) types.Type {
-	fields := p.fieldListToVars(recordType.Fields)
+	//defaultfield use  Unused [8]byte
+	var fields []*types.Var
+	if len(recordType.Fields.List) == 0 {
+		fields = p.defaultRecordField()
+	} else {
+		fields = p.fieldListToVars(recordType.Fields)
+	}
 	return types.NewStruct(fields, nil)
 }
 
