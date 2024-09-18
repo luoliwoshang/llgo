@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/goplus/llgo/chore/gogensig/cmptest"
 	"github.com/goplus/llgo/chore/gogensig/unmarshal"
 	"github.com/goplus/llgo/chore/gogensig/util"
 	"github.com/goplus/llgo/chore/gogensig/visitor"
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg"
+	"github.com/goplus/llgo/chore/gogensig/visitor/testvisitor/cmptest"
 )
 
 func TestSpectrum(t *testing.T) {
@@ -55,7 +55,7 @@ const Piecetype_Rook int = 10
 const Piecetype_Pawn int = 11
 	`
 	result := buf.String()
-	isEqual, diff := cmptest.EqualIgnoreSpace(result, expectedString)
+	isEqual, diff := cmptest.EqualStringIgnoreSpace(result, expectedString)
 	if !isEqual {
 		t.Errorf("%s", diff)
 	}

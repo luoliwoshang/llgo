@@ -6,7 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func EqualIgnoreSpace(s1 string, s2 string) (bool, string) {
+func EqualStringIgnoreSpace(s1 string, s2 string) (bool, string) {
 	s1 = strings.TrimSpace(s1)
 	s2 = strings.TrimSpace(s2)
 	if !cmp.Equal(s1, s2) {
