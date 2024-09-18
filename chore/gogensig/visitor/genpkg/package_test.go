@@ -10,6 +10,7 @@ import (
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
+// todo(zzy): add more test cases for other type
 func TestToType(t *testing.T) {
 	pkg := genpkg.NewPackage(".", "testpkg", &gogen.Config{})
 
