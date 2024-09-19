@@ -51,8 +51,8 @@ func RunTest(t *testing.T, pkgName string, isCpp bool, symbolEntries []symb.Symb
 	p.UnmarshalBytes(bytes)
 
 	result := buf.String()
-	if isEqual, diff := EqualStringIgnoreSpace(result, expectedOutput); !isEqual {
-		t.Errorf("%s", diff)
+	if isEqual, diff := EqualStringIgnoreSpace(expectedOutput, result); !isEqual {
+		t.Errorf("unexpected result:\n%s", diff)
 	}
 }
 
