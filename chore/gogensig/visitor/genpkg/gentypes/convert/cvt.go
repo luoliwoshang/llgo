@@ -169,6 +169,9 @@ func (p *TypeConv) RecordTypeToStruct(recordType *ast.RecordType) types.Type {
 }
 
 func (p *TypeConv) LookupSymbol(mangleName symb.MangleNameType) (symb.GoNameType, error) {
+	if p.symbolTable == nil {
+		return "", fmt.Errorf("symbol table not initialized")
+	}
 	e, err := p.symbolTable.LookupSymbol(mangleName)
 	if err != nil {
 		return "", err
