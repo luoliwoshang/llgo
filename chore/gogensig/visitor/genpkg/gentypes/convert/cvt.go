@@ -10,10 +10,12 @@ import (
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
+	cppgtypes "github.com/goplus/llgo/chore/llcppg/types"
 )
 
 type TypeConv struct {
-	symbolTable *symb.SymbolTable
+	symbolTable *symb.SymbolTable // llcppg.symb.json
+	cppgConf    *cppgtypes.Config // llcppg.cfg
 	types       *types.Package
 	typeMap     *typmap.BuiltinTypeMap
 	// todo(zzy):refine array type in func or param's context
@@ -26,6 +28,10 @@ func NewConv(types *types.Package, typeMap *typmap.BuiltinTypeMap) *TypeConv {
 
 func (p *TypeConv) SetSymbolTable(symbolTable *symb.SymbolTable) {
 	p.symbolTable = symbolTable
+}
+
+func (p *TypeConv) SetCppgConf(conf *cppgtypes.Config) {
+	p.cppgConf = conf
 }
 
 // Convert ast.Expr to types.Type
@@ -166,7 +172,7 @@ func (p *TypeConv) fieldToVar(field *ast.Field) *types.Var {
 func (p *TypeConv) RecordTypeToStruct(recordType *ast.RecordType) types.Type {
 	//defaultfield use  Unused [8]byte
 	var fields []*types.Var
-	if len(recordType.Fields.List) == 0 {
+	if recordType.Fields != nil && len(recordType.Fields.List) == 0 {
 		fields = p.defaultRecordField()
 	} else {
 		fields = p.fieldListToVars(recordType.Fields)

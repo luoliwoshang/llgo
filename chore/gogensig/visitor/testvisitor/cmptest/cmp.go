@@ -33,7 +33,7 @@ func RunTest(t *testing.T, pkgName string, isCpp bool, symbolEntries []symb.Symb
 		t.Fatal(err)
 	}
 
-	astConvert := visitor.NewAstConvert(pkgName, filePath)
+	astConvert := visitor.NewAstConvert(pkgName, filePath, "")
 	var buf bytes.Buffer
 	astConvert.SetVisitDone(func(pkg *genpkg.Package, docPath string) {
 		if err := pkg.WriteToBuffer(&buf); err != nil {

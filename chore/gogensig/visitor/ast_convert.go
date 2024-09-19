@@ -1,11 +1,15 @@
 package visitor
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"github.com/goplus/llgo/chore/gogensig/util"
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
+	cppgtypes "github.com/goplus/llgo/chore/llcppg/types"
+	"github.com/goplus/llgo/xtool/env"
 )
 
 type AstConvert struct {
@@ -14,12 +18,13 @@ type AstConvert struct {
 	visitDone func(pkg *genpkg.Package, docPath string)
 }
 
-func NewAstConvert(pkgName string, symbFile string) *AstConvert {
+func NewAstConvert(pkgName string, symbFile string, genConfFile string) *AstConvert {
 	p := new(AstConvert)
 	p.BaseDocVisitor = NewBaseDocVisitor(p)
 	pkg := genpkg.NewPackage(".", pkgName, nil)
 	p.pkg = pkg
 	p.setupSymbleTableFile(symbFile)
+	p.setupGenConfig(genConfFile)
 	return p
 }
 
@@ -27,12 +32,28 @@ func (p *AstConvert) SetVisitDone(fn func(pkg *genpkg.Package, docPath string)) 
 	p.visitDone = fn
 }
 
-func (p *AstConvert) setupSymbleTableFile(fileName string) error {
-	symbTable, err := symb.NewSymbolTable(fileName)
+func (p *AstConvert) setupSymbleTableFile(filePath string) error {
+	symbTable, err := symb.NewSymbolTable(filePath)
 	if err != nil {
 		return err
 	}
 	p.pkg.SetSymbolTable(symbTable)
+	return nil
+}
+
+func (p *AstConvert) setupGenConfig(filePath string) error {
+	bytes, err := util.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+	conf := &cppgtypes.Config{}
+	err = json.Unmarshal(bytes, &conf)
+	if err != nil {
+		return err
+	}
+	conf.CFlags = env.ExpandEnv(conf.CFlags)
+	conf.Libs = env.ExpandEnv(conf.Libs)
+	p.pkg.SetCppgConf(conf)
 	return nil
 }
 

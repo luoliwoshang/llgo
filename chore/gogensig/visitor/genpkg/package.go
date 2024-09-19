@@ -14,6 +14,7 @@ import (
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg/gentypes/typmap"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
+	cppgtypes "github.com/goplus/llgo/chore/llcppg/types"
 )
 
 type Package struct {
@@ -37,6 +38,10 @@ func NewPackage(pkgPath, name string, conf *gogen.Config) *Package {
 
 func (p *Package) SetSymbolTable(symbolTable *symb.SymbolTable) {
 	p.cvt.SetSymbolTable(symbolTable)
+}
+
+func (p *Package) SetCppgConf(conf *cppgtypes.Config) {
+	p.cvt.SetCppgConf(conf)
 }
 
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
