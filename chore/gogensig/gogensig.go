@@ -16,6 +16,24 @@
 
 package main
 
+import (
+	"io"
+	"os"
+)
+
 func main() {
-	// TODO(xsw): implement gogensig tool
+	var data []byte
+	var err error
+	if len(os.Args) <= 1 || os.Args[1] != "-" {
+		os.Exit(1)
+	}
+	data, err = io.ReadAll(os.Stdin)
+	check(err)
+	println(string(data))
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

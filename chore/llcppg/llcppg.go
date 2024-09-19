@@ -35,13 +35,21 @@ func llcppsymg(conf []byte) error {
 	return cmd.Run()
 }
 
-func llcppsigfetch(conf []byte, out io.Writer) {
+func llcppsigfetch(conf []byte, out *io.PipeWriter) {
+	// 解除注释，文件可以正常输出
+	// outputFile, err := os.Create("./llcppsig.json")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer outputFile.Close()
+
 	cmd := exec.Command("llcppsigfetch", "-")
 	cmd.Stdin = bytes.NewReader(conf)
 	cmd.Stdout = out
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	check(err)
+	out.Close()
 }
 
 func gogensig(in io.Reader) error {
