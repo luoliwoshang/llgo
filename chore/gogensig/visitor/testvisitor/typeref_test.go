@@ -41,6 +41,7 @@ func TestCustomStruct(t *testing.T) {
 		{MangleName: "lua_resetthread", CppName: "lua_resetthread", GoName: "Resetthread"},
 	}, `
 typedef struct lua_State lua_State;
+typedef int (*lua_CFunction)(lua_State *L);
 LUA_API void(lua_close)(lua_State *L);
 LUA_API lua_State *(lua_newthread)(lua_State *L);
 LUA_API int(lua_closethread)(lua_State *L, lua_State *from);
@@ -53,6 +54,8 @@ import "github.com/goplus/llgo/c"
 type lua_State struct {
 	Unused [8]uint8
 }
+// llgo:type C
+type lua_CFunction func(*lua_State) c.Int
 
 //go:linkname Close C.lua_close
 func Close(L *lua_State) c.Int

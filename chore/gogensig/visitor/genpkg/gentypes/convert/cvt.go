@@ -151,10 +151,16 @@ func (p *TypeConv) defaultRecordField() []*types.Var {
 }
 
 func (p *TypeConv) fieldToVar(field *ast.Field) *types.Var {
-	if field == nil || len(field.Names) <= 0 {
+	if field == nil {
 		return nil
 	}
-	return types.NewVar(token.NoPos, p.types, field.Names[0].Name, p.ToType(field.Type))
+
+	//field without name
+	var name string
+	if len(field.Names) > 0 {
+		name = field.Names[0].Name
+	}
+	return types.NewVar(token.NoPos, p.types, name, p.ToType(field.Type))
 }
 
 func (p *TypeConv) RecordTypeToStruct(recordType *ast.RecordType) types.Type {
