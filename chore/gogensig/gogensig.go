@@ -19,6 +19,9 @@ package main
 import (
 	"io"
 	"os"
+
+	"github.com/goplus/llgo/chore/gogensig/unmarshal"
+	"github.com/goplus/llgo/chore/gogensig/visitor"
 )
 
 func main() {
@@ -29,7 +32,12 @@ func main() {
 	}
 	data, err = io.ReadAll(os.Stdin)
 	check(err)
-	println(string(data))
+	// println(string(data))
+
+	astConvert := visitor.NewAstConvert("temp", "./llcppg.symb.json")
+	p := unmarshal.NewDocFileSetUnmarshaller([]visitor.DocVisitor{astConvert})
+	err = p.UnmarshalBytes(data)
+	check(err)
 }
 
 func check(err error) {
