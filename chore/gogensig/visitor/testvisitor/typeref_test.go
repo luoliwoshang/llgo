@@ -59,20 +59,20 @@ LUA_API int(lua_resetthread)(lua_State *L);
 	p.UnmarshalBytes(bytes)
 	// todo(zzy) compare test
 
-	package typeref
+	// package typeref
 
-	import "github.com/goplus/llgo/c"
+	// import "github.com/goplus/llgo/c"
 
-	type lua_State struct {
-		Unused [8]uint8
-	}
+	// type lua_State struct {
+	// 	Unused [8]uint8
+	// }
 
-	//go:linkname LuaClose C.lua_close
-	func LuaClose(L *lua_State) c.Int
+	// //go:linkname LuaClose C.lua_close
+	// func LuaClose(L *lua_State) c.Int
 
-	//go:linkname LuaClosethread C.lua_closethread
-	func LuaClosethread(L *lua_State, from *lua_State) c.Int
+	// //go:linkname LuaClosethread C.lua_closethread
+	// func LuaClosethread(L *lua_State, from *lua_State) c.Int
 
-	//go:linkname LuaResetthread C.lua_resetthread
-	func LuaResetthread(L *lua_State) c.Int
+	// //go:linkname LuaResetthread C.lua_resetthread
+	// func LuaResetthread(L *lua_State) c.Int
 }
