@@ -9,6 +9,7 @@ import (
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
+	cppgtypes "github.com/goplus/llgo/chore/llcppg/types"
 )
 
 // todo(zzy): add more test cases for other type
@@ -63,6 +64,7 @@ func TestFuncDeclWithArray(t *testing.T) {
 		name     string
 		decl     *ast.FuncDecl
 		symbs    []symb.SymbolEntry
+		cppgconf *cppgtypes.Config
 		expected string
 	}{
 		{
@@ -109,6 +111,9 @@ func TestFuncDeclWithArray(t *testing.T) {
 					MangleName: "foo",
 					GoName:     "Foo",
 				},
+			},
+			cppgconf: &cppgtypes.Config{
+				Name: "testpkg",
 			},
 			expected: `
 package testpkg

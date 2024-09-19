@@ -1,15 +1,12 @@
 package visitor
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/goplus/llgo/chore/gogensig/util"
 	"github.com/goplus/llgo/chore/gogensig/visitor/genpkg"
 	"github.com/goplus/llgo/chore/gogensig/visitor/symb"
 	"github.com/goplus/llgo/chore/llcppg/ast"
-	cppgtypes "github.com/goplus/llgo/chore/llcppg/types"
-	"github.com/goplus/llgo/xtool/env"
 )
 
 type AstConvert struct {
@@ -42,17 +39,10 @@ func (p *AstConvert) setupSymbleTableFile(filePath string) error {
 }
 
 func (p *AstConvert) setupGenConfig(filePath string) error {
-	bytes, err := util.ReadFile(filePath)
+	conf, err := util.GetCppgFromPath(filePath)
 	if err != nil {
 		return err
 	}
-	conf := &cppgtypes.Config{}
-	err = json.Unmarshal(bytes, &conf)
-	if err != nil {
-		return err
-	}
-	conf.CFlags = env.ExpandEnv(conf.CFlags)
-	conf.Libs = env.ExpandEnv(conf.Libs)
 	p.pkg.SetCppgConf(conf)
 	return nil
 }

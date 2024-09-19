@@ -87,8 +87,12 @@ func (p *TypeConv) handlePointerType(t *ast.PointerType) types.Type {
 func (p *TypeConv) handleIdentRefer(t ast.Expr) types.Type {
 	switch t := t.(type) {
 	case *ast.Ident:
-		// todo(zzy):find coresponding define
-		obj := p.types.Scope().Lookup(t.Name)
+		name, err := p.RemovePrefixedName(t.Name)
+		if err != nil {
+			// todo(zzy):panic
+			return nil
+		}
+		obj := p.types.Scope().Lookup(name)
 		if typ, ok := obj.Type().(*types.Named); ok {
 			return typ
 		}
@@ -96,9 +100,14 @@ func (p *TypeConv) handleIdentRefer(t ast.Expr) types.Type {
 	case *ast.ScopingExpr:
 		// todo(zzy)
 	case *ast.TagExpr:
-		// todo(zzy)
+		// todo(zzy):scoping
 		if ident, ok := t.Name.(*ast.Ident); ok {
-			return p.types.Scope().Lookup(ident.Name).Type()
+			name, err := p.RemovePrefixedName(ident.Name)
+			if err != nil {
+				// todo(zzy):panic
+				return nil
+			}
+			return p.types.Scope().Lookup(name).Type()
 		} else {
 			panic("todo:scoping expr")
 		}
@@ -189,6 +198,18 @@ func (p *TypeConv) LookupSymbol(mangleName symb.MangleNameType) (symb.GoNameType
 		return "", err
 	}
 	return e.GoName, nil
+}
+
+func (p *TypeConv) RemovePrefixedName(name string) (string, error) {
+	if p.cppgConf == nil {
+		return name, nil
+	}
+	for _, prefix := range p.cppgConf.TrimPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return strings.TrimPrefix(name, prefix), nil
+		}
+	}
+	return name, nil
 }
 
 func ToTitle(s string) string {
