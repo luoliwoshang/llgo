@@ -55,14 +55,14 @@ func (p *BaseDocVisitor) Visit(_Type string, node ast.Node) {
 }
 
 func (p *BaseDocVisitor) visitFuncDecl(funcDecl *ast.FuncDecl) {
-	if funcDecl == nil || funcDecl.Name == nil {
+	if funcDecl == nil {
 		return
 	}
 	p.VisitFuncDecl(funcDecl)
 }
 
 func (p *BaseDocVisitor) visitTypeDecl(typeDecl *ast.TypeDecl) {
-	if typeDecl == nil || typeDecl.Name == nil {
+	if typeDecl == nil {
 		return
 	}
 	if typeDecl.Type.Tag == ast.Class {
@@ -100,14 +100,14 @@ func (p *BaseDocVisitor) visitUnion(unionName *ast.Ident, fields *ast.FieldList,
 }
 
 func (p *BaseDocVisitor) visitEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) {
-	if enumTypeDecl == nil || enumTypeDecl.Name == nil {
+	if enumTypeDecl == nil {
 		return
 	}
 	p.VisitEnumTypeDecl(enumTypeDecl)
 }
 
 func (p *BaseDocVisitor) visitTypedefDecl(typedefDecl *ast.TypedefDecl) {
-	if typedefDecl == nil || typedefDecl.Name == nil {
+	if typedefDecl == nil {
 		return
 	}
 	p.VisitTypedefDecl(typedefDecl)
