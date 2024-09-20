@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	cppgtypes "github.com/goplus/llgo/chore/llcppg/types"
-	"github.com/goplus/llgo/xtool/env"
 )
 
 func GetCppgFromPath(filePath string) (*cppgtypes.Config, error) {
@@ -17,7 +16,5 @@ func GetCppgFromPath(filePath string) (*cppgtypes.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	conf.CFlags = env.ExpandEnv(conf.CFlags)
-	conf.Libs = env.ExpandEnv(conf.Libs)
 	return conf, nil
 }
