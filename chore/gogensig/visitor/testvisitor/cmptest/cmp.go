@@ -35,7 +35,7 @@ func skipSpace(data []byte, from int) int {
 	return index
 }
 
-func SplitString(s string) []string {
+func SplitLineIgnoreSpace(s string) []string {
 	buf := bytes.NewBufferString(s)
 	scan := bufio.NewScanner(buf)
 	results := make([]string, 0)
@@ -47,7 +47,7 @@ func SplitString(s string) []string {
 			if atEOF && len(data) == 0 {
 				return 0, nil, nil
 			}
-			if i := bytes.IndexAny(data, " \r\n\t"); i >= 0 {
+			if i := bytes.IndexAny(data, " \t"); i >= 0 {
 				ii := skipSpace(data, i+1)
 				return ii, data[0:i], nil
 			}
@@ -81,8 +81,8 @@ func SplitString(s string) []string {
 }
 
 func EqualStringIgnoreSpace(s1 string, s2 string) (bool, string) {
-	arr1 := SplitString(s1)
-	arr2 := SplitString(s2)
+	arr1 := SplitLineIgnoreSpace(s1)
+	arr2 := SplitLineIgnoreSpace(s2)
 	if !cmp.Equal(arr1, arr2) {
 		return false, cmp.Diff(arr1, arr2)
 	}
