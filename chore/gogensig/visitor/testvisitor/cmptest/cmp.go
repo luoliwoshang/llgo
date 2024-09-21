@@ -73,7 +73,6 @@ func SplitLineIgnoreSpace(s string) []string {
 			writeSpace = total > 0
 		}
 		if total > 0 {
-			strBuilder.WriteRune('\n')
 			results = append(results, strBuilder.String())
 		}
 	}
