@@ -31,15 +31,29 @@ type ConvertCommentGroup struct {
 func CommentGroup(doc *ast.CommentGroup) *ConvertCommentGroup {
 	goDoc := &goast.CommentGroup{}
 	goDoc.List = make([]*goast.Comment, 0)
-	for _, comment := range doc.List {
-		goDoc.List = append(goDoc.List, Comment(comment).Comment)
+	if doc != nil && doc.List != nil {
+		for _, comment := range doc.List {
+			goDoc.List = append(goDoc.List, Comment(comment).Comment)
+		}
 	}
 	return &ConvertCommentGroup{CommentGroup: goDoc}
 }
 
+func (p *ConvertCommentGroup) AddComment(comment *goast.Comment) error {
+	if comment == nil || len(comment.Text) <= 0 {
+		return fmt.Errorf("%s", "add nil or empty comment")
+	}
+	p.CommentGroup.List = append(p.CommentGroup.List,
+		[]*goast.Comment{
+			comment,
+		}...,
+	)
+	return nil
+}
+
 func (p *ConvertCommentGroup) AddCommentGroup(doc *goast.CommentGroup) error {
-	if doc == nil || len(doc.List) <= 0 {
-		return fmt.Errorf("%s", "empty commentgroup")
+	if doc == nil || doc.List == nil || len(doc.List) <= 0 {
+		return fmt.Errorf("%s", "add nil or empty commentgroup")
 	}
 	p.CommentGroup.List = append(p.CommentGroup.List, doc.List...)
 	return nil
