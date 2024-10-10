@@ -79,19 +79,19 @@ func TestGenHeaderFilePath() {
 
 func TestNewSymbolProcessor() {
 	fmt.Println("=== Test NewSymbolProcessor ===")
-	process := parse.NewSymbolProcessor([]string{"lua_", "luaL_"})
-	fmt.Printf("Before: No prefixes After: Prefixes: %v\n", process.Prefixes)
+	process := parse.NewSymbolProcessor([]string{"lua_", "luaL_"}, []string{"", ""})
+	fmt.Printf("Before: No prefixes After: Prefixes: %v\n", process.TrimPrefixes)
 	fmt.Println()
 }
 
 func TestRemovePrefix() {
 	fmt.Println("=== Test RemovePrefix ===")
-	process := parse.NewSymbolProcessor([]string{"lua_", "luaL_"})
+	process := parse.NewSymbolProcessor([]string{"lua_", "luaL_"}, []string{"", ""})
 
 	testCases := []string{"lua_closethread", "luaL_checknumber"}
 
 	for _, input := range testCases {
-		result := process.TrimPrefixes(input)
+		result := process.DoTrimPrefixes(input)
 		fmt.Printf("Before: %s After: %s\n", input, result)
 	}
 	fmt.Println()
@@ -99,9 +99,9 @@ func TestRemovePrefix() {
 
 func TestToGoName() {
 	fmt.Println("=== Test ToGoName ===")
-	process1 := parse.NewSymbolProcessor([]string{"lua_", "luaL_"})
-	process2 := parse.NewSymbolProcessor([]string{"sqlite3_", "sqlite3_"})
-	process3 := parse.NewSymbolProcessor([]string{"INI"})
+	process1 := parse.NewSymbolProcessor([]string{"lua_", "luaL_"}, []string{"", ""})
+	process2 := parse.NewSymbolProcessor([]string{"sqlite3_", "sqlite3_"}, []string{"", ""})
+	process3 := parse.NewSymbolProcessor([]string{"INI"}, []string{""})
 
 	testCases := []struct {
 		processor *parse.SymbolProcessor
@@ -146,7 +146,7 @@ func TestGenMethodName() {
 
 func TestAddSuffix() {
 	fmt.Println("=== Test AddSuffix ===")
-	process := parse.NewSymbolProcessor([]string{"INI"})
+	process := parse.NewSymbolProcessor([]string{"INI"}, []string{""})
 	methods := []string{
 		"INIReader",
 		"INIReader",
@@ -170,6 +170,7 @@ func TestParseHeaderFile() {
 		content  string
 		isCpp    bool
 		prefixes []string
+		repls    []string
 	}{
 		{
 			name: "C++ Class with Methods",
@@ -202,7 +203,7 @@ int(lua_compare)(lua_State *L, int idx1, int idx2, int op);
 	for _, tc := range testCases {
 		fmt.Printf("=== Test Case: %s ===\n", tc.name)
 
-		symbolMap, err := parse.ParseHeaderFile([]string{tc.content}, tc.prefixes, tc.isCpp, true)
+		symbolMap, err := parse.ParseHeaderFile([]string{tc.content}, tc.prefixes, tc.repls, tc.isCpp, true)
 
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)

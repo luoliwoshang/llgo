@@ -53,7 +53,7 @@ func main() {
 
 	filepaths, err := parse.GenHeaderFilePath(conf.CFlags, conf.Include)
 	check(err)
-	headerInfos, err := parse.ParseHeaderFile(filepaths, conf.TrimPrefixes, conf.Cplusplus, false)
+	headerInfos, err := parse.ParseHeaderFile(filepaths, conf.TrimPrefixes, conf.ReplPrefixes, conf.Cplusplus, false)
 	check(err)
 
 	symbolData, err := symbol.GenerateAndUpdateSymbolTable(symbols, headerInfos, symbFile)
