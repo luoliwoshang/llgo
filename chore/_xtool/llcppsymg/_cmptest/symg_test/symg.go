@@ -17,7 +17,8 @@ func TestParseHeaderFile() {
 		name            string
 		content         string
 		isCpp           bool
-		prefixes        []string
+		trimPrefixes    []string
+		replPrefixes    []string
 		dylibSymbols    []*nm.Symbol
 		symbFileContent string
 	}{
@@ -37,8 +38,9 @@ class INIReader {
     static const char * MakeKey(const char *section, const char *name);
 };
             `,
-			isCpp:    true,
-			prefixes: []string{"INI"},
+			isCpp:        true,
+			trimPrefixes: []string{"INI"},
+			replPrefixes: []string{""},
 			dylibSymbols: []*nm.Symbol{
 				{Name: "__ZN9INIReaderC1EPKc"},
 				{Name: "__ZN9INIReaderC1EPKcl"},
@@ -84,8 +86,9 @@ LUA_API void(lua_setallocf)(lua_State *L, lua_Alloc f, void *ud);
 LUA_API void(lua_toclose)(lua_State *L, int idx);
 LUA_API void(lua_closeslot)(lua_State *L, int idx);
             `,
-			isCpp:    false,
-			prefixes: []string{"lua_"},
+			isCpp:        false,
+			trimPrefixes: []string{"lua_"},
+			replPrefixes: []string{""},
 			dylibSymbols: []*nm.Symbol{
 				{Name: "_lua_error"},
 				{Name: "_lua_next"},
@@ -97,7 +100,7 @@ LUA_API void(lua_closeslot)(lua_State *L, int idx);
 
 	for _, tc := range testCases {
 		fmt.Printf("=== Test Case: %s ===\n", tc.name)
-		headerSymbolMap, err := parse.ParseHeaderFile([]string{tc.content}, tc.prefixes, tc.isCpp, true)
+		headerSymbolMap, err := parse.ParseHeaderFile([]string{tc.content}, tc.trimPrefixes, tc.replPrefixes, tc.isCpp, true)
 		if err != nil {
 			fmt.Println("Error:", err)
 		}
