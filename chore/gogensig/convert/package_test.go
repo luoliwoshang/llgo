@@ -647,6 +647,22 @@ import _ "unsafe"
 type Foo struct {
 }`,
 		},
+		{
+			name: "anonymous struct",
+			decl: &ast.TypeDecl{
+				Name: nil,
+				Type: &ast.RecordType{
+					Tag:    ast.Struct,
+					Fields: nil,
+				},
+			},
+			expected: `
+package testpkg
+
+import _ "unsafe"
+
+`,
+		},
 		// invalid struct type
 		{
 			name: "invalid struct type",
