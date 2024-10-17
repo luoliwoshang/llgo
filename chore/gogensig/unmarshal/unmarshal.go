@@ -3,6 +3,7 @@ package unmarshal
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
@@ -12,6 +13,25 @@ type NodeUnmarshaler func(data []byte) (ast.Node, error)
 var nodeUnmarshalers map[string]NodeUnmarshaler
 
 type FileSet []FileEntry
+
+func (s FileSet) FindEntry(absIncludePath string) int {
+	for i, e := range s {
+		if e.Path == absIncludePath {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s FileSet) IncludeDir(includeFile string) string {
+	for _, f := range s {
+		after, found := strings.CutSuffix(f.Path, includeFile)
+		if found {
+			return after
+		}
+	}
+	return ""
+}
 
 type FileEntry struct {
 	Path string
