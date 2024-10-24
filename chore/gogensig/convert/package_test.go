@@ -272,7 +272,7 @@ func TestFuncDecl(t *testing.T) {
 				MangledName: "foo",
 				Type: &ast.FuncType{
 					Params: nil,
-					Ret:    nil,
+					Ret:    &ast.BuiltinType{Kind: ast.Void},
 				},
 			},
 			symbs: []config.SymbolEntry{
@@ -287,6 +287,33 @@ package testpkg
 import _ "unsafe"
 //go:linkname Foo C.foo
 func Foo()`,
+		},
+		{
+			name: "variadic func",
+			decl: &ast.FuncDecl{
+				Name:        &ast.Ident{Name: "foo"},
+				MangledName: "foo",
+				Type: &ast.FuncType{
+					Params: &ast.FieldList{
+						List: []*ast.Field{
+							{Type: &ast.Variadic{}},
+						},
+					},
+					Ret: &ast.BuiltinType{Kind: ast.Void},
+				},
+			},
+			symbs: []config.SymbolEntry{
+				{
+					CppName:    "foo",
+					MangleName: "foo",
+					GoName:     "Foo",
+				},
+			},
+			expected: `
+package testpkg
+import _ "unsafe"
+//go:linkname Foo C.foo
+func Foo(__llgo_va_list ...interface{})`,
 		},
 		{
 			name: "func not in symbol table",
