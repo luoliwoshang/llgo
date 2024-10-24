@@ -261,7 +261,6 @@ func Resetthread(L *State) c.Int
 // #include <sys/_types/_u_int16_t.h>
 // #include <sys/_types/_u_int32_t.h>
 // #include <sys/_types/_u_int64_t.h>
-/*
 func TestSkipBuiltinTypedefine(t *testing.T) {
 	cmptest.RunTest(t, "skip", false, []config.SymbolEntry{
 		{MangleName: "testInt", CppName: "testInt", GoName: "TestInt"},
@@ -301,7 +300,7 @@ func TestUint(a int8, b uint16, c c.Uint, d c.UlongLong)
 		}
 	})
 }
-*/
+
 // ===========================error
 func TestNewAstConvert(t *testing.T) {
 	_, err := convert.NewAstConvert(&convert.AstConvertConfig{
