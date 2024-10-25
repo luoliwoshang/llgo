@@ -195,24 +195,6 @@ func TestPackageWrite(t *testing.T) {
 		verifyGeneratedFile(t, expectedFilePath)
 	})
 
-	t.Run("OutputWithoutFilename", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "test_package_write_no_filename")
-		if err != nil {
-			t.Fatalf("Failed to create temporary directory: %v", err)
-		}
-		defer os.RemoveAll(tempDir)
-
-		pkg := createTestPkg(t, tempDir)
-		pkg.SetCurFile("", true)
-		err = pkg.Write("")
-		if err != nil {
-			t.Fatalf("Write method failed: %v", err)
-		}
-
-		expectedFilePath := filepath.Join(tempDir, "testpkg", "temp.go")
-		verifyGeneratedFile(t, expectedFilePath)
-	})
-
 	t.Run("InvalidOutputDir", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
@@ -1478,7 +1460,7 @@ func createTestPkg(t *testing.T, outputDir string) *convert.Package {
 func comparePackageOutput(t *testing.T, pkg *convert.Package, expect string) {
 	t.Helper()
 	// For Test,The Test package's header filename same as package name
-	buf, err := pkg.WriteToBuffer(pkg.Name() + ".h")
+	buf, err := pkg.WriteDefaultFileToBuffer()
 	if err != nil {
 		t.Fatalf("WriteTo failed: %v", err)
 	}
@@ -1540,7 +1522,8 @@ func TestTypeClean(t *testing.T) {
 		pkg.SetCurFile(tc.headerFile, true)
 		tc.addType()
 
-		buf, err := pkg.WriteToBuffer(tc.headerFile)
+		goFileName := convert.HeaderFileToGo(tc.headerFile)
+		buf, err := pkg.WriteToBuffer(goFileName)
 		if err != nil {
 			t.Fatal(err)
 		}
