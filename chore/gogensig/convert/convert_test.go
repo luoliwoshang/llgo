@@ -3,7 +3,6 @@ package convert_test
 import (
 	"log"
 	"os"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -320,11 +319,6 @@ func Sethook(L *Lua_State, func_ Lua_Hook, mask c.Int, count c.Int)
 // #include <sys/_types/_u_int32_t.h>
 // #include <sys/_types/_u_int64_t.h>
 func TestSkipBuiltinTypedefine(t *testing.T) {
-	// current only support macos
-	if runtime.GOOS != "darwin" {
-		t.Skip("skip on non-macos")
-	}
-
 	cmptest.RunTest(t, "skip", false, []config.SymbolEntry{
 		{MangleName: "testInt", CppName: "testInt", GoName: "TestInt"},
 		{MangleName: "testUint", CppName: "testUint", GoName: "TestUint"},
