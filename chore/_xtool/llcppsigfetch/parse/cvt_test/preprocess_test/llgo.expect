@@ -2,6 +2,8 @@
 === TestSystemHeader ===
 stdio.h is absolute path
 include files are all system headers
+=== TestInclusionMap ===
+sys/types.h include path found
 TestDefine Case 1:
 {
 	"temp.h":	{

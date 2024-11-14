@@ -16,9 +16,10 @@ import (
 )
 
 type FileEntry struct {
-	Path  string
-	IsSys bool
-	Doc   *ast.File
+	Path    string
+	IncPath string
+	IsSys   bool
+	Doc     *ast.File
 }
 
 type Converter struct {
@@ -80,19 +81,42 @@ func NewConverter(config *clangutils.Config) (*Converter, error) {
 		return nil, err
 	}
 
+	files := initFileEntries(unit)
+
 	return &Converter{
-		Files:        make([]*FileEntry, 0),
+		Files:        files,
 		index:        index,
 		unit:         unit,
 		anonyTypeMap: make(map[string]bool),
 		typeDecls:    make(map[string]ast.Decl),
 	}, nil
+
 }
 
 func (ct *Converter) Dispose() {
 	ct.logln("Dispose")
 	ct.index.Dispose()
 	ct.unit.Dispose()
+}
+
+func initFileEntries(unit *clang.TranslationUnit) []*FileEntry {
+	files := make([]*FileEntry, 0)
+	clangutils.GetInclusions(unit, func(inced clang.File, incins []clang.SourceLocation) {
+		loc := unit.GetLocation(inced, 1, 1)
+		incedFile := toStr(inced.FileName())
+		var incPath string
+		if len(incins) > 0 {
+			cur := unit.GetCursor(&incins[0])
+			incPath = toStr(cur.String())
+		}
+		files = append(files, &FileEntry{
+			Path:    incedFile,
+			IncPath: incPath,
+			IsSys:   loc.IsInSystemHeader() != 0,
+			Doc:     &ast.File{},
+		})
+	})
+	return files
 }
 
 func (ct *Converter) GetTokens(cursor clang.Cursor) []*ast.Token {
@@ -165,13 +189,10 @@ func (ct *Converter) GetCurFile(cursor clang.Cursor) *ast.File {
 			return ct.Files[i].Doc
 		}
 	}
-	ct.logln("GetCurFile: Create New ast.File", filePath)
-	entry := &FileEntry{Path: filePath, Doc: &ast.File{}, IsSys: false}
-	if loc.IsInSystemHeader() != 0 {
-		entry.IsSys = true
-	}
-	ct.Files = append(ct.Files, entry)
-	return entry.Doc
+	// Since the inclusion stack's dependent files are in the same translation unit as VisitChildren,
+	// these files should have been initialized beforehand. No uninitialized files should appear.
+	fmt.Fprintln(os.Stderr, "GetCurFile: not found", ct.curLoc.File)
+	return nil
 }
 
 func (ct *Converter) SetAnonyType(cursor clang.Cursor) {
