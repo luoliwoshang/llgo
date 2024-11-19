@@ -3,6 +3,7 @@ package unmarshal
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
@@ -15,6 +16,7 @@ type FileSet []FileEntry
 
 type FileEntry struct {
 	Path    string
+	IsSys   bool
 	IncPath string
 	Doc     *ast.File
 }
@@ -56,6 +58,7 @@ func init() {
 func UnmarshalFileSet(data []byte) (FileSet, error) {
 	var filesWrapper []struct {
 		Path    string          `json:"path"`
+		IsSys   bool            `json:"isSys"`
 		IncPath string          `json:"incPath"`
 		Doc     json.RawMessage `json:"doc"`
 	}
@@ -78,6 +81,7 @@ func UnmarshalFileSet(data []byte) (FileSet, error) {
 
 		result = append(result, FileEntry{
 			Path:    fileData.Path,
+			IsSys:   fileData.IsSys,
 			IncPath: fileData.IncPath,
 			Doc:     file,
 		})
@@ -601,7 +605,8 @@ func UnmarshalFile(data []byte) (ast.Node, error) {
 	for i, declData := range file.Decls {
 		decl, err := UnmarshalNode(declData)
 		if err != nil {
-			return nil, fmt.Errorf("error unmarshalling %d Decl in File: %w", i, err)
+			fmt.Fprintf(os.Stderr, "error unmarshalling %d Decl in File: %v\n%s\n", i, err, string(declData))
+			continue
 		}
 		result.Decls = append(result.Decls, decl.(ast.Decl))
 	}

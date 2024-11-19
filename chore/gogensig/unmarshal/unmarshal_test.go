@@ -1145,7 +1145,8 @@ func TestUnmarshalFileSet(t *testing.T) {
 	files := `[
   {
     "path": "/opt/homebrew/Cellar/inih/58/include/INIReader.h",
-    "incPath": "INIReader.h",
+    "isSys": false,
+	"incPath": "INIReader.h",
     "doc": {
       "_Type": "File",
       "decls": [
@@ -1510,11 +1511,13 @@ func TestUnmarshalFileSet(t *testing.T) {
 
 	expected := []struct {
 		Path    string
+		IsSys   bool
 		IncPath string
 		Doc     *ast.File
 	}{
 		{
 			Path:    "/opt/homebrew/Cellar/inih/58/include/INIReader.h",
+			IsSys:   false,
 			IncPath: "INIReader.h",
 			Doc: &ast.File{
 				Decls: []ast.Decl{
@@ -2084,12 +2087,6 @@ func TestUnmarshalErrors(t *testing.T) {
 			fn:          unmarshal.UnmarshalFile,
 			input:       `{"invalid": "json"`,
 			expectedErr: "error unmarshalling File",
-		},
-		{
-			name:        "unmarshalFile - Invalid Decl",
-			fn:          unmarshal.UnmarshalFile,
-			input:       `{"decls": [{"_Type": "InvalidType"}], "includes": [], "macros": []}`,
-			expectedErr: "error unmarshalling 0 Decl in File",
 		},
 	}
 

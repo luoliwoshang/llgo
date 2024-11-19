@@ -17,11 +17,11 @@ func NewDocVisitorManager(visitorList []visitor.DocVisitor) *DocVisitorManager {
 	return &DocVisitorManager{VisitorList: visitorList}
 }
 
-func (p *DocVisitorManager) Visit(node ast.Node, incPath string) bool {
+func (p *DocVisitorManager) Visit(node ast.Node, path string, incPath string, isSys bool) bool {
 	for _, v := range p.VisitorList {
-		v.VisitStart(incPath)
+		v.VisitStart(path, incPath, isSys)
 		v.Visit(node)
-		v.VisitDone(incPath)
+		v.VisitDone(path)
 	}
 	return true
 }
@@ -42,7 +42,7 @@ type ProcesserConfig struct {
 }
 
 func defaultExec(file *unmarshal.FileEntry) error {
-	fmt.Println(file.IncPath)
+	fmt.Println(file.Path)
 	return nil
 }
 
@@ -64,15 +64,15 @@ func NewDocFileSetProcessor(cfg *ProcesserConfig) *DocFileSetProcessor {
 	return p
 }
 
-func (p *DocFileSetProcessor) visitFile(incPath string, files unmarshal.FileSet) {
-	if _, ok := p.visitedFile[incPath]; ok {
+func (p *DocFileSetProcessor) visitFile(path string, files unmarshal.FileSet) {
+	if _, ok := p.visitedFile[path]; ok {
 		return
 	}
-	if _, ok := p.processing[incPath]; ok {
+	if _, ok := p.processing[path]; ok {
 		return
 	}
-	p.processing[incPath] = struct{}{}
-	idx := FindEntry(files, incPath)
+	p.processing[path] = struct{}{}
+	idx := FindEntry(files, path)
 	if idx < 0 {
 		return
 	}
@@ -80,15 +80,14 @@ func (p *DocFileSetProcessor) visitFile(incPath string, files unmarshal.FileSet)
 	for _, include := range findFile.Doc.Includes {
 		p.visitFile(include.Path, files)
 	}
-
 	p.exec(&findFile)
-	p.visitedFile[findFile.IncPath] = struct{}{}
-	delete(p.processing, findFile.IncPath)
+	p.visitedFile[findFile.Path] = struct{}{}
+	delete(p.processing, findFile.Path)
 }
 
 func (p *DocFileSetProcessor) ProcessFileSet(files unmarshal.FileSet) error {
 	for _, file := range files {
-		p.visitFile(file.IncPath, files)
+		p.visitFile(file.Path, files)
 	}
 	if p.done != nil {
 		p.done()
@@ -112,9 +111,9 @@ func (p *DocFileSetProcessor) ProcessFileSetFromPath(filePath string) error {
 	return p.ProcessFileSetFromByte(data)
 }
 
-func FindEntry(files unmarshal.FileSet, incPath string) int {
+func FindEntry(files unmarshal.FileSet, path string) int {
 	for i, e := range files {
-		if e.IncPath == incPath {
+		if e.Path == path {
 			return i
 		}
 	}

@@ -18,18 +18,23 @@ import (
 	"github.com/goplus/llgo/chore/llcppg/ast"
 )
 
+type HeaderInfo struct {
+	IncPath string // stdlib include path
+	Path    string // full path
+}
+
 type TypeConv struct {
 	gogen.PkgRef
+	SysTypeLoc   map[string]*HeaderInfo
 	symbolTable  *config.SymbolTable // llcppg.symb.json
 	trimPrefixes []string
 	typeMap      *BuiltinTypeMap
-	// todo(zzy):refine array type in func or param's context
-	inParam bool // flag to indicate if currently processing a param
-
-	conf *TypeConfig
+	inParam      bool // flag to indicate if currently processing a param
+	conf         *TypeConfig
 }
 
 type TypeConfig struct {
+	Package      *Package
 	Types        *types.Package
 	TypeMap      *BuiltinTypeMap
 	SymbolTable  *config.SymbolTable
@@ -43,6 +48,7 @@ func NewConv(conf *TypeConfig) *TypeConv {
 		typeMap:      conf.TypeMap,
 		trimPrefixes: conf.TrimPrefixes,
 		conf:         conf,
+		SysTypeLoc:   make(map[string]*HeaderInfo),
 	}
 	typeConv.Types = conf.Types
 	return typeConv
@@ -115,7 +121,17 @@ func (p *TypeConv) handleIdentRefer(t ast.Expr) (types.Type, error) {
 		// For types defined in other packages, they should already be in current scope
 		// We don't check for types.Named here because the type returned from ConvertType
 		// for aliases like int8_t might be a built-in type (e.g., int8),
-		obj := gogen.Lookup(p.Types.Scope(), name)
+
+		// check if the type is a system type
+		obj, err := p.referSysType(name)
+		if err != nil {
+			return nil, err
+		}
+		if obj != nil {
+			return obj.Type(), nil
+		}
+
+		obj = gogen.Lookup(p.Types.Scope(), name)
 		if obj == nil {
 			return nil, fmt.Errorf("%s not found", name)
 		}
@@ -125,7 +141,7 @@ func (p *TypeConv) handleIdentRefer(t ast.Expr) (types.Type, error) {
 	case *ast.Ident:
 		typ, err := lookup(t.Name)
 		if err != nil {
-			return nil, fmt.Errorf("%s not found", t.Name)
+			return nil, fmt.Errorf("%s not found %w", t.Name, err)
 		}
 		return typ, nil
 	case *ast.ScopingExpr:
@@ -274,6 +290,41 @@ func (p *TypeConv) ToDefaultEnumType() types.Type {
 	return p.typeMap.CType("Int")
 }
 
+// typedecl,enumdecl,funcdecl,funcdecl
+// true determine continue execute the type gen
+// if this type is in a system header,skip the type gen & collect the type info
+func (p *TypeConv) handleSysType(ident *ast.Ident, loc *ast.Location, incPath string) (skip bool, anony bool, err error) {
+	anony = ident == nil
+	if !p.conf.Package.isSys || anony {
+		return false, anony, nil
+	}
+	if existingLoc, ok := p.SysTypeLoc[ident.Name]; ok {
+		return true, anony, fmt.Errorf("type %s already defined in %s,include path: %s", ident.Name, existingLoc.Path, existingLoc.IncPath)
+	}
+	p.SysTypeLoc[ident.Name] = &HeaderInfo{
+		IncPath: incPath,
+		Path:    loc.File,
+	}
+	return true, anony, nil
+}
+
+func (p *TypeConv) referSysType(name string) (types.Object, error) {
+	if info, ok := p.SysTypeLoc[name]; ok {
+		// todo(zzy): additional logic for incpath -> package
+		var obj types.Object
+		if strings.HasSuffix(info.IncPath, "size_t.h") {
+			depPkg := p.conf.Package.p.Import("github.com/goplus/llgo/c")
+			obj = depPkg.TryRef(CPubName(name))
+		}
+		if obj == nil {
+			return nil, fmt.Errorf("sys type %s in %s not found full path %s", name, info.IncPath, info.Path)
+		}
+		return obj, nil
+
+	}
+	return nil, nil
+}
+
 func (p *TypeConv) LookupSymbol(mangleName config.MangleNameType) (config.GoNameType, error) {
 	if p.symbolTable == nil {
 		return "", fmt.Errorf("symbol table not initialized")
@@ -311,15 +362,28 @@ func checkFieldName(name string, isRecord bool, isVariadic bool) string {
 	return avoidKeyword(name)
 }
 
-// from gogen@1.15.2
 func CPubName(name string) string {
-	if r := name[0]; 'a' <= r && r <= 'z' {
-		r -= 'a' - 'A'
-		return string(r) + name[1:]
-	} else if r == '_' {
-		return "X" + name
+	if len(name) == 0 {
+		return name
 	}
-	return name
+	toCamelCase := func(s string) string {
+		parts := strings.Split(s, "_")
+		for i := 0; i < len(parts); i++ {
+			if len(parts[i]) > 0 {
+				parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+			}
+		}
+		return strings.Join(parts, "")
+	}
+	if name[0] == '_' {
+		i := 0
+		for i < len(name) && name[i] == '_' {
+			i++
+		}
+		prefix := name[:i]
+		return "X" + prefix + toCamelCase(name[i:])
+	}
+	return toCamelCase(name)
 }
 
 func avoidKeyword(name string) string {

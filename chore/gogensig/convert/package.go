@@ -8,9 +8,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/goplus/gogen"
+	"github.com/goplus/llgo/chore/_xtool/llcppsymg/config/cfgparse"
 	cfg "github.com/goplus/llgo/chore/gogensig/config"
 	"github.com/goplus/llgo/chore/gogensig/convert/deps"
 	"github.com/goplus/llgo/chore/llcppg/ast"
@@ -34,15 +36,18 @@ func SetDebug(flags int) {
 // -----------------------------------------------------------------------------
 
 type Package struct {
-	name      string
-	p         *gogen.Package
-	deps      []*deps.CPackage
-	cvt       *TypeConv
-	outputDir string
-	conf      *PackageConfig
-	depIncs   []string
-	inCurPkg  bool              // whether the current file is in the llcppg package not the dependent files
-	public    map[string]string // original C name -> public Go name
+	name       string
+	p          *gogen.Package
+	deps       []*deps.CPackage
+	cvt        *TypeConv
+	outputDir  string
+	conf       *PackageConfig
+	depIncs    []string
+	inCurPkg   bool              // whether the current file is in the llcppg package not the dependent files
+	isSys      bool              // whether system header
+	sysIncPath string            // current system header file include path
+	public     map[string]string // original C name -> public Go name
+	incPaths   []string          //current pkg's include file
 }
 
 type PackageConfig struct {
@@ -68,6 +73,12 @@ func NewPackage(config *PackageConfig) *Package {
 	p.outputDir = config.OutputDir
 	p.public = config.Public
 
+	cflags := cfgparse.ParseCFlags(config.CppgConf.CFlags)
+	incPaths, _, err := cflags.GenHeaderFilePaths(config.CppgConf.Include)
+	if err != nil {
+		log.Println("failed to gen include paths: \n", err.Error())
+	}
+	p.incPaths = incPaths
 	// init deps
 	deps, err := deps.LoadDeps(p.outputDir, config.CppgConf.Deps)
 	if err != nil {
@@ -76,23 +87,34 @@ func NewPackage(config *PackageConfig) *Package {
 	p.deps = deps
 	clib := p.p.Import("github.com/goplus/llgo/c")
 	typeMap := NewBuiltinTypeMapWithPkgRefS(clib, p.p.Unsafe())
-	// init type converter
 	p.cvt = NewConv(&TypeConfig{
 		Types:        p.p.Types,
 		TypeMap:      typeMap,
 		SymbolTable:  config.SymbolTable,
 		TrimPrefixes: config.CppgConf.TrimPrefixes,
 		Deps:         deps,
+		Package:      p,
 	})
 	p.initDepPkgs()
-	p.SetCurFile(p.Name(), false, false)
+	p.SetCurFile(p.Name(), "", false, false, false)
 	return p
 }
 
-func (p *Package) SetCurFile(file string, isHeaderFile bool, inCurPkg bool) error {
+func (p *Package) SetCurFile(file string, incPath string, isHeaderFile bool, inCurPkg bool, isSys bool) error {
+	// for system header file,avoid create a file of gogen
+	if p.isSys = isSys; p.isSys {
+		if incPath == "" {
+			return fmt.Errorf("system header file %s has no include path", file)
+		}
+		p.sysIncPath = incPath
+		if debug {
+			log.Printf("%s is a system header file,include path: %s\n", file, incPath)
+		}
+		return nil
+	}
 	var fileName string
 	if isHeaderFile {
-		// include path to go filename
+		// path to go filename
 		fileName = HeaderFileToGo(file)
 	} else {
 		// package name as the default file
@@ -122,6 +144,10 @@ func (p *Package) Name() string {
 	return p.name
 }
 
+func (p *Package) GetTypeConv() *TypeConv {
+	return p.cvt
+}
+
 // todo(zzy):refine logic
 func (p *Package) linkLib(lib string) error {
 	if lib == "" {
@@ -133,9 +159,20 @@ func (p *Package) linkLib(lib string) error {
 }
 
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
+	skip, anony, err := p.cvt.handleSysType(funcDecl.Name, funcDecl.Loc, p.sysIncPath)
+	if skip {
+		if debug {
+			log.Printf("NewFuncDecl: %v is a function of system header file\n", funcDecl.Name)
+		}
+		return err
+	}
 	if debug {
 		log.Printf("NewFuncDecl: %v\n", funcDecl.Name)
 	}
+	if anony {
+		return fmt.Errorf("anonymous function not supported")
+	}
+
 	goFuncName, err := p.cvt.LookupSymbol(cfg.MangleNameType(funcDecl.MangledName))
 	if err != nil {
 		// not gen the function not in the symbolmap
@@ -157,19 +194,27 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 
 // todo(zzy): for class,union,struct
 func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
-	if typeDecl.Name == nil {
+	skip, anony, err := p.cvt.handleSysType(typeDecl.Name, typeDecl.Loc, p.sysIncPath)
+	if skip {
+		if debug {
+			log.Printf("NewTypeDecl: %s type of system header\n", typeDecl.Name)
+		}
+		return err
+	}
+	if debug {
+		log.Printf("NewTypeDecl: %v\n", typeDecl.Name)
+	}
+	if anony {
 		if debug {
 			log.Println("NewTypeDecl:Skip a anonymous type")
 		}
 		return nil
 	}
+
 	// every type name should be public
 	name, changed, err := p.DeclName(typeDecl.Name.Name, true)
 	if err != nil {
 		return err
-	}
-	if debug {
-		log.Printf("NewTypeDecl: %v\n", name)
 	}
 
 	structType, err := p.cvt.RecordTypeToStruct(typeDecl.Type)
@@ -189,6 +234,16 @@ func (p *Package) NewTypeDecl(typeDecl *ast.TypeDecl) error {
 }
 
 func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
+	skip, _, err := p.cvt.handleSysType(typedefDecl.Name, typedefDecl.Loc, p.sysIncPath)
+	if skip {
+		if debug {
+			log.Printf("NewTypedefDecl: %v is a typedef of system header file\n", typedefDecl.Name)
+		}
+		return err
+	}
+	if debug {
+		log.Printf("NewTypedefDecl: %v\n", typedefDecl.Name)
+	}
 	name, changed, err := p.DeclName(typedefDecl.Name.Name, true)
 	if err != nil {
 		// for a typedef ,always appear same name like
@@ -196,9 +251,7 @@ func (p *Package) NewTypedefDecl(typedefDecl *ast.TypedefDecl) error {
 		// For this typedef, we only need skip this
 		return nil
 	}
-	if debug {
-		log.Printf("NewTypedefDecl: %s\n", name)
-	}
+
 	genDecl := p.p.NewTypeDefs()
 	typ, err := p.ToType(typedefDecl.Type)
 	if err != nil {
@@ -229,6 +282,13 @@ func (p *Package) NewTypedefs(name string, typ types.Type) *gogen.TypeDecl {
 }
 
 func (p *Package) NewEnumTypeDecl(enumTypeDecl *ast.EnumTypeDecl) error {
+	skip, _, err := p.cvt.handleSysType(enumTypeDecl.Name, enumTypeDecl.Loc, p.sysIncPath)
+	if skip {
+		if debug {
+			log.Printf("NewEnumTypeDecl: %v is a enum type of system header file\n", enumTypeDecl.Name)
+		}
+		return err
+	}
 	if debug {
 		log.Printf("NewEnumTypeDecl: %v\n", enumTypeDecl.Name)
 	}
@@ -305,6 +365,9 @@ func (p *Package) createEnumItems(items []*ast.EnumItem, enumType types.Type, en
 //
 // Files that are already processed in dependent packages will not be output.
 func (p *Package) Write(headerFile string) error {
+	if p.isSys {
+		return nil
+	}
 	fileName := HeaderFileToGo(headerFile)
 	filePath := filepath.Join(p.outputDir, fileName)
 	if debug {
@@ -360,11 +423,9 @@ func (p *Package) WriteToBuffer(genFName string) (*bytes.Buffer, error) {
 }
 
 // /path/to/foo.h -> foo.go
-// /path/to/_intptr.h -> SYS_intptr.go
-// for std include header file path
+// /path/to/_intptr.h -> X_intptr.go
 func HeaderFileToGo(incPath string) string {
-	// _, fileName := filepath.Split(headerFile)
-	fileName := strings.ReplaceAll(incPath, string(filepath.Separator), "_")
+	_, fileName := filepath.Split(incPath)
 	ext := filepath.Ext(fileName)
 	if len(ext) > 0 {
 		fileName = strings.TrimSuffix(fileName, ext)
@@ -436,4 +497,98 @@ func (p *Package) DeclName(name string, collect bool) (pubName string, changed b
 // AllDepIncs returns all std include paths of dependent packages
 func (p *Package) AllDepIncs() []string {
 	return p.depIncs
+}
+
+type PkgMapping struct {
+	Pattern string
+	Package string
+}
+
+const (
+	LLGO_C        = "github.com/goplus/llgo/c"
+	LLGO_PTHREAD  = "github.com/goplus/llgo/pthread"
+	LLGO_SYSTEM   = "github.com/goplus/llgo/system"
+	LLGO_TIME     = "github.com/goplus/llgo/time"
+	LLGO_MATH     = "github.com/goplus/llgo/math"
+	LLGO_COMPLEX  = "github.com/goplus/llgo/math/cmplx"
+	LLGO_UNIX_NET = "github.com/goplus/llgo/unix/net"
+)
+
+// IncPathToPkg determines the Go package for a given C include path.
+//
+// According to the C language specification, when including a standard library,
+// such as stdio.h, certain declarations must be provided (e.g., FILE type).
+// However, these types don't have to be declared in the header file itself.
+// On MacOS, for example, the actual declaration exists in _stdio.h. Therefore,
+// each standard library header file can be viewed as defining an interface,
+// independent of its implementation.
+//
+// In our current requirements, the matching follows this order:
+//  1. First match standard library interface headers (like stdio.h, stdint.h)
+//     which define required types and functions
+//  2. Then match implementation headers (like _stdio.h, sys/_types/_int8_t.h)
+//     which contain the actual type definitions
+//
+// For example:
+// - stdio.h as interface, specifies that FILE type must be provided
+// - _stdio.h as implementation, provides the actual FILE definition on MacOS
+func IncPathToPkg(incPath string) (pkg string, isDefault bool) {
+	pkgMappings := []PkgMapping{
+		// c std
+		{Pattern: `(^|[^a-zA-Z0-9])stdint[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])stddef[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])stdio[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])stdlib[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])string[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])stdbool[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])stdarg[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])limits[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])ctype[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])uchar[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])wchar[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])wctype[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])inttypes[^a-zA-Z0-9]`, Package: LLGO_C},
+
+		{Pattern: `(^|[^a-zA-Z0-9])signal[^a-zA-Z0-9]`, Package: LLGO_SYSTEM},
+
+		{Pattern: `(^|[^a-zA-Z0-9])fenv[^a-zA-Z0-9]`, Package: LLGO_MATH},
+		{Pattern: `(^|[^a-zA-Z0-9])complex[^a-zA-Z0-9]`, Package: LLGO_COMPLEX},
+
+		{Pattern: `(^|[^a-zA-Z0-9])time[^a-zA-Z0-9]`, Package: LLGO_TIME},
+
+		{Pattern: `(^|[^a-zA-Z0-9])pthread[^a-zA-Z0-9]`, Package: LLGO_PTHREAD},
+
+		//c posix
+		{Pattern: `(^|[^a-zA-Z0-9])socket[^a-zA-Z0-9]`, Package: LLGO_UNIX_NET},
+		{Pattern: `(^|[^a-zA-Z0-9])arpa[^a-zA-Z0-9]`, Package: LLGO_UNIX_NET},
+		{Pattern: `(^|[^a-zA-Z0-9])netinet6?[^a-zA-Z0-9]`, Package: LLGO_UNIX_NET},
+		{Pattern: `(^|[^a-zA-Z0-9])net[^a-zA-Z0-9]`, Package: LLGO_UNIX_NET},
+
+		{Pattern: `_int\d+_t`, Package: LLGO_C},
+		{Pattern: `_uint\d+_t`, Package: LLGO_C},
+		{Pattern: `_size_t`, Package: LLGO_C},
+		{Pattern: `_intptr_t`, Package: LLGO_C},
+		{Pattern: `_uintptr_t`, Package: LLGO_C},
+		{Pattern: `_ptrdiff_t`, Package: LLGO_C},
+
+		{Pattern: `malloc`, Package: LLGO_C},
+
+		// before must the special type.h such as _pthread_types.h ....
+		{Pattern: `\w+_t[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])types[^a-zA-Z0-9]`, Package: LLGO_C},
+		{Pattern: `(^|[^a-zA-Z0-9])sys[^a-zA-Z0-9]`, Package: LLGO_SYSTEM},
+
+		// {Pattern: `(^|[^a-zA-Z0-9])strings\.h$`, Package: LLGO_C},
+	}
+
+	for _, mapping := range pkgMappings {
+		matched, err := regexp.MatchString(mapping.Pattern, incPath)
+		if err != nil {
+			panic(err)
+		}
+		if matched {
+			return mapping.Package, false
+		}
+	}
+	return LLGO_C, true
 }
