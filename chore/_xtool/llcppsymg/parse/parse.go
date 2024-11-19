@@ -80,6 +80,23 @@ func (p *SymbolProcessor) GenMethodName(class, name string, isDestructor bool) s
 	return prefix + name
 }
 
+func (p *SymbolProcessor) isStructArg(arg clang.Cursor) (bool, string) {
+	typ := arg.Type()
+	if typ.Kind == clang.TypePointer {
+		namedType := typ.PointeeType().NamedType().String()
+		defer namedType.Dispose()
+		switch typ.PointeeType().Kind {
+		case clang.TypeElaborated:
+			fallthrough
+		case clang.TypeRecord:
+			fallthrough
+		case clang.TypeTypedef:
+			return true, toTitle(c.GoString(namedType.CStr()))
+		}
+	}
+	return false, toTitle(c.GoString(typ.Kind.String().CStr()))
+}
+
 func (p *SymbolProcessor) genGoName(cursor clang.Cursor) string {
 	funcName := cursor.String()
 	defer funcName.Dispose()
@@ -98,6 +115,13 @@ func (p *SymbolProcessor) genGoName(cursor clang.Cursor) string {
 		defer parentName.Dispose()
 		class := p.ToGoName(c.GoString(parentName.CStr()))
 		return p.AddSuffix(p.GenMethodName(class, convertedName, isDestructor))
+	} else if cursor.Kind == clang.CursorFunctionDecl {
+		numArgs := cursor.NumArguments()
+		if numArgs > 0 {
+			if ok, typeName := p.isStructArg(cursor.Argument(0)); ok {
+				return p.AddSuffix(p.GenMethodName(typeName, convertedName, isDestructor))
+			}
+		}
 	}
 	return p.AddSuffix(convertedName)
 }
