@@ -289,17 +289,17 @@ type Pcache struct {
 type PcacheMethods2 struct {
 	IVersion   c.Int
 	PArg       unsafe.Pointer
-	XInit      func(unsafe.Pointer) c.Int
-	XShutdown  func(unsafe.Pointer)
-	XCreate    func(c.Int, c.Int, c.Int) *Pcache
-	XCachesize func(*Pcache, c.Int)
-	XPagecount func(*Pcache) c.Int
-	XFetch     func(*Pcache, c.Uint, c.Int) *PcachePage
-	XUnpin     func(*Pcache, *PcachePage, c.Int)
-	XRekey     func(*Pcache, *PcachePage, c.Uint, c.Uint)
-	XTruncate  func(*Pcache, c.Uint)
-	XDestroy   func(*Pcache)
-	XShrink    func(*Pcache)
+	XInit      unsafe.Pointer
+	XShutdown  unsafe.Pointer
+	XCreate    unsafe.Pointer
+	XCachesize unsafe.Pointer
+	XPagecount unsafe.Pointer
+	XFetch     unsafe.Pointer
+	XUnpin     unsafe.Pointer
+	XRekey     unsafe.Pointer
+	XTruncate  unsafe.Pointer
+	XDestroy   unsafe.Pointer
+	XShrink    unsafe.Pointer
 }
 	`, func(t *testing.T, pkg *convert.Package) {
 		cmptest.CheckPubFile(t, pkg, `

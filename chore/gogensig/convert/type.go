@@ -28,6 +28,7 @@ type TypeConv struct {
 	symbolTable *config.SymbolTable // llcppg.symb.json
 	typeMap     *BuiltinTypeMap
 	inParam     bool // flag to indicate if currently processing a param
+	inRecord    bool
 	conf        *TypeConfig
 }
 
@@ -107,6 +108,9 @@ func (p *TypeConv) handlePointerType(t *ast.PointerType) (types.Type, error) {
 		return p.typeMap.CType("Pointer"), nil
 	}
 	if baseFuncType, ok := baseType.(*types.Signature); ok {
+		if p.inRecord {
+			return p.typeMap.CType("Pointer"), nil
+		}
 		return baseFuncType, nil
 	}
 	return types.NewPointer(baseType), nil
@@ -205,6 +209,11 @@ func (p *TypeConv) retToResult(ret ast.Expr) (*types.Tuple, error) {
 
 // Convert ast.FieldList to []types.Var
 func (p *TypeConv) fieldListToVars(params *ast.FieldList, isRecord bool) ([]*types.Var, error) {
+	if isRecord {
+		beforeInRecord := p.inRecord
+		p.inRecord = true
+		defer func() { p.inRecord = beforeInRecord }()
+	}
 	var vars []*types.Var
 	if params == nil || params.List == nil {
 		return vars, nil
