@@ -139,6 +139,21 @@ func (p *Package) linkLib(lib string) error {
 	return nil
 }
 
+func (p *Package) NewReceiver(goFuncName *GoFuncName, typ *ast.FuncType) (*types.Var, error) {
+	if len(goFuncName.recvName) <= 0 {
+		return nil, fmt.Errorf("no receiver")
+	}
+	if typ.Params.List != nil && len(typ.Params.List) > 0 {
+		recvField := typ.Params.List[0]
+		recvType, err := p.ToType(recvField.Type)
+		if err != nil {
+			return nil, err
+		}
+		return p.p.NewParam(token.NoPos, "p", recvType), nil
+	}
+	return nil, fmt.Errorf("no params")
+}
+
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	skip, anony, err := p.cvt.handleSysType(funcDecl.Name, funcDecl.Loc, p.curFile.sysIncPath)
 	if skip {
@@ -154,21 +169,53 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 		return fmt.Errorf("anonymous function not supported")
 	}
 
-	goFuncName, err := p.cvt.LookupSymbol(cfg.MangleNameType(funcDecl.MangledName))
+	goSymbolName, err := p.cvt.LookupSymbol(cfg.MangleNameType(funcDecl.MangledName))
 	if err != nil {
 		// not gen the function not in the symbolmap
 		return err
 	}
-	if obj := p.p.Types.Scope().Lookup(goFuncName); obj != nil {
-		return fmt.Errorf("function %s already defined", goFuncName)
+	if obj := p.p.Types.Scope().Lookup(goSymbolName); obj != nil {
+		return fmt.Errorf("function %s already defined", goSymbolName)
 	}
-	sig, err := p.cvt.ToSignature(funcDecl.Type)
-	if err != nil {
-		return err
+	var sig *types.Signature
+	var recv *types.Var
+	goFuncName := NewGoFuncName(goSymbolName)
+	if goFuncName.HasReceiver() {
+		retRecv, err := p.NewReceiver(goFuncName, funcDecl.Type)
+		if err != nil {
+			return err
+		}
+		recv = retRecv
+		retSig, err := p.cvt.ToSignature(funcDecl.Type, recv)
+		if err != nil {
+			return err
+		}
+		sig = retSig
+	} else {
+		retSig, err := p.cvt.ToSignature(funcDecl.Type, nil)
+		if err != nil {
+			return err
+		}
+		sig = retSig
 	}
-	decl := p.p.NewFuncDecl(token.NoPos, string(goFuncName), sig)
+	var decl *gogen.Func
+	if goFuncName.HasReceiver() {
+		decl = p.p.NewFuncDecl(token.NoPos, goFuncName.funcName, sig)
+		if funcDecl.Type.Ret != nil {
+			_, ok := funcDecl.Type.Ret.(*ast.PointerType)
+			if ok {
+				decl.BodyStart(p.p).Val(types.Universe.Lookup("nil")).End()
+			} else {
+				decl.BodyStart(p.p).End()
+			}
+		} else {
+			decl.BodyStart(p.p).End()
+		}
+	} else {
+		decl = p.p.NewFuncDecl(token.NoPos, goSymbolName, sig)
+	}
 	doc := CommentGroup(funcDecl.Doc)
-	doc.AddCommentGroup(NewFuncDocComments(funcDecl.Name.Name, string(goFuncName)))
+	doc.AddCommentGroup(NewFuncDocComments(funcDecl.Name.Name, string(goSymbolName)))
 	decl.SetComments(p.p, doc.CommentGroup)
 	return nil
 }
