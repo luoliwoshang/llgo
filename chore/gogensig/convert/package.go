@@ -139,8 +139,8 @@ func (p *Package) linkLib(lib string) error {
 	return nil
 }
 
-func (p *Package) NewReceiver(goFuncName *GoFuncName, typ *ast.FuncType) (*types.Var, error) {
-	if len(goFuncName.recvName) <= 0 {
+func (p *Package) newReceiver(goFuncName *GoFuncName, typ *ast.FuncType) (*types.Var, error) {
+	if !goFuncName.HasReceiver() {
 		return nil, fmt.Errorf("no receiver")
 	}
 	if typ.Params.List != nil && len(typ.Params.List) > 0 {
@@ -152,6 +152,45 @@ func (p *Package) NewReceiver(goFuncName *GoFuncName, typ *ast.FuncType) (*types
 		return p.p.NewParam(token.NoPos, "p", recvType), nil
 	}
 	return nil, fmt.Errorf("no params")
+}
+
+func (p *Package) ToSigSignature(goFuncName *GoFuncName, funcDecl *ast.FuncDecl) (*types.Signature, error) {
+	var sig *types.Signature
+	var recv *types.Var
+	var err error
+	if goFuncName.HasReceiver() {
+		recv, err = p.newReceiver(goFuncName, funcDecl.Type)
+		if err != nil {
+			return nil, err
+		}
+	}
+	sig, err = p.cvt.ToSignature(funcDecl.Type, recv)
+	if err != nil {
+		return nil, err
+	}
+	return sig, nil
+}
+
+func (p *Package) newFuncDecl(goFuncName *GoFuncName, sig *types.Signature, funcDecl *ast.FuncDecl) error {
+	var decl *gogen.Func
+	if goFuncName.HasReceiver() {
+		decl = p.p.NewFuncDecl(token.NoPos, goFuncName.funcName, sig)
+		if !Expr(funcDecl.Type.Ret).IsVoid() {
+			retType, err := p.ToType(funcDecl.Type.Ret)
+			if err != nil {
+				return err
+			}
+			decl.BodyStart(p.p).ZeroLit(retType).Return(1).End()
+		} else {
+			decl.BodyStart(p.p).End()
+		}
+	} else {
+		decl = p.p.NewFuncDecl(token.NoPos, goFuncName.OriginGoSymbolName(), sig)
+	}
+	doc := CommentGroup(funcDecl.Doc)
+	doc.AddCommentGroup(NewFuncDocComments(funcDecl.Name.Name, goFuncName.OriginGoSymbolName()))
+	decl.SetComments(p.p, doc.CommentGroup)
+	return nil
 }
 
 func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
@@ -177,47 +216,14 @@ func (p *Package) NewFuncDecl(funcDecl *ast.FuncDecl) error {
 	if obj := p.p.Types.Scope().Lookup(goSymbolName); obj != nil {
 		return fmt.Errorf("function %s already defined", goSymbolName)
 	}
-	var sig *types.Signature
-	var recv *types.Var
+
 	goFuncName := NewGoFuncName(goSymbolName)
-	if goFuncName.HasReceiver() {
-		retRecv, err := p.NewReceiver(goFuncName, funcDecl.Type)
-		if err != nil {
-			return err
-		}
-		recv = retRecv
-		retSig, err := p.cvt.ToSignature(funcDecl.Type, recv)
-		if err != nil {
-			return err
-		}
-		sig = retSig
-	} else {
-		retSig, err := p.cvt.ToSignature(funcDecl.Type, nil)
-		if err != nil {
-			return err
-		}
-		sig = retSig
+	sig, err := p.ToSigSignature(goFuncName, funcDecl)
+	if err != nil {
+		return err
 	}
-	var decl *gogen.Func
-	if goFuncName.HasReceiver() {
-		decl = p.p.NewFuncDecl(token.NoPos, goFuncName.funcName, sig)
-		if funcDecl.Type.Ret != nil {
-			_, ok := funcDecl.Type.Ret.(*ast.PointerType)
-			if ok {
-				decl.BodyStart(p.p).Val(types.Universe.Lookup("nil")).End()
-			} else {
-				decl.BodyStart(p.p).End()
-			}
-		} else {
-			decl.BodyStart(p.p).End()
-		}
-	} else {
-		decl = p.p.NewFuncDecl(token.NoPos, goSymbolName, sig)
-	}
-	doc := CommentGroup(funcDecl.Doc)
-	doc.AddCommentGroup(NewFuncDocComments(funcDecl.Name.Name, string(goSymbolName)))
-	decl.SetComments(p.p, doc.CommentGroup)
-	return nil
+
+	return p.newFuncDecl(goFuncName, sig, funcDecl)
 }
 
 // NewTypeDecl converts C/C++ type declarations to Go.
