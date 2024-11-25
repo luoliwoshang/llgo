@@ -313,7 +313,7 @@ func (p *TypeConv) referSysType(name string) (types.Object, error) {
 		var obj types.Object
 		pkg, _ := IncPathToPkg(info.IncPath)
 		depPkg := p.conf.Package.p.Import(pkg)
-		obj = depPkg.TryRef(names.CPubName(name))
+		obj = depPkg.TryRef(names.PubName(name))
 		if obj == nil {
 			return nil, fmt.Errorf("sys type %s in %s not found in package %s, full path %s", name, info.IncPath, pkg, info.Path)
 		}
@@ -343,7 +343,7 @@ func checkFieldName(name string, isRecord bool, isVariadic bool) string {
 	}
 	// every field name should be public,will not be a keyword
 	if isRecord {
-		return names.CPubName(name)
+		return names.PubName(name)
 	}
 	return avoidKeyword(name)
 }

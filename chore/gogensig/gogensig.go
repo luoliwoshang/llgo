@@ -18,6 +18,7 @@ package main
 
 import (
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -27,12 +28,21 @@ import (
 	"github.com/goplus/llgo/chore/gogensig/unmarshal"
 )
 
+func editGoMod(dir string) {
+	projectRoot, err := filepath.Abs("../../..")
+	if err != nil {
+		log.Fatal(err)
+	}
+	config.RunCommand(dir, "go", "mod", "edit", "-replace", "github.com/goplus/llgo="+projectRoot)
+}
+
 func runGoCmds(wd, pkg string) {
 	dir := filepath.Join(wd, pkg)
 	os.MkdirAll(dir, 0744)
 	os.Chdir(pkg)
 	config.RunCommand(dir, "go", "mod", "init", pkg)
 	config.RunCommand(dir, "go", "get", "github.com/goplus/llgo")
+	editGoMod(dir)
 }
 
 func main() {

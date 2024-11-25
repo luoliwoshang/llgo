@@ -57,10 +57,7 @@ func (p *PackageConfig) GetGoName(name string, inCurPkg bool) string {
 	if ok {
 		return goName
 	}
-	if inCurPkg {
-		name = names.RemovePrefixedName(name, p.CppgConf.TrimPrefixes)
-	}
-	return names.CPubName(name)
+	return names.GoName(name, p.CppgConf.TrimPrefixes, inCurPkg)
 }
 
 func (p *PackageConfig) GetIncPaths() ([]string, error) {
