@@ -3,3 +3,25 @@ package _systopkg
 
 import _ "unsafe"
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+===== llcppg.pub =====
+fenv Fenv
+stddef Stddef
+stdint Stdint
+stdio Stdio
+time Time
+uchar Uchar
+wchar Wchar

@@ -37,36 +37,57 @@ func TestSysToPkg(t *testing.T) {
 		if typConv.SysTypeLoc == nil {
 			t.Fatal("sysTypeLoc is nil")
 		}
-		type inf struct {
-			typeName  string
-			isDefault bool // is default llgo/c
-			info      *convert.HeaderInfo
-		}
-		pkgTypes := make(map[string][]*inf)
+		pkgIncTypes := make(map[string]map[string][]string)
 
+		// full type in all std lib
 		for name, info := range typConv.SysTypeLoc {
 			targetPkg, isDefault := convert.IncPathToPkg(info.IncPath)
-			pkgTypes[targetPkg] = append(pkgTypes[targetPkg], &inf{
-				typeName:  name,
-				info:      info,
-				isDefault: isDefault,
-			})
+			if isDefault {
+				targetPkg = "github.com/goplus/llgo/c [default]"
+			}
+			if pkgIncTypes[targetPkg] == nil {
+				pkgIncTypes[targetPkg] = make(map[string][]string, 0)
+			}
+			if pkgIncTypes[targetPkg][info.IncPath] == nil {
+				pkgIncTypes[targetPkg][info.IncPath] = make([]string, 0)
+			}
+			pkgIncTypes[targetPkg][info.IncPath] = append(pkgIncTypes[targetPkg][info.IncPath], name)
 		}
 
-		for pkg, types := range pkgTypes {
-			t.Logf("Package %s contains types:", pkg)
-			sort.Slice(types, func(i, j int) bool {
-				if types[i].isDefault != types[j].isDefault {
-					return types[i].isDefault
-				}
-				return types[i].typeName < types[j].typeName
-			})
-			for _, inf := range types {
-				if !inf.isDefault {
-					t.Logf("  - %s (%s)", inf.typeName, inf.info.IncPath)
+		for pkg, incTypes := range pkgIncTypes {
+			t.Logf("\x1b[1;32m %s \x1b[0m Package contains inc types:", pkg)
+			for incPath, types := range incTypes {
+				t.Logf("\x1b[1;33m  - %s\x1b[0m (%s):", incPath, pkg)
+				sort.Strings(types)
+				t.Logf("    - %s", strings.Join(types, " "))
+			}
+		}
+
+		// check referd type in std lib
+		// Expected type to package mappings
+		expected := map[string]string{
+			"mbstate_t":   "github.com/goplus/llgo/c",
+			"wint_t":      "github.com/goplus/llgo/c",
+			"ptrdiff_t":   "github.com/goplus/llgo/c",
+			"int8_t":      "github.com/goplus/llgo/c",
+			"max_align_t": "github.com/goplus/llgo/c",
+			"FILE":        "github.com/goplus/llgo/c",
+			"tm":          "github.com/goplus/llgo/c/time",
+			"time_t":      "github.com/goplus/llgo/c/time",
+			"clock_t":     "github.com/goplus/llgo/c/time",
+			"fenv_t":      "github.com/goplus/llgo/c/math",
+			"size_t":      "github.com/goplus/llgo/c",
+		}
+
+		for name, exp := range expected {
+			if _, ok := typConv.SysTypePkg[name]; ok {
+				if typConv.SysTypePkg[name].PkgPath != exp {
+					t.Errorf("type [%s]: expected package [%s], got [%s] in header [%s]", name, exp, typConv.SysTypePkg[name].PkgPath, typConv.SysTypePkg[name].Header.IncPath)
 				} else {
-					t.Logf("  - %s (%s) [default]", inf.typeName, inf.info.IncPath)
+					t.Logf("refer type [%s] expected package [%s] from header [%s]", name, exp, typConv.SysTypePkg[name].Header.IncPath)
 				}
+			} else {
+				t.Logf("missing expected type %s (package: %s)", name, exp)
 			}
 		}
 	})

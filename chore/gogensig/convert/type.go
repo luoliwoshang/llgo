@@ -22,9 +22,15 @@ type HeaderInfo struct {
 	Path    string // full path
 }
 
+type Header2Pkg struct {
+	Header  *HeaderInfo
+	PkgPath string
+}
+
 type TypeConv struct {
 	gogen.PkgRef
 	SysTypeLoc  map[string]*HeaderInfo
+	SysTypePkg  map[string]*Header2Pkg
 	symbolTable *config.SymbolTable // llcppg.symb.json
 	typeMap     *BuiltinTypeMap
 	inParam     bool // flag to indicate if currently processing a param
@@ -45,6 +51,7 @@ func NewConv(conf *TypeConfig) *TypeConv {
 		typeMap:     conf.TypeMap,
 		conf:        conf,
 		SysTypeLoc:  make(map[string]*HeaderInfo),
+		SysTypePkg:  make(map[string]*Header2Pkg),
 	}
 	typeConv.Types = conf.Types
 	return typeConv
@@ -312,6 +319,11 @@ func (p *TypeConv) referSysType(name string) (types.Object, error) {
 	if info, ok := p.SysTypeLoc[name]; ok {
 		var obj types.Object
 		pkg, _ := IncPathToPkg(info.IncPath)
+		// in current converter process 's ref type
+		p.SysTypePkg[name] = &Header2Pkg{
+			Header:  info,
+			PkgPath: pkg,
+		}
 		depPkg := p.conf.Package.p.Import(pkg)
 		obj = depPkg.TryRef(names.CPubName(name))
 		if obj == nil {
