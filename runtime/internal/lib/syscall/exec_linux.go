@@ -722,7 +722,7 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 	ret10086 = int(os.Execve(argv0, argv, envv))
 	if ret10086 != 0 {
 		err1 = Errno(ret10086)
-		println("os.Execve(argv0, argv, envv)", err1)
+		println("os.Execve(argv0, argv, envv)", Errno(os.Errno()))
 	}
 	/**
 	_, _, err1 = RawSyscall(SYS_EXECVE,
