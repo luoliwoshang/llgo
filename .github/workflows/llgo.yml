@@ -59,6 +59,13 @@ jobs:
           fi
           echo "Using Go version: $go_version"
 
+      - name: Check echo location
+        run: |
+          which echo
+          ls -l $(which echo)
+          ls -l /usr/bin/echo
+          echo $PATH
+          
       - name: Test Command Run
         run: |
           llgo run ./_demo/commandrun/commandrun.go
