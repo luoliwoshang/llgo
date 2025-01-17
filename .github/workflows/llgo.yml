@@ -70,6 +70,10 @@ jobs:
           echo "Test result on ${{matrix.os}} with LLVM ${{matrix.llvm}}" > result.md
           bash ./.github/workflows/test_llgo.sh
 
+      - name: Test Command Run
+        run: |
+          llgo run ./_demo/commandrun/commandrun.go
+
       - name: Test demos
         run: |
           # TODO(lijie): force python3-embed to be linked with python-3.12-embed

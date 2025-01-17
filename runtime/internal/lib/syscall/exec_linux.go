@@ -344,6 +344,7 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			// pid, err1 = rawVforkSyscall(syscall.SYS_CLONE, 0, flags)
 			panic("todo: syscall.forkAndExecInChild1 - GOARCH == s390x")
 		} else {
+			println("Attempting clone with flags:", flags)
 			ret := os.Syscall(syscall.SYS_CLONE, flags, 0)
 			if ret >= 0 {
 				pid = uintptr(ret)
@@ -665,9 +666,9 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 	// started with, so if len(fd) < 3, close 0, 1, 2 as needed.
 	// Programs that know they inherit fds >= 3 will need
 	// to set them close-on-exec.
-	// for i = len(fd); i < 3; i++ {
-	// 	os.Close(c.Int(i))
-	// }
+	for i = len(fd); i < 3; i++ {
+		os.Close(c.Int(i))
+	}
 
 	// Detach fd 0 from tty
 	if sys.Noctty {
