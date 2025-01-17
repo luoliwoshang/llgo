@@ -716,7 +716,12 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 	}
 
 	// Time to exec.
-	os.Execve(argv0, argv, envv)
+	// os.Execve(argv0, argv, envv)
+	ret := os.Execve(argv0, argv, envv)
+	if ret != 0 {
+		err1 = Errno(ret)
+		println("os.Execve(argv0, argv, envv)", err1)
+	}
 	/**
 	_, _, err1 = RawSyscall(SYS_EXECVE,
 		uintptr(unsafe.Pointer(argv0)),
