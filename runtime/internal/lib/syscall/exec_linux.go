@@ -341,6 +341,7 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		panic("todo: syscall.forkAndExecInChild1 - clone3 != nil")
 	} else {
 		flags |= uintptr(syscall.SIGCHLD)
+		flags |= uintptr(CLONE_FS) // debug
 		if runtime.GOARCH == "s390x" {
 			// On Linux/s390, the first two arguments of clone(2) are swapped.
 			// pid, err1 = rawVforkSyscall(syscall.SYS_CLONE, 0, flags)
