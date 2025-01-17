@@ -251,6 +251,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		cred                      *Credential
 		ngroups, groups           uintptr
 		// c                         uintptr
+
+		ret10086 int
 	)
 
 	rlim, rlimOK := origRlimitNofile.Load().(Rlimit)
@@ -717,9 +719,9 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 
 	// Time to exec.
 	// os.Execve(argv0, argv, envv)
-	ret := os.Execve(argv0, argv, envv)
-	if ret != 0 {
-		err1 = Errno(ret)
+	ret10086 = int(os.Execve(argv0, argv, envv))
+	if ret10086 != 0 {
+		err1 = Errno(ret10086)
 		println("os.Execve(argv0, argv, envv)", err1)
 	}
 	/**
