@@ -347,11 +347,13 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			println("Attempting clone with flags:", flags)
 			ret := os.Syscall(syscall.SYS_CLONE, flags, 0)
 			if ret >= 0 {
+				println("clone succeeded")
 				pid = uintptr(ret)
 				err1 = Errno(0)
 			} else {
 				pid = 0
 				err1 = Errno(os.Errno())
+				println("clone failed", err1)
 			}
 		}
 	}
