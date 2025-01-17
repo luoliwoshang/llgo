@@ -722,6 +722,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 	ret10086 = int(os.Execve(argv0, argv, envv))
 	if ret10086 != 0 {
 		err1 = Errno(ret10086)
+		println("=== Execve Arguments ===")
+		println("argv0 (path):", c.GoString(argv0))
 		println("os.Execve(argv0, argv, envv)", Errno(os.Errno()))
 	}
 	/**
