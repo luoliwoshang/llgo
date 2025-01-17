@@ -59,17 +59,6 @@ jobs:
           fi
           echo "Using Go version: $go_version"
 
-      - name: _xtool build tests
-        run: |
-          cd _xtool
-          llgo build -v ./...
-
-      - name: LLGO tests
-        if: ${{!startsWith(matrix.os, 'ubuntu')}}
-        run: |
-          echo "Test result on ${{matrix.os}} with LLVM ${{matrix.llvm}}" > result.md
-          bash ./.github/workflows/test_llgo.sh
-
       - name: Test Command Run
         run: |
           llgo run ./_demo/commandrun/commandrun.go

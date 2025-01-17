@@ -632,6 +632,7 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			}
 			if ret := os.Dup3(c.Int(fd[i]), c.Int(nextfd), syscall.O_CLOEXEC); ret < 0 {
 				err1 = Errno(os.Errno())
+				println("for i = 0; i < len(fd); i++ {")
 				goto childerror
 			}
 			fd[i] = nextfd
@@ -650,6 +651,7 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			// probably not elsewhere either.
 			if ret := os.Fcntl(c.Int(fd[i]), syscall.F_SETFD, 0); ret < 0 {
 				err1 = Errno(os.Errno())
+				println("Pass 2: dup fd[i] down onto i.")
 				goto childerror
 			}
 			continue
@@ -658,6 +660,7 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		// which is exactly what we want.
 		if ret := os.Dup3(c.Int(fd[i]), c.Int(i), 0); ret < 0 {
 			err1 = Errno(os.Errno())
+			println("The new fd is created NOT close-on-exec,")
 			goto childerror
 		}
 	}
