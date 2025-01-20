@@ -7,6 +7,7 @@
 package syscall
 
 import (
+	"fmt"
 	"runtime"
 	"unsafe"
 
@@ -370,6 +371,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		return
 	}
 
+	println("Fork succeeded, now in child.")
+
 	// Fork succeeded, now in child.
 
 	// Enable the "keep capabilities" flag to set ambient capabilities later.
@@ -630,6 +633,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		panic("todo: syscall.forkAndExecInChild1 - pipe < nextfd")
 	}
 
+	println("Pass 1: look for fd[i] < i and move those up above len(fd)")
+
 	for i = 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < i {
 			if nextfd == pipe { // don't stomp on pipe
@@ -644,6 +649,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			nextfd++
 		}
 	}
+
+	println("Pass 2: dup fd[i] down onto i.")
 
 	// Pass 2: dup fd[i] down onto i.
 	for i = 0; i < len(fd); i++ {
@@ -718,13 +725,16 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		panic("todo: syscall.forkAndExecInChild1 - sys.Ptrace")
 	}
 
+	fmt.Println("=== Execve Arguments ===")
+	fmt.Println("argv0 (path):", c.GoString(argv0))
+	fmt.Println("PATH in env:", attr.Env)
+
 	// Time to exec.
 	// os.Execve(argv0, argv, envv)
 	ret10086 = int(os.Execve(argv0, argv, envv))
+
 	if ret10086 != 0 {
 		err1 = Errno(ret10086)
-		println("=== Execve Arguments ===")
-		println("argv0 (path):", c.GoString(argv0))
 		println("os.Execve(argv0, argv, envv)", Errno(os.Errno()))
 	}
 	/**
