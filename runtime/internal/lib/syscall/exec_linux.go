@@ -341,7 +341,6 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		panic("todo: syscall.forkAndExecInChild1 - clone3 != nil")
 	} else {
 		flags |= uintptr(syscall.SIGCHLD)
-		flags |= uintptr(CLONE_FS) // debug
 		if runtime.GOARCH == "s390x" {
 			// On Linux/s390, the first two arguments of clone(2) are swapped.
 			// pid, err1 = rawVforkSyscall(syscall.SYS_CLONE, 0, flags)
@@ -350,7 +349,11 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			println("Attempting clone with flags:", flags)
 			ret := os.Syscall(syscall.SYS_CLONE, flags, 0)
 			if ret >= 0 {
-				println("clone succeeded")
+				if ret == 0 {
+					println("clone succeeded, now in child")
+				} else {
+					println("clone succeeded now in parent")
+				}
 				pid = uintptr(ret)
 				err1 = Errno(0)
 			} else {
@@ -369,8 +372,6 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		// the child was replaced.
 		return
 	}
-
-	println("Fork succeeded, now in child.")
 
 	// Fork succeeded, now in child.
 
