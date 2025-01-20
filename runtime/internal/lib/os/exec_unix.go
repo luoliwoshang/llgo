@@ -39,6 +39,7 @@ func (p *Process) wait() (ps *ProcessState, err error) {
 		pid1   int
 		e      error
 	)
+	println("wait!!!! Process")
 	for {
 		pid1, e = syscall.Wait4(p.Pid, &status, 0, &rusage)
 		if e != syscall.EINTR {
