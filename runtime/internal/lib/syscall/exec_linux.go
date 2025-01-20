@@ -642,8 +642,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			}
 			if ret := os.Dup3(c.Int(fd[i]), c.Int(nextfd), syscall.O_CLOEXEC); ret < 0 {
 				err1 = Errno(os.Errno())
-				println("for i = 0; i < len(fd); i++ {")
-				goto childerror
+				panic("for i = 0; i < len(fd); i++ {")
+				// goto childerror
 			}
 			fd[i] = nextfd
 			nextfd++
@@ -663,8 +663,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			// probably not elsewhere either.
 			if ret := os.Fcntl(c.Int(fd[i]), syscall.F_SETFD, 0); ret < 0 {
 				err1 = Errno(os.Errno())
-				println("Pass 2: dup fd[i] down onto i.")
-				goto childerror
+				panic("Pass 2: dup fd[i] down onto i.")
+				// goto childerror
 			}
 			continue
 		}
@@ -672,8 +672,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		// which is exactly what we want.
 		if ret := os.Dup3(c.Int(fd[i]), c.Int(i), 0); ret < 0 {
 			err1 = Errno(os.Errno())
-			println("The new fd is created NOT close-on-exec,")
-			goto childerror
+			panic("The new fd is created NOT close-on-exec,")
+			// goto childerror
 		}
 	}
 
@@ -722,6 +722,7 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			goto childerror
 		}
 		*/
+		// goto childerror //debug
 		panic("todo: syscall.forkAndExecInChild1 - sys.Ptrace")
 	}
 
@@ -736,7 +737,6 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 	if ret10086 != 0 {
 		err1 = Errno(ret10086)
 		println("os.Execve(argv0, argv, envv)", Errno(os.Errno()))
-		goto childerror
 	}
 	/**
 	_, _, err1 = RawSyscall(SYS_EXECVE,
