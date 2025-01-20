@@ -7,7 +7,6 @@
 package syscall
 
 import (
-	"fmt"
 	"runtime"
 	"unsafe"
 
@@ -725,9 +724,9 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 		panic("todo: syscall.forkAndExecInChild1 - sys.Ptrace")
 	}
 
-	fmt.Println("=== Execve Arguments ===")
-	fmt.Println("argv0 (path):", c.GoString(argv0))
-	fmt.Println("PATH in env:", attr.Env)
+	println("=== Execve Arguments ===")
+	println("argv0 (path):", c.GoString(argv0))
+	println("PATH in env:", attr.Env)
 
 	// Time to exec.
 	// os.Execve(argv0, argv, envv)
