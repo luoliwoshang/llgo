@@ -126,6 +126,9 @@ func forkExec(argv0 string, argv []string, attr *ProcAttr) (pid int, err error) 
 	// Convert args to C form.
 	argv0p := c.AllocaCStr(argv0)
 	argvp := c.AllocaCStrs(argv, true)
+	for _, env := range attr.Env {
+		println(env)
+	}
 	envvp := c.AllocaCStrs(attr.Env, true)
 
 	if (runtime.GOOS == "freebsd" || runtime.GOOS == "dragonfly") && len(argv) > 0 && len(argv[0]) > len(argv0) {
