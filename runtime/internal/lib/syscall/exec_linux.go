@@ -722,8 +722,8 @@ func forkAndExecInChild1(argv0 *c.Char, argv, envv **c.Char, chroot, dir *c.Char
 			goto childerror
 		}
 		*/
-		// goto childerror //debug
-		panic("todo: syscall.forkAndExecInChild1 - sys.Ptrace")
+		goto childerror //debug
+		// panic("todo: syscall.forkAndExecInChild1 - sys.Ptrace") // debug
 	}
 
 	println("=== Execve Arguments ===")
