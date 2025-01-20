@@ -21,14 +21,22 @@ runs:
         EOL
         cat > main.go << 'EOL'
         package main
+
         import (
-          "fmt"
-          "github.com/goplus/llgo/c"
+          "bytes"
+          "os/exec"
         )
+
         func main() {
-            fmt.Println("Hello, LLGo!")
-            println("Hello, LLGo!")
-            c.Printf(c.Str("Hello, LLGo!\n"))
+          var data bytes.Buffer
+          cmd := exec.Command("echo", "hello llgo")
+          cmd.Stdout = &data
+          err := cmd.Run()
+          if err != nil {
+            panic(err)
+          }
+          println("len:", len(data.Bytes()))
+          println("data:", data.String())
         }
         EOL
         go mod tidy
