@@ -1,4 +1,4 @@
-module github.com/goplus/llgo
+module github.com/luoliwoshang/llgo
 
 go 1.20
 
