@@ -77,6 +77,7 @@ type Config struct {
 	Mode        Mode
 	GenExpect   bool // only valid for ModeCmpTest
 	Verbose     bool
+	GenLL       bool // generate pkg .ll files
 	Tags        string
 	GlobalNames map[string][]string // pkg => names
 	GlobalDatas map[string]string   // pkg.name => data
@@ -184,7 +185,7 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	prog := llssa.NewProgram(target)
 	sizes := func(sizes types.Sizes, compiler, arch string) types.Sizes {
 		if arch == "wasm" {
-			sizes = &types.StdSizes{4, 4}
+			sizes = &types.StdSizes{WordSize: 4, MaxAlign: 4}
 		}
 		return prog.TypeSizes(sizes)
 	}
@@ -250,9 +251,17 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	os.Setenv("PATH", env.BinDir()+":"+os.Getenv("PATH")) // TODO(xsw): check windows
 
 	output := conf.OutFile != ""
-	export, err := crosscompile.Use(conf.Goos, conf.Goarch, IsWasiThreadsEnabled(), IsRpathChangeEnabled())
+	export, err := crosscompile.Use(conf.Goos, conf.Goarch, IsWasiThreadsEnabled())
 	check(err)
-	ctx := &context{env, cfg, progSSA, prog, dedup, patches, make(map[string]none), initial, mode, 0, output, make(map[*packages.Package]bool), make(map[*packages.Package]bool), conf, export}
+	ctx := &context{env: env, conf: cfg, progSSA: progSSA, prog: prog, dedup: dedup,
+		patches: patches, built: make(map[string]none), initial: initial, mode: mode,
+		output:        output,
+		needRt:        make(map[*packages.Package]bool),
+		needPyInit:    make(map[*packages.Package]bool),
+		buildConf:     conf,
+		crossCompile:  export,
+		isCheckEnable: IsCheckEnable(),
+	}
 	pkgs, err := buildAllPkgs(ctx, initial, verbose)
 	check(err)
 	if mode == ModeGen {
@@ -273,13 +282,17 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	addGlobalString(conf, "runtime.defaultGOROOT="+runtime.GOROOT(), nil)
 	addGlobalString(conf, "runtime.buildVersion="+runtime.Version(), nil)
 
-	global, err := createGlobals(conf, ctx.prog, pkgs)
+	global, err := createGlobals(ctx, ctx.prog, pkgs)
 	check(err)
 
 	for _, pkg := range initial {
 		if needLink(pkg, mode) {
 			linkMainPkg(ctx, pkg, allPkgs, global, conf, mode, verbose)
 		}
+	}
+
+	if mode == ModeTest && ctx.testFail {
+		mockable.Exit(1)
 	}
 
 	return dpkg, nil
@@ -337,11 +350,15 @@ type context struct {
 	nLibdir int
 	output  bool
 
+	isCheckEnable bool
+
 	needRt     map[*packages.Package]bool
 	needPyInit map[*packages.Package]bool
 
 	buildConf    *Config
 	crossCompile crosscompile.Export
+
+	testFail bool
 }
 
 func (c *context) compiler() *clang.Cmd {
@@ -470,25 +487,28 @@ func addGlobalString(conf *Config, arg string, mainPkgs []string) {
 	}
 }
 
-func createGlobals(conf *Config, prog llssa.Program, pkgs []*aPackage) (llssa.Package, error) {
-	if len(conf.GlobalDatas) == 0 {
+func createGlobals(ctx *context, prog llssa.Program, pkgs []*aPackage) (llssa.Package, error) {
+	if len(ctx.buildConf.GlobalDatas) == 0 {
 		return nil, nil
 	}
 	for _, pkg := range pkgs {
 		if pkg.ExportFile == "" {
 			continue
 		}
-		if names, ok := conf.GlobalNames[pkg.PkgPath]; ok {
+		if names, ok := ctx.buildConf.GlobalNames[pkg.PkgPath]; ok {
 			err := pkg.LPkg.Undefined(names...)
 			if err != nil {
 				return nil, err
 			}
-			pkg.ExportFile = pkg.ExportFile + "-global.ll"
-			os.WriteFile(pkg.ExportFile, []byte(pkg.LPkg.String()), 0644)
+			pkg.ExportFile += "-global"
+			pkg.ExportFile, err = exportObject(ctx, pkg.PkgPath+".global", pkg.ExportFile, []byte(pkg.LPkg.String()))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	global := prog.NewPackage("", "global")
-	for name, value := range conf.GlobalDatas {
+	for name, value := range ctx.buildConf.GlobalDatas {
 		global.AddGlobalString(name, value)
 	}
 	return global, nil
@@ -537,48 +557,32 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, global l
 			}
 		}
 	})
-	entryLLFile, err := genMainModuleFile(conf, llssa.PkgRuntime, pkg.PkgPath, needRuntime, needPyInit)
+	entryLLFile, err := genMainModuleFile(ctx, llssa.PkgRuntime, pkg, needRuntime, needPyInit)
 	check(err)
 	// defer os.Remove(entryLLFile)
 	llFiles = append(llFiles, entryLLFile)
 
 	if global != nil {
-		export := pkg.ExportFile + "-global.ll"
-		os.WriteFile(export, []byte(global.String()), 0666)
+		export, err := exportObject(ctx, pkg.PkgPath+".global", pkg.ExportFile+"-global", []byte(global.String()))
+		check(err)
 		llFiles = append(llFiles, export)
 	}
 
-	// add rpath and find libs
-	exargs := make([]string, 0, ctx.nLibdir<<1)
-	libs := make([]string, 0, ctx.nLibdir*3)
-
-	// Treat every link-time library search path, specified by the -L parameter, as a runtime search path as well.
-	// This is to ensure the final executable can locate libraries with a relocatable install_name
-	// (e.g., "@rpath/libfoo.dylib") at runtime.
-	for _, arg := range linkArgs {
-		if strings.HasPrefix(arg, "-L") {
-			exargs = append(exargs, "-rpath", arg[2:])
-		} else if strings.HasPrefix(arg, "-l") {
-			// need remove the libs collect when rpath mode is removed
-			libs = append(libs, arg[2:])
+	if IsFullRpathEnabled() {
+		exargs := make([]string, 0, ctx.nLibdir<<1)
+		// Treat every link-time library search path, specified by the -L parameter, as a runtime search path as well.
+		// This is to ensure the final executable can locate libraries with a relocatable install_name
+		// (e.g., "@rpath/libfoo.dylib") at runtime.
+		for _, arg := range linkArgs {
+			if strings.HasPrefix(arg, "-L") {
+				exargs = append(exargs, "-rpath", arg[2:])
+			}
 		}
+		linkArgs = append(linkArgs, exargs...)
 	}
-	linkArgs = append(linkArgs, exargs...)
 
 	err = compileAndLinkLLFiles(ctx, app, llFiles, linkArgs, verbose)
 	check(err)
-
-	if IsRpathChangeEnabled() && ctx.buildConf.Goos == "darwin" {
-		dylibDeps := make([]string, 0, len(libs))
-		for _, lib := range libs {
-			dylibDep := findDylibDep(app, lib)
-			if dylibDep != "" {
-				dylibDeps = append(dylibDeps, dylibDep)
-			}
-		}
-		err := ctx.env.InstallNameTool().ChangeToRpath(app, dylibDeps...)
-		check(err)
-	}
 
 	switch mode {
 	case ModeTest:
@@ -590,7 +594,9 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, global l
 		if s := cmd.ProcessState; s != nil {
 			exitCode := s.ExitCode()
 			fmt.Fprintf(os.Stderr, "%s: exit code %d\n", app, exitCode)
-			mockable.Exit(exitCode)
+			if !ctx.testFail && exitCode != 0 {
+				ctx.testFail = true
+			}
 		}
 	case ModeRun:
 		args := make([]string, 0, len(conf.RunArgs)+1)
@@ -658,13 +664,14 @@ func isWasmTarget(goos string) bool {
 	return slices.Contains([]string{"wasi", "js", "wasip1"}, goos)
 }
 
-func genMainModuleFile(conf *Config, rtPkgPath, mainPkgPath string, needRuntime, needPyInit bool) (path string, err error) {
+func genMainModuleFile(ctx *context, rtPkgPath string, pkg *packages.Package, needRuntime, needPyInit bool) (path string, err error) {
 	var (
 		pyInitDecl string
 		pyInit     string
 		rtInitDecl string
 		rtInit     string
 	)
+	mainPkgPath := pkg.PkgPath
 	if needRuntime {
 		rtInit = "call void @\"" + rtPkgPath + ".init\"()"
 		rtInitDecl = "declare void @\"" + rtPkgPath + ".init\"()"
@@ -674,7 +681,7 @@ func genMainModuleFile(conf *Config, rtPkgPath, mainPkgPath string, needRuntime,
 		pyInitDecl = "declare void @Py_Initialize()"
 	}
 	declSizeT := "%size_t = type i64"
-	if is32Bits(conf.Goarch) {
+	if is32Bits(ctx.buildConf.Goarch) {
 		declSizeT = "%size_t = type i32"
 	}
 	stdioDecl := ""
@@ -698,7 +705,7 @@ call i32 @setvbuf(ptr %stderr_ptr, ptr null, i32 2, %size_t 0)
 	`
 	}
 	mainDefine := "define i32 @main(i32 noundef %0, ptr nocapture noundef readnone %1) local_unnamed_addr"
-	if isWasmTarget(conf.Goos) {
+	if isWasmTarget(ctx.buildConf.Goos) {
 		mainDefine = "define hidden noundef i32 @__main_argc_argv(i32 noundef %0, ptr nocapture noundef readnone %1) local_unnamed_addr"
 	}
 	mainCode := fmt.Sprintf(`; ModuleID = 'main'
@@ -737,19 +744,7 @@ _llgo_0:
 		mainDefine, stdioNobuf,
 		pyInit, rtInit, mainPkgPath, mainPkgPath)
 
-	f, err := os.CreateTemp("", "main*.ll")
-	if err != nil {
-		return "", err
-	}
-	_, err = f.Write([]byte(mainCode))
-	if err != nil {
-		return "", err
-	}
-	err = f.Close()
-	if err != nil {
-		return "", err
-	}
-	return f.Name(), nil
+	return exportObject(ctx, pkg.PkgPath+".main", pkg.ExportFile+"-main", []byte(mainCode))
 }
 
 func is32Bits(goarch string) bool {
@@ -800,21 +795,51 @@ func buildPkg(ctx *context, aPkg *aPackage, verbose bool) error {
 		aPkg.LinkArgs = append(aPkg.LinkArgs, altLdflags...)
 	}
 	if pkg.ExportFile != "" {
-		pkg.ExportFile += ".ll"
-		os.WriteFile(pkg.ExportFile, []byte(ret.String()), 0644)
+		pkg.ExportFile, err = exportObject(ctx, pkg.PkgPath, pkg.ExportFile, []byte(ret.String()))
+		if err != nil {
+			return fmt.Errorf("export object of %v failed: %v", pkgPath, err)
+		}
 		if debugBuild || verbose {
 			fmt.Fprintf(os.Stderr, "==> Export %s: %s\n", aPkg.PkgPath, pkg.ExportFile)
-		}
-		if IsCheckEnable() {
-			if err, msg := llcCheck(ctx.env, pkg.ExportFile); err != nil {
-				fmt.Fprintf(os.Stderr, "==> lcc %v: %v\n%v\n", pkg.PkgPath, pkg.ExportFile, msg)
-			}
 		}
 	}
 	return nil
 }
 
-func llcCheck(env *llvm.Env, exportFile string) (err error, msg string) {
+func exportObject(ctx *context, pkgPath string, exportFile string, data []byte) (string, error) {
+	f, err := os.CreateTemp("", "llgo-*.ll")
+	if err != nil {
+		return "", err
+	}
+	f.Write(data)
+	err = f.Close()
+	if err != nil {
+		return exportFile, err
+	}
+	if ctx.isCheckEnable {
+		if msg, err := llcCheck(ctx.env, f.Name()); err != nil {
+			fmt.Fprintf(os.Stderr, "==> lcc %v: %v\n%v\n", pkgPath, f.Name(), msg)
+		}
+	}
+	if ctx.buildConf.GenLL {
+		exportFile += ".ll"
+		err = os.Chmod(f.Name(), 0644)
+		if err != nil {
+			return exportFile, err
+		}
+		return exportFile, os.Rename(f.Name(), exportFile)
+	}
+	exportFile += ".o"
+	args := []string{"-o", exportFile, "-c", f.Name(), "-Wno-override-module"}
+	args = append(args, ctx.crossCompile.CCFLAGS...)
+	if ctx.buildConf.Verbose {
+		fmt.Fprintln(os.Stderr, "clang", args)
+	}
+	cmd := ctx.compiler()
+	return exportFile, cmd.Compile(args...)
+}
+
+func llcCheck(env *llvm.Env, exportFile string) (msg string, err error) {
 	bin := filepath.Join(env.BinDir(), "llc")
 	cmd := exec.Command(bin, "-filetype=null", exportFile)
 	var buf bytes.Buffer
@@ -907,6 +932,7 @@ func createSSAPkg(prog *ssa.Program, p *packages.Package, verbose bool) *ssa.Pac
 	return pkgSSA
 }
 
+/*
 var (
 	// TODO(xsw): complete build flags
 	buildFlags = map[string]bool{
@@ -925,16 +951,17 @@ var (
 		"-ldflags":   true,  // --ldflags 'flag list': arguments to pass on each go tool link invocation
 	}
 )
+*/
 
 const llgoDebug = "LLGO_DEBUG"
 const llgoDbgSyms = "LLGO_DEBUG_SYMBOLS"
 const llgoTrace = "LLGO_TRACE"
 const llgoOptimize = "LLGO_OPTIMIZE"
 const llgoCheck = "LLGO_CHECK"
-const llgoRpathChange = "LLGO_RPATH_CHANGE"
 const llgoWasmRuntime = "LLGO_WASM_RUNTIME"
 const llgoWasiThreads = "LLGO_WASI_THREADS"
 const llgoStdioNobuf = "LLGO_STDIO_NOBUF"
+const llgoFullRpath = "LLGO_FULL_RPATH"
 
 const defaultWasmRuntime = "wasmtime"
 
@@ -978,12 +1005,12 @@ func IsCheckEnable() bool {
 	return isEnvOn(llgoCheck, false)
 }
 
-func IsRpathChangeEnabled() bool {
-	return isEnvOn(llgoRpathChange, false)
-}
-
 func IsWasiThreadsEnabled() bool {
 	return isEnvOn(llgoWasiThreads, true)
+}
+
+func IsFullRpathEnabled() bool {
+	return isEnvOn(llgoFullRpath, true)
 }
 
 func WasmRuntime() string {
@@ -1027,15 +1054,20 @@ func clFiles(ctx *context, files string, pkg *packages.Package, procFile func(li
 }
 
 func clFile(ctx *context, args []string, cFile, expFile string, procFile func(linkFile string), verbose bool) {
-	llFile := expFile + filepath.Base(cFile) + ".ll"
+	llFile := expFile + filepath.Base(cFile)
 	ext := filepath.Ext(cFile)
 
 	// default clang++ will use c++ to compile c file,will cause symbol be mangled
 	if ext == ".c" {
 		args = append(args, "-x", "c")
 	}
-
-	args = append(args, "-emit-llvm", "-S", "-o", llFile, "-c", cFile)
+	if ctx.buildConf.GenLL {
+		llFile += ".ll"
+		args = append(args, "-emit-llvm", "-S", "-o", llFile, "-c", cFile)
+	} else {
+		llFile += ".o"
+		args = append(args, "-o", llFile, "-c", cFile)
+	}
 	args = append(args, ctx.crossCompile.CCFLAGS...)
 	args = append(args, ctx.crossCompile.CFLAGS...)
 	if verbose {
