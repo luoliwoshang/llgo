@@ -139,6 +139,8 @@ sudo apt-get install -y llvm-19-dev clang-19 lld-19 libgc-dev libssl-dev zlib1g-
 - Uses `//go:linkname` to bind external symbols through ABI
 - Python libraries automatically converted via `pydump` and `llpyg` tools
 - C libraries integrated by parsing symbols with `nm` tool
+- **Export Functions to C**: Use `//export` directive to create C-callable functions with simple names
+  - 📖 **[Complete Export Directive Guide](export-directive.md)** - Detailed documentation on using `//export` for C interoperability
 
 ### Special Features
 - **No defer in loops**: Intentional limitation for performance
