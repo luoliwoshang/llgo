@@ -141,6 +141,8 @@ sudo apt-get install -y llvm-19-dev clang-19 lld-19 libgc-dev libssl-dev zlib1g-
 - C libraries integrated by parsing symbols with `nm` tool
 - **Export Functions to C**: Use `//export` directive to create C-callable functions with simple names
   - 📖 **[Complete Export Directive Guide](export-directive.md)** - Detailed documentation on using `//export` for C interoperability
+- **LLVM Target Configuration**: LLGO supports cross-compilation through LLVM target triples
+  - 📖 **[LLVM Target Triple Configuration](target-triple.md)** - Complete guide to target triple generation and cross-compilation
 
 ### Special Features
 - **No defer in loops**: Intentional limitation for performance
