@@ -108,6 +108,7 @@ func NewDefaultConf(mode Mode) *Config {
 		BinPath: bin,
 		Mode:    mode,
 		AppExt:  DefaultAppExt(goos),
+		GenLL:   false, // Keep .o file generation
 	}
 	return conf
 }
@@ -568,6 +569,9 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, global l
 		llFiles = append(llFiles, export)
 	}
 
+	bindLL(app, llFiles)
+	return
+
 	err = compileAndLinkLLFiles(ctx, app, llFiles, linkArgs, verbose)
 	check(err)
 
@@ -623,6 +627,47 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, global l
 	case ModeCmpTest:
 		cmpTest(filepath.Dir(pkg.GoFiles[0]), pkgPath, app, conf.GenExpect, conf.RunArgs)
 	}
+}
+
+func bindLL(app string, objFiles []string) {
+	// Use ld to merge all .o files into a single .o file
+	outputFile := strings.TrimSuffix(app, filepath.Ext(app)) + ".o"
+
+	fmt.Printf("Merging %d .o files into: %s\n", len(objFiles), outputFile)
+
+	// Use ld -r to create a relocatable object file
+	args := []string{"-r", "-o", outputFile}
+	args = append(args, objFiles...)
+
+	// Execute ld command with error output
+	cmd := exec.Command("ld", args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		fmt.Printf("ld command failed: %v\n", err)
+		fmt.Printf("ld stderr: %s\n", stderr.String())
+		fmt.Printf("ld command: ld %s\n", strings.Join(args, " "))
+		
+		// Try using llvm-ar instead
+		fmt.Println("Trying llvm-ar as fallback...")
+		arArgs := []string{"rcs", outputFile}
+		arArgs = append(arArgs, objFiles...)
+		
+		arCmd := exec.Command("llvm-ar", arArgs...)
+		var arStderr bytes.Buffer
+		arCmd.Stderr = &arStderr
+		arErr := arCmd.Run()
+		if arErr != nil {
+			fmt.Printf("llvm-ar also failed: %v\n", arErr)
+			fmt.Printf("llvm-ar stderr: %s\n", arStderr.String())
+			panic(fmt.Errorf("both ld and llvm-ar failed"))
+		}
+		fmt.Printf("Successfully created archive: %s\n", outputFile)
+		return
+	}
+
+	fmt.Printf("Successfully merged .o files into: %s\n", outputFile)
 }
 
 func compileAndLinkLLFiles(ctx *context, app string, llFiles, linkArgs []string, verbose bool) error {
