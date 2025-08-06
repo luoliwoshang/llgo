@@ -184,3 +184,104 @@ cd _demo/readdir
 llgo run .  # Run with LLGO
 go run .    # Run with standard Go (should produce identical output)
 ```
+
+## LLGO Build Target Design 完整计划 (Issue #1176)
+
+LLGO 构建目标设计是一个**四阶段宏伟计划**，目标是让 LLGO 支持各种嵌入式和硬件平台，类似 TinyGo 的能力：
+
+### 📋 第一阶段: Basic Target Parameter Support ✅ (已完成 - Issue #1194)
+- ✅ 添加 `-target` 参数支持 `llgo build/run/test`
+- ✅ 实现基于 JSON 的目标配置系统
+- ✅ 100+ 个嵌入式平台配置文件 (`/targets/` 目录)
+- ✅ `crosscompile.UseWithTarget()` 函数实现
+- ✅ 弱符号 `_start()` 入口点支持无 libc 环境
+
+### 🔄 第二阶段: Multi-Platform LLVM Support (进行中)
+- 🔄 支持多平台 (X86, ARM, RISC-V 等)
+- 🔄 生成可启动代码 (bootable code)
+- 🔄 集成链接器脚本 (linker script)
+- 🔄 Flash 编程集成 (烧录支持)
+
+### ⏳ 第三阶段: Generic Machine Library (可与第一阶段平行开发)
+- 创建统一的硬件抽象层
+- 支持 GPIO, SPI, I2C, UART 等接口
+- 保持与 TinyGo 的兼容性
+- 类似 Arduino 的 `digitalWrite()`, `digitalRead()` 抽象
+- **平行开发优势**: 硬件接口设计独立于底层编译实现，可以同时进行
+
+### ⏳ 第四阶段: Hardware-Specific Machine Library (低优先级)
+- 开发平台特定的库
+- 使用构建标签区分特定硬件特性
+- 例如：STM32 特有功能、ESP32 WiFi、RP2040 PIO 等
+
+## 嵌入式系统支持实现详情 (Issue #1194 - 第一阶段完成)
+
+LLGO 通过从 TinyGo 导入的三个关键功能实现了全面的嵌入式系统支持：
+
+### 目标配置系统
+- **`/targets/`** - 包含 100+ 个嵌入式平台的 JSON 目标定义文件
+  - Arduino 系列: `arduino-leonardo.json`, `arduino-nano.json`, `arduino-zero.json`
+  - ESP32 系列: `esp32c3.json`, `esp32-coreboard-v2.json`, `esp-c3-32s-kit.json`
+  - RP2040/RP2350: `rp2040.json`, `pico.json`, `pico2.json`, `feather-rp2040.json`
+  - STM32 系列: `stm32f4disco.json`, `nucleo-f103rb.json`, `bluepill.json`
+  - RISC-V: `riscv32.json`, `riscv64.json`, `k210.json`, `hifive1b.json`
+  - ARM Cortex-M: `cortex-m0.json`, `cortex-m4.json`, `cortex-m7.json`
+  - WebAssembly: `wasm.json`, `wasip1.json`, `wasip2.json`
+- **继承机制**: 目标可以继承其他目标 (如 `rp2040.json` 继承自 `cortex-m0plus`)
+- **配置字段**: `llvm-target`, `cpu`, `features`, `build-tags`, `goos`, `goarch`, `cflags`, `ldflags`
+
+### 支持目标的交叉编译
+```bash
+# 使用 -target 标志进行嵌入式编译
+llgo build -target rp2040 .
+llgo build -target esp32c3 .
+llgo build -target wasm .
+llgo run -target cortex-m4 .
+```
+
+- **`internal/crosscompile/crosscompile.go:273`** - `UseWithTarget()` 函数实现
+- **目标解析**: `internal/targets/` 包负责加载和解析目标配置
+- **编译器标志生成**: 自动将目标配置转换为 CCFLAGS/LDFLAGS
+- **LLVM 集成**: 使用 LLVM 目标三元组和 CPU 特定优化
+
+### 无 libc 入口点支持
+- **`internal/build/build.go:715-726`** - 弱符号 `_start()` 函数定义
+- **用途**: 当 libc 不可用时提供入口点 (裸机/嵌入式环境)
+- **实现**: 简单的 `_start()` 调用 `main(0, null)` 提供最小运行时
+- **LLVM IR**: 生成弱符号定义，避免与系统 libc 冲突
+
+### 嵌入式 CI 测试
+- **`.github/workflows/targets.yml`** - 所有嵌入式目标的自动化测试
+- **测试策略**: 使用最小化的 `_demo/empty/empty.go` (空 main 函数)
+- **覆盖范围**: 测试 100+ 嵌入式目标，验证编译而不依赖复杂依赖
+- **验证方式**: 每个目标显示 ✅ 成功或 ❌ 失败及文件类型信息
+
+### 目标使用示例
+```bash
+# 列出可用目标
+ls targets/*.json | sed 's/targets\///g' | sed 's/\.json//g'
+
+# 为特定嵌入式平台构建
+cd _demo/hello
+llgo build -target rp2040 -o firmware.elf .      # Raspberry Pi Pico
+llgo build -target esp32c3 -o firmware.bin .     # ESP32-C3
+llgo build -target arduino-nano -o sketch.hex .  # Arduino Nano
+llgo build -target cortex-m4 -o firmware.o .     # 通用 ARM Cortex-M4
+
+# WebAssembly 目标
+llgo build -target wasm -o module.wasm .
+llgo build -target wasip1 -o program.wasm .
+```
+
+## 技术架构核心思想
+
+这个构建目标设计计划的核心架构理念：
+
+1. **目标抽象** - 不局限于传统的 GOOS/GOARCH，而是支持具体的硬件平台定义
+2. **配置驱动** - 通过 JSON 配置文件灵活定义每个平台的编译特性和硬件能力  
+3. **LLVM 深度集成** - 充分利用 LLVM 强大的交叉编译和优化能力
+4. **渐进式抽象** - 从底层平台支持逐步发展到高层硬件接口抽象
+
+这个嵌入式支持使得 Go 程序能够在微控制器和嵌入式系统上以最小的运行时开销运行，为 Go 语言开辟了嵌入式和 IoT 开发的新领域。
+
+**当前状态**: 第一阶段已完成，LLGO 现在可以编译到 100+ 个嵌入式目标平台！🎉
