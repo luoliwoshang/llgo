@@ -62,16 +62,17 @@ DRAM内存就是ESP32存放data段的内存位置，ld脚本则强制指定其�
 
 ## 引导程序启动流程
 由于启动bootloader代码是处于硬件部分的，暂时没有办法看到其实现，不过猜测如下：
-1.烧录到指定地址后，例如 `0x1000`，硬件会解析ESP32镜像格式，获取bootloader程序相关信息（如`entry point`）
-2.从data段加载引导程序描述头，获取bootloader程序版本
-3.跳转到 `entry point`，实际运行bootloader程序
+
+1. 烧录到指定地址后，例如 `0x1000`，硬件会解析ESP32镜像格式，获取bootloader程序相关信息（如`entry point`）
+2. 从data段加载引导程序描述头，获取bootloader程序版本
+3. 跳转到 `entry point`，实际运行bootloader程序
 
 其中 `entry point` 指定由ld脚本 `ENTRY()` 完成指定，默认为 `call_start_cpu0`
 
 bootloader程序启动后，会进行如下初始化：
-1.初始化内存区域，保护指定内存区域
-2.初始化BSS段
-3.初始化时钟，控制台输出（UART或者USB驱动到用户控制台），硬件看门狗，硬件RNG生成器
+1. 初始化内存区域，保护指定内存区域
+2. 初始化BSS段
+3. 初始化时钟，控制台输出（UART或者USB驱动到用户控制台），硬件看门狗，硬件RNG生成器
 
 ## 应用程序启动流程
 bootloader程序完成初始化后，通过硬件HAL接口读取位于 `0x8000` 的分区表，然后启动应用程序
