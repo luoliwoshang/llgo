@@ -11,7 +11,8 @@ ESP32启动流程分为三步：
 `esp_startup_start_app_other_cores_default`（CPU1- M）
 
 ## 镜像格式
-[https://docs.espressif.com/projects/esp-idf/zh_CN/stable/esp32/api-reference/system/app_image_format.html](ESP32镜像格式)
+[ESP32镜像格式](https://docs.espressif.com/projects/esp-idf/zh_CN/stable/esp32/api-reference/system/app_image_format.html)
+
 其中描述了乐鑫的镜像格式分为两种，第一种是引导程序格式，第二种是应用程序格式
 应用程序格式分为两部分，第一是镜像头（`esp_image_header_t`），与ELF格式很相似，记录entry point地址等等，第二是内存分段头（`esp_image_segment_header_t`），记录代码分别位于什么段段内存
 
