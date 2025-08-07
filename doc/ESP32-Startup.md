@@ -1,9 +1,9 @@
 # ESP32启动流程
 ESP32启动流程分为三步：
-一级引导，加载位于0x1000的程序，程序入口 `call_start_cpu0` （bootloader）
-二级引导（bootloader），找到位于 `0x8000` 的分区表，读取应用程序内存地址，一般是 `0x10000`
 
-三级引导，bootloader加载 `0x10000` 的应用程序，程序入口：`start_cpu0_default`
+* 一级引导，加载位于0x1000的程序，程序入口 `call_start_cpu0` （bootloader）
+* 二级引导（bootloader），找到位于 `0x8000` 的分区表，读取应用程序内存地址，一般是 `0x10000`
+* 三级引导，bootloader加载 `0x10000` 的应用程序，程序入口：`start_cpu0_default`
 ，一般由 `esp_system` 套件实现，主要是进行一些硬件初始化和libc初始化操作
 
 `esp_system` 完成硬件初始化后才会开始启动应用程序部分的代码，入口分为两个：
