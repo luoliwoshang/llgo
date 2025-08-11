@@ -93,7 +93,11 @@ type Interrupt struct {
 
 #### 后端部分
 
-Pass会查找所有存在 `interrupt.handle` 的符号，并进行如下替换
+Pass会查找所有存在 `interrupt.handle` 的符号，获得 funcPtr 和 中断id，
+
+例如：`runtime/interrupt.$interrupt2`，解析得到：`runtime/interrupt` 和 中断id为 2
+
+并进行如下替换
 
 ```
 runtime/interrupt.callHandlers => funcPtr
