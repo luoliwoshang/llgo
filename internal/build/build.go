@@ -654,7 +654,7 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, global l
 
 func constructMain(ctx *context, app string, objFiles []string, verbose bool) error {
 	args := []string{}
-	// args = append(args, "--target=xtensa-esp-elf", "-mcpu=esp32")
+	args = append(args, "--target=xtensa-esp-unknown-elf", "-mcpu=esp32")
 
 	args = append(args,
 		"-Os",
@@ -809,17 +809,23 @@ call i32 @setvbuf(ptr %stderr_ptr, ptr null, i32 2, %size_t 0)
 	}
 	// TODO(lijie): workaround for libc-free
 	// Remove main/_start when -buildmode and libc are ready
+	// only for esp32 !
 	startDefine := `
-define weak void @_start() {
-  ; argc = 0
-  %argc_val = icmp eq i32 0, 0
-  %argc = zext i1 %argc_val to i32
-  ; argv = null
-  %argv = inttoptr i64 0 to i8**
-  call i32 @main(i32 %argc, i8** %argv)
-  ret void
-}
-`
+	define dso_local void @app_main() {
+	  ; argc = 0
+	  %argc_val = icmp eq i32 0, 0
+	  %argc = zext i1 %argc_val to i32
+	  ; argv = null
+	  %argv = inttoptr i64 0 to i8**
+	  call i32 @main(i32 %argc, i8** %argv)
+	  ret void
+	}
+	`
+
+	if ctx.buildConf.Target
+
+	
+
 	mainDefine := "define i32 @main(i32 noundef %0, ptr nocapture noundef readnone %1) local_unnamed_addr"
 	if isWasmTarget(ctx.buildConf.Goos) {
 		mainDefine = "define hidden noundef i32 @__main_argc_argv(i32 noundef %0, ptr nocapture noundef readnone %1) local_unnamed_addr"
