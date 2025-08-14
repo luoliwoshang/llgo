@@ -170,6 +170,10 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	if conf.Tags != "" {
 		tags += "," + conf.Tags
 	}
+	if len(export.BuildTags) != 0 {
+		tags += "," + strings.Join(export.BuildTags, ",")
+	}
+	fmt.Println("Build tags:", tags)
 	cfg := &packages.Config{
 		Mode:       loadSyntax | packages.NeedDeps | packages.NeedModule | packages.NeedExportFile,
 		BuildFlags: []string{"-tags=" + tags},
@@ -821,10 +825,6 @@ call i32 @setvbuf(ptr %stderr_ptr, ptr null, i32 2, %size_t 0)
 	  ret void
 	}
 	`
-
-	if ctx.buildConf.Target
-
-	
 
 	mainDefine := "define i32 @main(i32 noundef %0, ptr nocapture noundef readnone %1) local_unnamed_addr"
 	if isWasmTarget(ctx.buildConf.Goos) {

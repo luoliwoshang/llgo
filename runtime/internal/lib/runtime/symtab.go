@@ -5,10 +5,7 @@
 package runtime
 
 import (
-	"unsafe"
-
 	c "github.com/goplus/llgo/runtime/internal/clite"
-	"github.com/goplus/llgo/runtime/internal/clite/debug"
 )
 
 // Frames may be used to get function/file/line information for a
@@ -92,10 +89,16 @@ func (ci *Frames) Next() (frame Frame, more bool) {
 		} else {
 			pc, ci.callers = ci.callers[0], ci.callers[1:]
 		}
-		info := &debug.Info{}
-		if debug.Addrinfo(unsafe.Pointer(pc), info) == 0 {
-			break
-		}
+		info := &struct {
+			Fname *c.Char
+			Fbase c.Pointer
+			Sname *c.Char
+			Saddr c.Pointer
+		}{}
+
+		// if debug.Addrinfo(unsafe.Pointer(pc), info) == 0 {
+		// 	break
+		// }
 		ci.frames = append(ci.frames, Frame{
 			PC:        pc,
 			Function:  safeGoString(info.Fname, "<unknown function>"),

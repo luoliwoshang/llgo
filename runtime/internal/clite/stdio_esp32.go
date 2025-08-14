@@ -1,5 +1,5 @@
-//go:build !darwin && !esp32
-// +build !darwin,!esp32
+//go:build esp32
+// +build esp32
 
 /*
  * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
@@ -21,11 +21,6 @@ package c
 
 import _ "unsafe"
 
-//go:linkname Stdin stdin
-var Stdin FilePtr
-
-//go:linkname Stdout stdout
-var Stdout FilePtr
-
-//go:linkname Stderr stderr
-var Stderr FilePtr
+var Stdin FilePtr = nil
+var Stdout FilePtr = nil
+var Stderr FilePtr = nil
