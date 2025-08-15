@@ -391,6 +391,7 @@ func (c *context) linker() *clang.Cmd {
 	if c.crossCompile.Linker != "" {
 		cmd = clang.New(c.crossCompile.Linker)
 	}
+	fmt.Println("c.crossCompile.Linker", c.crossCompile.Linker)
 	cmd.Verbose = c.buildConf.Verbose
 	return cmd
 }
@@ -654,6 +655,7 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, global l
 
 func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose bool) error {
 	buildArgs := []string{"-o", app}
+	buildArgs = append(buildArgs, "-nostdlib", "-L/Users/zhangzhiyang/.espressif/tools/esp-clang/esp-18.1.2_20240912/esp-clang/lib/clang-runtimes/xtensa-esp-unknown-elf/esp32/lib", "-lc", "-lnosys", "-lm")
 	buildArgs = append(buildArgs, linkArgs...)
 
 	// Add common linker arguments based on target OS and architecture
