@@ -51,6 +51,29 @@ func cstr(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
 - 这是编译时的指令生成器，不是运行时函数
 - `constStr()` 是关键 - 确保只处理编译时已知的字符串
 
+## constStr 函数分析
+
+```go
+func constStr(v ssa.Value) (ret string, ok bool) {
+    if c, ok := v.(*ssa.Const); ok {        // 类型断言：检查是否为 *ssa.Const
+        if v := c.Value; v.Kind() == constant.String {  // 检查常量类型
+            return constant.StringVal(v), true   // 提取字符串值
+        }
+    }
+    return  // 不是字符串常量则返回 false
+}
+```
+
+**关键理解**：
+- `ssa.Value` 是接口，有多种实现类型
+- 字符串字面量在 Go SSA 中是 `*ssa.Const` 类型
+- `constStr()` 通过类型断言提取实际字符串内容
+
+**数据流**：
+```
+Go源码: "Hello" → Go SSA: *ssa.Const → constStr(): 类型断言 → 字符串值
+```
+
 ## 待理解
 
 - [ ] 其他编译器指令的实现
