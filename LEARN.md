@@ -30,6 +30,27 @@ LLVM 层
 - `ssa` 层 = 编译器的"手臂"（IR 生成工具）
 - Builder = Go语义 到 LLVM IR 的桥梁
 
+## cstr 函数分析
+
+```go
+func cstr(b llssa.Builder, args []ssa.Value) (ret llssa.Expr) {
+    // len(args) == 1 
+    if sv, ok := constStr(args[0]); ok {  // 从 SSA Value 提取字符串常量
+        return b.CStr(sv)  // 调用 Builder 构建 LLVM 指令
+    }
+}
+```
+
+**关键步骤**：
+1. 检查参数数量 `len(args) == 1`
+2. 从 SSA Value 提取字符串常量 `constStr(args[0])`
+3. 调用 `b.CStr(sv)` 构建 LLVM 全局字符串指令
+4. 非字符串字面量会触发 panic
+
+**理解要点**：
+- 这是编译时的指令生成器，不是运行时函数
+- `constStr()` 是关键 - 确保只处理编译时已知的字符串
+
 ## 待理解
 
 - [ ] 其他编译器指令的实现
