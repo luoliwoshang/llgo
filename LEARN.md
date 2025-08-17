@@ -74,6 +74,35 @@ func constStr(v ssa.Value) (ret string, ok bool) {
 Go源码: "Hello" → Go SSA: *ssa.Const → constStr(): 类型断言 → 字符串值
 ```
 
+## Program 和 Package 层次
+
+```go
+// Program - 全局程序上下文
+type aProgram struct {
+    ctx   llvm.Context        // LLVM 上下文
+    typs  typeutil.Map        // 类型映射缓存
+    rt    *types.Package      // Go 运行时包
+    py    *types.Package      // Python 集成包
+}
+
+// Package - 单个包上下文  
+type aPackage struct {
+    mod llvm.Module           // LLVM 模块 (一个 .ll 文件)
+    Prog Program              // 所属的 Program
+    vars   map[string]Global   // 全局变量
+    fns    map[string]Function // 函数
+}
+```
+
+**层次关系**：
+```
+Program (全局) → Package (包) → Function (函数) → Builder (指令) → LLVM IR
+```
+
+**作用**：
+- **Program**: 整个编译器实例，管理全局状态和类型系统
+- **Package**: 单个 Go 包，对应一个 LLVM 模块，管理包内符号
+
 ## 待理解
 
 - [ ] 其他编译器指令的实现
