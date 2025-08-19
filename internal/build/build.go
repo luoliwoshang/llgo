@@ -170,6 +170,9 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	if conf.Tags != "" {
 		tags += "," + conf.Tags
 	}
+	if len(export.BuildTags) > 0 {
+		tags += "," + strings.Join(export.BuildTags, ",")
+	}
 	cfg := &packages.Config{
 		Mode:       loadSyntax | packages.NeedDeps | packages.NeedModule | packages.NeedExportFile,
 		BuildFlags: []string{"-tags=" + tags},
@@ -732,8 +735,7 @@ call i32 @setvbuf(ptr %stderr_ptr, ptr null, i32 2, %size_t 0)
 	startDefine := `
 define weak void @_start() {
   ; argc = 0
-  %argc_val = icmp eq i32 0, 0
-  %argc = zext i1 %argc_val to i32
+  %argc = add i32 0, 0
   ; argv = null
   %argv = inttoptr i64 0 to i8**
   call i32 @main(i32 %argc, i8** %argv)
