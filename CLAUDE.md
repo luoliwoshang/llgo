@@ -88,6 +88,24 @@ go install github.com/goplus/hdq/chore/pysigfetch@v0.8.1
 - **`/runtime/`** - Custom Go runtime implementation with local module replacement
 - **`/internal/build/`** - Build orchestration that strings together the compilation process
 
+### Compiler Directives Architecture
+
+LLGO implements compiler directives (like `llgo.cstr`, `llgo.atomicLoad`) using a "bypass architecture" that **directly couples with SSA intermediate representation rather than Go function signatures**:
+
+```
+Normal Go Functions:  Go AST → Go Types → SSA → LLVM IR
+                               ^^^^^^^^^ requires signature
+
+Compiler Directives:  Go AST → SSA → LLVM IR  
+                              ^^^ bypasses type system
+```
+
+**Key Characteristics:**
+- Go function signatures serve as user-facing type safety guarantees
+- Actual return values are determined entirely by compiler internal implementation
+- All directive implementations follow: `func(b llssa.Builder, args []ssa.Value) llssa.Expr`
+- This enables compile-time optimizations and platform-specific code generation
+
 ### Development Tools (chore/)
 
 - **`llgen/`** - Compiles Go packages into LLVM IR files (*.ll)

@@ -28,6 +28,65 @@ LLVM 层
 - `llgo.cstr` = 编译器指令，不是运行时函数
 - `cl` 层 = 编译器的"大脑"（语义理解）
 - `ssa` 层 = 编译器的"手臂"（IR 生成工具）
+
+## LLGO 编译器指令架构洞察
+
+### 关键发现：直接SSA耦合，跳过Go类型系统
+
+LLGO的编译器指令实现采用"旁路架构"，**直接与SSA中间表示耦合，而不与Go函数签名耦合**。
+
+#### 架构对比
+
+```
+普通Go函数：  Go AST → Go Types → SSA → LLVM IR
+                      ^^^^^^^^^ 需要签名信息
+
+编译器指令：   Go AST → SSA → LLVM IR  
+                     ^^^ 直接跳过类型系统
+```
+
+#### 实现机制
+
+1. **指令识别**：`cl/import.go:544-546`
+   ```go
+   if strings.HasPrefix(v, "llgo.") {
+       return nil, v[5:], llgoInstr  // 只看linkname，不看签名
+   }
+   ```
+
+2. **指令处理**：`cl/instr.go:349-352`
+   ```go
+   case llgoInstr:
+       if ftype = llgoInstrs[name]; ftype == 0 {
+           panic("unknown llgo instruction: " + name)
+       }
+       // 注意：完全没有使用 fn.Signature！
+   ```
+
+3. **具体实现**：所有编译器指令都是这个模式
+   ```go
+   func cstr(b llssa.Builder, args []ssa.Value) (ret llssa.Expr)
+   //                        ^^^^^^^^^^^^^ 只看SSA值，不看Go类型
+   //                                             ^^^^^^^^ 返回LLVM表达式
+   ```
+
+#### 关键特征
+
+- **Go函数签名** = 用户接口的类型安全保证
+- **实际返回值** = 完全由编译器内部实现决定
+- **参数处理** = 基于SSA值的运行时类型检查
+- **返回值生成** = 直接返回LLVM IR表达式
+
+#### 设计优势
+
+1. **性能优化** - 编译器指令生成特定LLVM IR，不受Go类型限制
+2. **灵活性** - 可以返回任何LLVM表达式类型  
+3. **编译时计算** - 支持编译时常量处理和优化
+4. **平台抽象** - 同一指令可在不同平台生成不同LLVM IR
+
+#### 本质理解
+
+**LLGO编译器指令是"元编程"机制 - 它们不是普通函数，而是编译时的代码生成器，操作在SSA层面，具有跳过Go类型系统的特权。**
 - Builder = Go语义 到 LLVM IR 的桥梁
 
 ## cstr 函数分析
