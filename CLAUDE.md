@@ -159,10 +159,28 @@ Target: arm64-apple-darwin24.5.0
 ```
 
 #### **Clang 发现机制**
-LLGO 按以下优先级自动发现 clang：
+LLGO 按以下优先级自动发现 clang，具体实现在 `xtool/env/llvm/llvm.go:36-46`：
 1. **环境变量 `LLVM_CONFIG`**（如果设置）
+   ```go
+   // xtool/env/llvm/llvm.go:37
+   bin := os.Getenv("LLVM_CONFIG")
+   ```
 2. **PATH 中的 `llvm-config`**（当前使用）
-3. **备用路径**（系统默认路径）
+   ```go
+   // xtool/env/llvm/llvm.go:41
+   bin, _ = exec.LookPath("llvm-config")
+   ```
+3. **备用路径**（平台特定的编译时常量）
+   ```go
+   // xtool/env/llvm/llvm.go:45
+   return ldLLVMConfigBin
+   ```
+   
+   备用路径按平台和架构定义：
+   - **macOS ARM64**: `/opt/homebrew/opt/llvm@19/bin/llvm-config`
+   - **macOS AMD64**: `/usr/local/opt/llvm@19/bin/llvm-config`  
+   - **Linux**: `/usr/lib/llvm-19/bin/llvm-config`
+   - **Windows**: `llvm-config.exe`
 
 #### **交叉编译工具链**
 根据目标平台自动选择不同的 clang：
