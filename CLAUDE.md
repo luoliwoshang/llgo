@@ -28,6 +28,9 @@ go build -v ./...
 # Run all tests
 go test ./...
 
+# Run specific test
+go test ./cl -run TestSpecificTest
+
 # Run tests with llgo compiler
 llgo test ./...
 
@@ -52,6 +55,11 @@ llgo install [flags] [packages]  # Compile and install
 llgo clean [flags] [packages]    # Remove object files
 llgo version                     # Print version
 llgo cmptest [flags] package     # Compare output with standard go
+
+# Cross-compilation to embedded targets
+llgo build -target rp2040 .      # Raspberry Pi Pico
+llgo build -target esp32c3 .     # ESP32-C3
+llgo build -target wasm .        # WebAssembly
 
 # Disable garbage collection
 llgo run -tags nogc .
@@ -82,11 +90,12 @@ go install github.com/goplus/hdq/chore/pysigfetch@v0.8.1
 
 ### Core Components
 
-- **`/cmd/llgo/`** - Main CLI application built with XGo/GoPlus framework using `.gox` files
-- **`/cl/`** - Core compiler logic that converts Go AST to LLVM IR
-- **`/ssa/`** - LLVM SSA generation using Go SSA semantics, provides high-level LLVM interface
-- **`/runtime/`** - Custom Go runtime implementation with local module replacement
-- **`/internal/build/`** - Build orchestration that strings together the compilation process
+- **`/cmd/llgo/`** - Main CLI application built with XGo/GoPlus framework using `.gox` files (not `.go`)
+- **`/cl/`** - Core compiler logic that converts Go AST to LLVM IR via Go SSA
+- **`/ssa/`** - LLVM SSA generation using Go SSA semantics, provides high-level LLVM interface bridging Go and LLVM
+- **`/runtime/`** - Custom Go runtime implementation with local module replacement for LLVM compatibility
+- **`/internal/build/`** - Build orchestration that coordinates the entire compilation pipeline
+- **`/targets/`** - 100+ JSON target configuration files for embedded platforms and cross-compilation
 
 ### Compiler Directives Architecture
 
@@ -108,10 +117,12 @@ Compiler Directives:  Go AST → SSA → LLVM IR
 
 ### Development Tools (chore/)
 
-- **`llgen/`** - Compiles Go packages into LLVM IR files (*.ll)
-- **`llpyg/`** - Converts Python libraries into Go packages automatically
-- **`ssadump/`** - Go SSA builder and interpreter
-- **`pydump/`** - Extracts Python library symbols (first production llgo program)
+- **`llgen/`** - Compiles Go packages into LLVM IR files (*.ll) for debugging and analysis
+- **`llpyg/`** - Converts Python libraries into Go packages automatically using symbol extraction
+- **`ssadump/`** - Go SSA builder and interpreter for SSA analysis
+- **`pydump/`** - Extracts Python library symbols (first production llgo program, compiled with llgo itself)
+- **`nmdump/`** - Symbol extraction from object files using `nm`
+- **`clangpp/`** - C++ integration tooling
 
 ### Key Directories
 
@@ -127,12 +138,12 @@ Compiler Directives:  Go AST → SSA → LLVM IR
 ## Development Environment
 
 ### Dependencies
-- Go 1.23+
-- LLVM 19 (specific version required)
-- Clang 19, LLD 19
-- bdwgc (Boehm garbage collector)
-- OpenSSL, libffi, libuv, pkg-config
-- Python 3.12+ (optional, for Python integration)
+- Go 1.23+ (specific version required, uses go1.24.1 toolchain)
+- LLVM 19 (specific version required - not compatible with other versions)
+- Clang 19, LLD 19 (must match LLVM version)
+- bdwgc (Boehm garbage collector) for default GC implementation
+- OpenSSL, libffi, libuv, pkg-config for C ecosystem integration
+- Python 3.12+ (optional, for Python library integration via `py` packages)
 
 ### Platform-Specific Setup
 
@@ -171,16 +182,19 @@ sudo apt-get install -y llvm-19-dev clang-19 lld-19 libgc-dev libssl-dev zlib1g-
 
 ### Module Structure
 - Uses Go modules with local runtime replacement: `replace github.com/goplus/llgo/runtime => ./runtime`
-- CLI built with XGo framework using `.gox` files instead of `.go`
-- LLVM dependency requires specific installation paths
+- CLI built with XGo/GoPlus framework using `.gox` files instead of `.go` (supports advanced Go+ syntax)
+- LLVM dependency requires specific installation paths and version matching
+- Complex test suite structure with separate directories: `_testdata/`, `_testgo/`, `_testlibc/`, `_testpy/`, `_testrt/`
 
 ### Testing
 - **Comparison Testing**: Compare llgo output with standard Go using `llgo cmptest`
 - **Demo Validation**: All `_demo/` examples are tested in CI to ensure cross-platform compatibility
 - **Behavior Verification**: Test that both `llgo run .` and `go run .` produce identical results
 - **Regression Prevention**: New functionality should include demo examples in `_demo/`
-- Extensive test suites across multiple `_test*` directories
-- CI runs on macOS and Ubuntu with coverage reporting
+- **Embedded Target Testing**: CI validates 100+ target configurations in `.github/workflows/targets.yml`
+- **Format Validation**: Strict formatting requirements enforced via `go fmt` in CI
+- Extensive test suites across multiple `_test*` directories (`_testgo/`, `_testlibc/`, `_testpy/`, `_testrt/`)
+- CI runs on macOS and Ubuntu with LLVM 19 across multiple versions
 
 ## Running Examples
 
