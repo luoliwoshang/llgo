@@ -145,6 +145,44 @@ LLGO 使用"旁路架构"实现编译器指令（如 `llgo.cstr`、`llgo.atomicL
 - OpenSSL、libffi、libuv、pkg-config 用于 C 生态系统集成
 - Python 3.12+（可选，用于通过 `py` 包进行 Python 库集成）
 
+### Clang 配置和来源
+
+#### **当前 Clang 来源**
+LLGO 使用通过 Homebrew 安装的 LLVM 19 中的 clang：
+```bash
+# 当前使用的 clang 路径
+/opt/homebrew/opt/llvm@19/bin/clang
+
+# 版本信息
+Homebrew clang version 19.1.7
+Target: arm64-apple-darwin24.5.0
+```
+
+#### **Clang 发现机制**
+LLGO 按以下优先级自动发现 clang：
+1. **环境变量 `LLVM_CONFIG`**（如果设置）
+2. **PATH 中的 `llvm-config`**（当前使用）
+3. **备用路径**（系统默认路径）
+
+#### **交叉编译工具链**
+根据目标平台自动选择不同的 clang：
+- **普通目标**：Homebrew LLVM@19 clang
+- **ESP32 目标**：自动下载 Espressif LLVM 工具链 (19.1.2_20250820)
+- **WASI 目标**：自动下载 WASI SDK clang
+- **嵌入式目标**：根据 `/targets/*.json` 配置选择工具链
+
+#### **配置优先级**
+编译标志按以下优先级合并：
+1. 环境变量 `CCFLAGS`
+2. 环境变量 `CFLAGS`/`LDFLAGS`
+3. 目标配置文件中的标志
+4. 程序内部默认设置
+
+#### **关键实现文件**
+- **`internal/clang/clang.go`**：clang 命令封装和配置管理
+- **`xtool/env/llvm/llvm.go`**：LLVM 环境发现和初始化  
+- **`internal/crosscompile/crosscompile.go`**：交叉编译工具链管理
+
 ### 平台特定配置
 
 **macOS：**
