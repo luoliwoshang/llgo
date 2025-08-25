@@ -182,12 +182,46 @@ LLGO 按以下优先级自动发现 clang，具体实现在 `xtool/env/llvm/llvm
    - **Linux**: `/usr/lib/llvm-19/bin/llvm-config`
    - **Windows**: `llvm-config.exe`
 
-#### **交叉编译工具链**
-根据目标平台自动选择不同的 clang：
-- **普通目标**：Homebrew LLVM@19 clang
-- **ESP32 目标**：自动下载 Espressif LLVM 工具链 (19.1.2_20250820)
-- **WASI 目标**：自动下载 WASI SDK clang
-- **嵌入式目标**：根据 `/targets/*.json` 配置选择工具链
+#### **交叉编译工具链选择机制**
+LLGO 通过 `internal/crosscompile/crosscompile.go` 实现智能工具链选择：
+
+**主入口函数** (`crosscompile.go:588`):
+```go
+func Use(goos, goarch string, wasiThreads bool, targetName string) (export Export, err error) {
+    if targetName != "" {
+        return useTarget(targetName)  // 使用目标配置文件
+    }
+    return use(goos, goarch, wasiThreads)  // 使用 GOOS/GOARCH
+}
+```
+
+**两种选择路径**:
+
+1. **目标配置文件模式** (`useTarget` 函数 - 行436):
+   - 解析 `/targets/*.json` 配置文件
+   - 自动选择 ESP Clang 工具链
+   - 示例：`llgo build -target esp32c3 .`
+
+2. **平台架构模式** (`use` 函数 - 行218):
+   - 基于 GOOS/GOARCH 选择工具链
+   - 支持 WASI、Emscripten 等特殊平台
+
+**工具链自动下载逻辑**:
+
+- **ESP32 系列** (`getESPClangRoot` - 行159):
+  ```go
+  // 检查优先级：LLGO_ROOT -> 缓存 -> 自动下载
+  espClangRoot := filepath.Join(llgoRoot, "crosscompile", "clang")
+  // 自动下载 Espressif LLVM 19.1.2_20250820
+  ```
+
+- **WASI 目标** (`use` 函数中 wasip1 分支 - 行309):
+  ```go
+  // 自动下载并解压 WASI SDK
+  wasiSdkRoot, err = checkDownloadAndExtractWasiSDK(sdkDir)
+  ```
+
+- **普通目标**：使用系统 Homebrew LLVM@19 clang
 
 #### **配置优先级**
 编译标志按以下优先级合并：
