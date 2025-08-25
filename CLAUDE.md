@@ -212,16 +212,38 @@ func Use(goos, goarch string, wasiThreads bool, targetName string) (export Expor
   ```go
   // 检查优先级：LLGO_ROOT -> 缓存 -> 自动下载
   espClangRoot := filepath.Join(llgoRoot, "crosscompile", "clang")
-  // 自动下载 Espressif LLVM 19.1.2_20250820
+  // 缓存路径生成 (crosscompile.go:172)
+  cacheClangDir := filepath.Join(cacheRoot(), "crosscompile", "esp-clang-"+espClangVersion)
+  // 实际路径：~/Library/Caches/llgo/crosscompile/esp-clang-19.1.2_20250820/bin/clang++
   ```
 
 - **WASI 目标** (`use` 函数中 wasip1 分支 - 行309):
   ```go
   // 自动下载并解压 WASI SDK
   wasiSdkRoot, err = checkDownloadAndExtractWasiSDK(sdkDir)
+  // 缓存路径：~/Library/Caches/llgo/crosscompile/wasm32-unknown-wasip1/
   ```
 
 - **普通目标**：使用系统 Homebrew LLVM@19 clang
+
+#### **缓存目录结构**
+LLGO 使用系统标准缓存目录 (`env.go:35-41`)：
+```go
+func LLGoCacheDir() string {
+    userCacheDir, _ := os.UserCacheDir()  // macOS: ~/Library/Caches
+    return filepath.Join(userCacheDir, "llgo")
+}
+```
+
+**实际缓存结构**：
+```
+~/Library/Caches/llgo/
+├── crosscompile/
+│   ├── esp-clang-19.1.2_20250820/     # ESP32 工具链
+│   │   └── bin/clang++
+│   ├── wasm32-unknown-wasip1/          # WASI SDK  
+│   └── [其他目标平台缓存]
+```
 
 #### **配置优先级**
 编译标志按以下优先级合并：
