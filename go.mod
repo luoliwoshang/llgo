@@ -6,7 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/goplus/cobra v1.9.12 //gop:class
-	github.com/goplus/gogen v1.19.0
+	github.com/goplus/gogen v1.19.1
 	github.com/goplus/lib v0.2.0
 	github.com/goplus/llgo/runtime v0.0.0-00010101000000-000000000000
 	github.com/goplus/llvm v0.8.5
@@ -14,6 +14,8 @@ require (
 	github.com/qiniu/x v1.15.1
 	golang.org/x/tools v0.36.0
 )
+
+require github.com/sigurn/crc16 v0.0.0-20240131213347-83fcde1e29d1
 
 require (
 	golang.org/x/mod v0.27.0 // indirect

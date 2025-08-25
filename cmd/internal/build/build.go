@@ -47,10 +47,7 @@ func runCmd(cmd *base.Command, args []string) {
 	}
 
 	conf := build.NewDefaultConf(build.ModeBuild)
-	conf.Tags = flags.Tags
-	conf.Verbose = flags.Verbose
-	conf.OutFile = flags.OutputFile
-	conf.Target = flags.Target
+	flags.UpdateConfig(conf)
 
 	args = cmd.Flag.Args()
 
