@@ -2,6 +2,23 @@
 
 本文件为 Claude Code (claude.ai/code) 在本代码库中工作时提供中文指导。
 
+## ⚠️ 重要提醒：编译器修改后必须重新安装
+
+**针对编译器的任何修改，都必须运行 `./install.sh` 来安装新的 LLGO！**
+
+```bash
+# 修改编译器源码后，必须执行：
+./install.sh
+
+# 这会重新编译并安装 llgo 到 $GOPATH/bin/llgo
+# 只有这样修改才会生效！
+```
+
+**为什么需要重新安装：**
+- LLGO 编译器是通过 Go 构建系统编译的独立二进制
+- 源码修改不会自动影响已安装的 `llgo` 命令
+- `./install.sh` 确保使用最新的源码重新构建和安装编译器
+
 ## 项目概述
 
 LLGO 是一个基于 LLVM 的 Go 编译器，旨在将 Go 与包括 Python 在内的 C 生态系统集成。它是 XGo 项目的子项目，旨在通过实现与 C/C++ 和 Python 库的无缝互操作性来扩展 Go 的边界。
@@ -57,9 +74,18 @@ llgo version                  # 打印版本
 llgo cmptest [标志] 包        # 与标准 go 比较输出
 
 # 交叉编译到嵌入式目标
-llgo build -target rp2040 .   # Raspberry Pi Pico
-llgo build -target esp32c3 .  # ESP32-C3
-llgo build -target wasm .     # WebAssembly
+llgo build -target rp2040 .                    # Raspberry Pi Pico
+llgo build -target esp32c3 .                   # ESP32-C3
+llgo build -target esp32-coreboard-v2 .        # ESP32 CoreBoard V2 开发板
+llgo build -target wasm .                      # WebAssembly
+
+# 嵌入式开发板编译（指定输出文件）
+llgo build -target esp32-coreboard-v2 -o firmware.bin .    # 为开发板生成固件
+llgo build -target rp2040 -o firmware.uf2 .               # Raspberry Pi Pico 固件
+
+# 查看详细构建日志（调试工具链和编译过程）
+llgo build -target esp32c3 -v .                # 显示详细编译过程
+llgo build -target esp32-coreboard-v2 -v -o firmware.bin . # 详细日志 + 输出文件
 
 # 禁用垃圾回收
 llgo run -tags nogc .
@@ -407,14 +433,23 @@ ls targets/*.json | sed 's/targets\///g' | sed 's/\.json//g'
 
 # 为特定嵌入式平台构建
 cd _demo/hello
-llgo build -target rp2040 -o firmware.elf .      # Raspberry Pi Pico
-llgo build -target esp32c3 -o firmware.bin .     # ESP32-C3
-llgo build -target arduino-nano -o sketch.hex .  # Arduino Nano
-llgo build -target cortex-m4 -o firmware.o .     # 通用 ARM Cortex-M4
+llgo build -target rp2040 -o firmware.elf .           # Raspberry Pi Pico
+llgo build -target esp32c3 -o firmware.bin .          # ESP32-C3
+llgo build -target esp32-coreboard-v2 -o firmware.bin . # ESP32 CoreBoard V2 开发板
+llgo build -target arduino-nano -o sketch.hex .       # Arduino Nano
+llgo build -target cortex-m4 -o firmware.o .          # 通用 ARM Cortex-M4
+
+# 开发板专用编译（查看详细构建过程）
+llgo build -target esp32-coreboard-v2 -v -o firmware.bin .  # 显示工具链调用详情
+llgo build -target rp2040 -v -o firmware.uf2 .             # Pico 开发详细日志
 
 # WebAssembly 目标
 llgo build -target wasm -o module.wasm .
 llgo build -target wasip1 -o program.wasm .
+
+# 调试嵌入式编译过程
+llgo build -target esp32-coreboard-v2 -v . 2>&1 | grep clang  # 查看使用的编译器
+llgo build -target esp32c3 -v . 2>&1 | head -20               # 查看前20行构建日志
 ```
 
 ## 技术架构核心思想
