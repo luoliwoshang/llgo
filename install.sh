@@ -40,7 +40,13 @@ get_system_info() {
 # Function to install from local source
 install_local() {
     echo "Installing llgo from local source..."
-    go install ./cmd/llgo
+    export CGO_CPPFLAGS="-I/Users/zhangzhiyang/Documents/Code/goplus/llgo/esp-clang/include"
+    export CGO_LDFLAGS="-L/Users/zhangzhiyang/Documents/Code/goplus/llgo/esp-clang/lib -lLLVM"
+    # go install ./cmd/llgo
+
+    go build -o ./build/llgo -tags=byollvm -ldflags="-s -w -X github.com/goplus/llgo/internal/env.buildVersion=v0.12.12 -X github.com/goplus/llgo/internal/env.buildTime=2025-08-26T05:56:44Z -X github.com/goplus/llgo/xtool/env/llvm.ldLLVMConfigBin=/Users/zhangzhiyang/Documents/Code/goplus/llgo/esp-clang/bin/llvm-config" ./cmd/llgo
+
+
     echo "Local installation complete."
     echo "llgo is now available in your GOPATH."
     if [ -n "$GITHUB_ENV" ]; then
