@@ -4,26 +4,38 @@ set -e
 ESP_CLANG_VERSION="19.1.2_20250830"
 BASE_URL="https://github.com/goplus/espressif-llvm-project-prebuilt/releases/download/${ESP_CLANG_VERSION}"
 
-get_filename() {
+get_esp_clang_platform() {
     local platform="$1"
-    case "${platform}" in
-        "darwin-amd64")
-            echo "clang-esp-${ESP_CLANG_VERSION}-x86_64-apple-darwin.tar.xz"
+    local os="${platform%-*}"
+    local arch="${platform##*-}"
+    
+    case "${os}" in
+        "darwin")
+            case "${arch}" in
+                "amd64") echo "x86_64-apple-darwin" ;;
+                "arm64") echo "aarch64-apple-darwin" ;;
+                *) echo "Error: Unsupported darwin architecture: ${arch}" >&2; exit 1 ;;
+            esac
             ;;
-        "darwin-arm64")
-            echo "clang-esp-${ESP_CLANG_VERSION}-aarch64-apple-darwin.tar.xz"
-            ;;
-        "linux-amd64")
-            echo "clang-esp-${ESP_CLANG_VERSION}-x86_64-linux-gnu.tar.xz"
-            ;;
-        "linux-arm64")
-            echo "clang-esp-${ESP_CLANG_VERSION}-aarch64-linux-gnu.tar.xz"
+        "linux")
+            case "${arch}" in
+                "amd64") echo "x86_64-linux-gnu" ;;
+                "arm64") echo "aarch64-linux-gnu" ;;
+                "arm")   echo "arm-linux-gnueabihf" ;;
+                *) echo "Error: Unsupported linux architecture: ${arch}" >&2; exit 1 ;;
+            esac
             ;;
         *)
-            echo "Error: Unknown platform ${platform}" >&2
+            echo "Error: Unsupported OS: ${os}" >&2
             exit 1
             ;;
     esac
+}
+
+get_filename() {
+    local platform="$1"
+    local platform_suffix=$(get_esp_clang_platform "${platform}")
+    echo "clang-esp-${ESP_CLANG_VERSION}-${platform_suffix}.tar.xz"
 }
 
 download_and_extract() {
@@ -53,9 +65,4 @@ for platform in "darwin-amd64" "darwin-arm64" "linux-amd64" "linux-arm64"; do
 done
 
 wait
-
-echo ""
-echo "Directory structure:"
-find crosscompile -name "clang++" -type f
-echo "Total size:"
-du -sh crosscompile/
+ls -la crosscompile
