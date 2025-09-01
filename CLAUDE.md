@@ -535,3 +535,31 @@ llgo build -target esp32c3 -v . 2>&1 | head -20               # 查看前20行�
 - **依赖分析工具**: `otool -L` (macOS), `ldd` (Linux)
 - **RPATH 配置**: 编译时设置，运行时库搜索路径
 - **实际库位置**: `/opt/homebrew/Cellar/llgo/.../libexec/crosscompile/clang/lib/`
+
+### GoReleaser 配置验证
+**`.goreleaser.yaml` 完全验证了动态链接设计**:
+
+#### 多平台构建配置 (4个目标)
+- **macOS Intel**: `/usr/local/opt/llvm@19` + `o64-clang` 交叉编译
+- **macOS Apple Silicon**: `/opt/homebrew/opt/llvm@19` + `oa64-clang++`  
+- **Linux x86_64**: `/usr/lib/llvm-19` + `x86_64-linux-gnu-gcc`
+- **Linux ARM64**: `/usr/lib/llvm-19` + `aarch64-linux-gnu-gcc`
+
+#### 动态链接配置证据
+- **`byollvm` 构建标签**: Build with Your Own LLVM，使用系统 LLVM
+- **CGO_LDFLAGS**: 所有平台都使用 `-lLLVM-19` 动态链接
+- **硬编码 llvm-config 路径**: 每平台指定具体的 `ldLLVMConfigBin`
+- **Sysroot 依赖**: 使用预构建的 `.sysroot/` 目录进行交叉编译
+
+#### 发布格式支持
+- **tar.gz**: 包含 `bin/llgo` + `runtime/` + 文档
+- **Linux 包**: deb/rpm 系统包管理器集成
+- **Snap**: Ubuntu Store 分发，使用 `classic` 限制模式
+- **校验和**: 自动生成文件完整性验证
+
+#### 技术设计理念
+这个配置揭示了 LLGO 团队的**技术权衡决策**：
+- ✅ **减小分发尺寸**: 避免在每个平台二进制中打包 82MB LLVM
+- ✅ **利用系统资源**: 复用已安装的 LLVM 19 提高内存效率
+- ⚠️ **增加部署复杂性**: 需要精确匹配的 LLVM 版本和路径
+- 🎯 **专业工具定位**: 面向已有 LLVM 环境的开发者，非通用分发
