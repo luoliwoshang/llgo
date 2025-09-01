@@ -464,3 +464,74 @@ llgo build -target esp32c3 -v . 2>&1 | head -20               # 查看前20行�
 这个嵌入式支持使得 Go 程序能够在微控制器和嵌入式系统上以最小的运行时开销运行，为 Go 语言开辟了嵌入式和 IoT 开发的新领域。
 
 **当前状态**：第一阶段已完成，LLGO 现在可以编译到 100+ 个嵌入式目标平台！🎉
+
+## LLGO 二进制依赖调查 (2025-09-01)
+
+### 问题背景
+- **调查目的**: 确定 LLGO 编译器二进制对 libLLVM 是静态依赖还是动态依赖
+- **调查原因**: 了解部署和分发时的依赖要求
+
+### 调查步骤
+1. **定位 LLGO 二进制**:
+   - 通过 `which llgo` 找到 `/opt/homebrew/bin/llgo`
+   - 发现这是一个 shell 脚本包装器，实际二进制在 `/opt/homebrew/Cellar/llgo/0.12.13/libexec/bin/llgo`
+
+2. **分析动态依赖**:
+   ```bash
+   # 查看动态库依赖
+   otool -L /opt/homebrew/Cellar/llgo/0.12.13/libexec/bin/llgo
+   ```
+
+3. **检查 RPATH 配置**:
+   ```bash
+   # 查看运行时库搜索路径
+   otool -l llgo_binary | grep -A 2 LC_RPATH
+   ```
+
+### 核心发现
+**LLGO 编译出的二进制是动态依赖 libLLVM 的，不是静态链接**
+
+#### 关键证据:
+- **动态依赖**: `@rpath/libLLVM.dylib` (版本 19.1.2)
+- **RPATH 设置**: `/opt/homebrew/Cellar/llgo/0.12.13/libexec/crosscompile/clang/lib`
+- **运行时库**: `libLLVM.dylib` 约 82MB，位于 RPATH 指定路径
+- **完整依赖列表**:
+  ```
+  @rpath/libLLVM.dylib
+  @rpath/libc++.1.dylib  
+  @rpath/libunwind.1.dylib
+  /usr/lib/libresolv.9.dylib
+  /System/Library/Frameworks/CoreFoundation.framework/...
+  /System/Library/Frameworks/Security.framework/...
+  /usr/lib/libSystem.B.dylib
+  ```
+
+#### 技术架构:
+- **包装脚本**: `/opt/homebrew/bin/llgo` → shell 脚本，设置 PATH 并调用实际二进制
+- **实际二进制**: `/opt/homebrew/Cellar/llgo/0.12.13/libexec/bin/llgo` → 动态链接的可执行文件
+- **LLVM 库路径**: RPATH 指向专门的 clang 库目录，包含完整的 LLVM 工具链
+
+### 影响分析
+**动态链接的优缺点**:
+
+✅ **优点**:
+- 二进制文件更小（不包含 82MB 的 LLVM 库）
+- 多个程序可共享同一份 LLVM 库
+- 内存使用更高效
+- 更新 LLVM 库时无需重新编译所有依赖程序
+
+⚠️ **缺点**:
+- 部署复杂性：目标系统必须有兼容的 LLVM 19 库
+- 版本依赖：严格依赖 LLVM 19.1.2，与其他版本不兼容
+- 分发挑战：不能作为单一可执行文件分发
+
+### 部署建议
+1. **Homebrew 用户**: 通过 `brew install llgo` 自动处理所有依赖
+2. **手动部署**: 需要确保目标系统有 LLVM 19 和相关动态库
+3. **Docker 部署**: 使用包含完整 LLVM 环境的基础镜像
+4. **静态链接需求**: 如需独立二进制，需要修改构建配置使用静态链接
+
+### 相关文件位置
+- **依赖分析工具**: `otool -L` (macOS), `ldd` (Linux)
+- **RPATH 配置**: 编译时设置，运行时库搜索路径
+- **实际库位置**: `/opt/homebrew/Cellar/llgo/.../libexec/crosscompile/clang/lib/`
