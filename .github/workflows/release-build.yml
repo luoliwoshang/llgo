@@ -34,4 +34,4 @@ jobs:
             -v $(pwd):/go/src/llgo \
             -w /go/src/llgo \
             ghcr.io/goreleaser/goreleaser-cross:v1.22 \
-            release --clean --skip nfpm,snapcraft
+            release --parallelism=1 --clean --skip nfpm,snapcraft
