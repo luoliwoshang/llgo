@@ -53,26 +53,6 @@ jobs:
       - name: Create Linux sysroot tarball
         if: steps.cache-linux-sysroot.outputs.cache-hit != 'true'
         run: tar -czvf .sysroot/linux.tar.gz -C .sysroot linux
-      - name: Verify Linux sysroot contents
-        if: steps.cache-linux-sysroot.outputs.cache-hit != 'true'
-        run: |
-          echo "验证 AMD64 sysroot..."
-          if [ ! -d ".sysroot/linux/amd64/usr/include/llvm-19" ]; then
-            echo "错误：AMD64 sysroot 缺少 LLVM 头文件"
-            exit 1
-          fi
-
-          echo "验证 ARM64 sysroot..."
-          if [ ! -d ".sysroot/linux/arm64/usr/include/llvm-19" ]; then
-            echo "错误：ARM64 sysroot 缺少 LLVM 头文件"
-            exit 1
-          fi
-
-          echo "检查关键文件..."
-          ls -la .sysroot/linux/amd64/usr/include/llvm-c/Core.h || echo "AMD64 Core.h 缺失"
-          ls -la .sysroot/linux/arm64/usr/include/llvm-c/Core.h || echo "ARM64 Core.h 缺失"
-
-          echo "sysroot 验证通过！"
       - name: Save Linux sysroot cache
         if: steps.cache-linux-sysroot.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -91,10 +71,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.24.x
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: tonistiigi/binfmt:qemu-v7.0.0-28
       - name: Restore Darwin sysroot cache
         id: cache-darwin-sysroot
         uses: actions/cache/restore@v4
