@@ -15,6 +15,7 @@ import (
 	"github.com/goplus/llgo/internal/flash"
 	"github.com/goplus/llgo/internal/targets"
 	"github.com/goplus/llgo/internal/xtool/llvm"
+	envllvm "github.com/goplus/llgo/xtool/env/llvm"
 )
 
 type Export struct {
@@ -48,8 +49,8 @@ var (
 )
 
 var (
-	espClangBaseUrl = "https://github.com/goplus/espressif-llvm-project-prebuilt/releases/download/19.1.2_20250820"
-	espClangVersion = "19.1.2_20250820"
+	espClangBaseUrl = "https://github.com/goplus/espressif-llvm-project-prebuilt/releases/download/19.1.2_20250905-3"
+	espClangVersion = "19.1.2_20250905-3"
 )
 
 // cacheRoot can be overridden for testing
@@ -108,7 +109,7 @@ func getESPClangRoot(forceEspClang bool) (clangRoot string, err error) {
 	llgoRoot := env.LLGoROOT()
 
 	// First check if clang exists in LLGoROOT
-	espClangRoot := filepath.Join(llgoRoot, "crosscompile", "clang")
+	espClangRoot := filepath.Join(llgoRoot, envllvm.CrosscompileClangPath)
 	if _, err = os.Stat(espClangRoot); err == nil {
 		clangRoot = espClangRoot
 		return
