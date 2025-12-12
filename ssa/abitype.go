@@ -19,6 +19,7 @@ package ssa
 import (
 	"go/token"
 	"go/types"
+	"strings"
 	"unsafe"
 
 	"github.com/goplus/llgo/ssa/abi"
@@ -406,8 +407,27 @@ func (p Package) patchType(t types.Type) types.Type {
 	return p.patch(t)
 }
 
+// typeInitFuncName generates a safe function name for type initialization
+func typeInitFuncName(typeName string) string {
+	// Replace invalid characters for function names
+	safeName := typeName
+	for _, r := range []rune{'[', ']', '*', '/', '.', ' ', '(', ')', ','} {
+		safeName = strings.ReplaceAll(safeName, string(r), "_")
+	}
+	return "_llgo_init_" + safeName
+}
+
 func (p Package) abiTypeInit(g Global, t types.Type, pub bool) {
-	b := p.afterBuilder()
+	// Get type name for function naming
+	typeName, _ := p.abi.TypeName(t)
+	initFuncName := typeInitFuncName(typeName)
+
+	// Create independent initialization function for this type
+	initFunc := p.NewFunc(initFuncName, NoArgsNoRet, InC)
+	initFunc.impl.SetLinkage(llvm.WeakAnyLinkage) // Use weak linkage to allow LLVM optimization
+
+	// Implement the original initialization logic in the independent function
+	b := initFunc.MakeBody(1)
 	if p.patch != nil {
 		t = p.patchType(t)
 	}
@@ -451,6 +471,11 @@ func (p Package) abiTypeInit(g Global, t types.Type, pub bool) {
 			b.blk.last = blks[1].last
 		}
 	}
+	b.Return()
+
+	// Call this independent initialization function from afterBuilder
+	afterB := p.afterBuilder()
+	afterB.Call(initFunc.Expr)
 }
 
 // abiType returns the abi type of the specified type.
