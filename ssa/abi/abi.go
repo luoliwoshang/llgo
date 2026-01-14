@@ -23,6 +23,7 @@ import (
 	"go/types"
 	"hash"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/goplus/llgo/internal/env"
@@ -71,11 +72,11 @@ func ChanDir(dir types.ChanDir) (abi.ChanDir, string) {
 	case types.SendRecv:
 		return abi.BothDir, "chan"
 	case types.SendOnly:
-		return abi.SendDir, "chan->"
+		return abi.SendDir, "chan<-"
 	case types.RecvOnly:
 		return abi.RecvDir, "<-chan"
 	}
-	panic("invlid chan dir")
+	panic("invalid chan dir")
 }
 
 // -----------------------------------------------------------------------------
@@ -131,20 +132,24 @@ func DataKindOf(raw types.Type, lvl int, is32Bits bool) (DataKind, types.Type, i
 
 // Builder is a helper for constructing ABI types.
 type Builder struct {
-	buf []byte
-	Pkg string
+	buf     []byte
+	Pkg     string
+	PtrSize uintptr
+	Sizes   types.Sizes
 }
 
 // New creates a new ABI type Builder.
-func New(pkg string) *Builder {
+func New(pkg string, ptrSize uintptr, sizes types.Sizes) *Builder {
 	ret := new(Builder)
-	ret.Init(pkg)
+	ret.Init(pkg, ptrSize, sizes)
 	return ret
 }
 
-func (b *Builder) Init(pkg string) {
+func (b *Builder) Init(pkg string, ptrSize uintptr, sizes types.Sizes) {
 	b.Pkg = pkg
 	b.buf = make([]byte, sha256.Size)
+	b.PtrSize = ptrSize
+	b.Sizes = sizes
 }
 
 // TypeName returns the ABI type name for the specified type.
@@ -168,7 +173,8 @@ func (b *Builder) TypeName(t types.Type) (ret string, pub bool) {
 	case *types.Named:
 		o := t.Obj()
 		pkg := o.Pkg()
-		return "_llgo_" + FullName(pkg, NamedName(t)), (pkg == nil || o.Exported())
+		ids := scopeIndices(o)
+		return "_llgo_" + FullName(pkg, NamedName(t)+ids), (pkg == nil || o.Exported() && ids == "")
 	case *types.Interface:
 		if t.Empty() {
 			return "_llgo_any", true
@@ -321,6 +327,16 @@ func IsClosure(raw *types.Struct) bool {
 	return false
 }
 
+func IsClosureFields(fields []*types.Var) bool {
+	if len(fields) == 2 {
+		f1, f2 := fields[0], fields[1]
+		if _, ok := f1.Type().(*types.Signature); ok && f1.Name() == "$f" {
+			return f2.Type() == types.Typ[types.UnsafePointer] && f2.Name() == "$data"
+		}
+	}
+	return false
+}
+
 func (b *Builder) structHash(t *types.Struct) (ret []byte, private bool) {
 	h := sha256.New()
 	n := t.NumFields()
@@ -342,6 +358,29 @@ func (b *Builder) structHash(t *types.Struct) (ret []byte, private bool) {
 	}
 	ret = h.Sum(b.buf[:0])
 	return
+}
+
+func scopeIndex(scope, root *types.Scope, id string) string {
+	parent := scope.Parent()
+	n := parent.NumChildren()
+	for i := 0; i < n; i++ {
+		if parent.Child(i) == scope {
+			id += "." + strconv.Itoa(i)
+			break
+		}
+	}
+	if parent == root {
+		return id
+	}
+	return scopeIndex(parent, root, id)
+}
+
+func scopeIndices(obj types.Object) string {
+	pkg := obj.Pkg()
+	if obj.Parent() != pkg.Scope() {
+		return scopeIndex(obj.Parent(), pkg.Scope(), "")
+	}
+	return ""
 }
 
 // -----------------------------------------------------------------------------

@@ -99,6 +99,9 @@ func (p *goProgram) Alignof(T types.Type) int64 {
 func (p *goProgram) Offsetsof(fields []*types.Var) (ret []int64) {
 	prog := Program(unsafe.Pointer(p))
 	ptrSize := int64(prog.PointerSize())
+	if abi.IsClosureFields(fields) {
+		return []int64{0, ptrSize}
+	}
 	extra := int64(0)
 	ret = p.sizes.Offsetsof(fields)
 	for i, f := range fields {
@@ -134,6 +137,9 @@ retry:
 	case *types.Signature:
 		return ptrSize
 	case *types.Struct:
+		if IsClosure(t) {
+			return
+		}
 		n := t.NumFields()
 		for i := 0; i < n; i++ {
 			f := t.Field(i)
@@ -535,13 +541,17 @@ func FuncName(pkg *types.Package, name string, recv *types.Var, org bool) string
 	if recv != nil {
 		named, ptr := recvNamed(recv.Type())
 		var tName string
-		if org {
-			tName = named.Obj().Name()
+		if named != nil {
+			if org {
+				tName = named.Obj().Name()
+			} else {
+				tName = abi.NamedName(named)
+			}
+			if ptr {
+				tName = "(*" + tName + ")"
+			}
 		} else {
-			tName = abi.NamedName(named)
-		}
-		if ptr {
-			tName = "(*" + tName + ")"
+			tName = types.TypeString(recv.Type(), PathOf)
 		}
 		return PathOf(pkg) + "." + tName + "." + name
 	}
