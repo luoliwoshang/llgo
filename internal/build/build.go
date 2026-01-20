@@ -130,6 +130,7 @@ type Config struct {
 	GenExpect     bool // only valid for ModeCmpTest
 	Verbose       bool
 	GenLL         bool // generate pkg .ll files
+	GenBC         bool // generate pkg .bc files
 	CheckLLFiles  bool // check .ll files valid
 	CheckLinkArgs bool // check linkargs valid
 	ForceEspClang bool // force to use esp-clang
@@ -835,16 +836,29 @@ func compileExtraFiles(ctx *context, verbose bool) ([]string, error) {
 			baseArgs = append(baseArgs, "-x", "assembler-with-cpp")
 		}
 
-		// If GenLL is enabled, first emit .ll for debugging
-		if ctx.buildConf.GenLL {
-			llFile := baseName + ".ll"
-			llArgs := append(slices.Clone(baseArgs), "-emit-llvm", "-S", "-o", llFile, "-c", srcFile)
-			if verbose {
-				fmt.Fprintf(os.Stderr, "Compiling extra file (ll): clang %s\n", strings.Join(llArgs, " "))
+		// If GenLL/GenBC is enabled, emit .ll/.bc for debugging
+		if ctx.buildConf.GenLL || ctx.buildConf.GenBC {
+			if ctx.buildConf.GenLL {
+				llFile := baseName + ".ll"
+				llArgs := append(slices.Clone(baseArgs), "-emit-llvm", "-S", "-o", llFile, "-c", srcFile)
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Compiling extra file (ll): clang %s\n", strings.Join(llArgs, " "))
+				}
+				cmd := ctx.compiler()
+				if err := cmd.Compile(llArgs...); err != nil {
+					return nil, fmt.Errorf("failed to compile extra file %s to .ll: %w", srcFile, err)
+				}
 			}
-			cmd := ctx.compiler()
-			if err := cmd.Compile(llArgs...); err != nil {
-				return nil, fmt.Errorf("failed to compile extra file %s to .ll: %w", srcFile, err)
+			if ctx.buildConf.GenBC {
+				bcFile := baseName + ".bc"
+				bcArgs := append(slices.Clone(baseArgs), "-emit-llvm", "-o", bcFile, "-c", srcFile)
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Compiling extra file (bc): clang %s\n", strings.Join(bcArgs, " "))
+				}
+				cmd := ctx.compiler()
+				if err := cmd.Compile(bcArgs...); err != nil {
+					return nil, fmt.Errorf("failed to compile extra file %s to .bc: %w", srcFile, err)
+				}
 			}
 		}
 
@@ -1189,15 +1203,27 @@ func exportObject(ctx *context, pkgPath string, exportFile string, data []byte) 
 			fmt.Fprintf(os.Stderr, "==> lcc %v: %v\n%v\n", pkgPath, f.Name(), msg)
 		}
 	}
-	// If GenLL is enabled, keep a copy of the .ll file for debugging
-	if ctx.buildConf.GenLL {
-		llFile := exportFile + ".ll"
+	// If GenLL/GenBC is enabled, keep copies of the .ll/.bc for debugging
+	if ctx.buildConf.GenLL || ctx.buildConf.GenBC {
 		if err := os.Chmod(f.Name(), 0644); err != nil {
 			return "", err
 		}
-		// Copy instead of rename so we can still compile to .o
-		if err := copyFileAtomic(f.Name(), llFile); err != nil {
-			return "", err
+		if ctx.buildConf.GenLL {
+			llFile := exportFile + ".ll"
+			if err := copyFileAtomic(f.Name(), llFile); err != nil {
+				return "", err
+			}
+		}
+		if ctx.buildConf.GenBC {
+			bcFile := exportFile + ".bc"
+			bcArgs := []string{"-emit-llvm", "-o", bcFile, "-c", f.Name(), "-Wno-override-module"}
+			if ctx.buildConf.Verbose {
+				fmt.Fprintln(os.Stderr, "clang", bcArgs)
+			}
+			cmd := ctx.compiler()
+			if err := cmd.Compile(bcArgs...); err != nil {
+				return "", err
+			}
 		}
 	}
 	// Always compile .ll to .o for linking
@@ -1577,16 +1603,28 @@ func clFile(ctx *context, args []string, cFile, expFile string, procFile func(li
 		args = append(args, "-x", "c")
 	}
 
-	// If GenLL is enabled, first emit .ll for debugging, then compile to .o
-	if ctx.buildConf.GenLL {
-		llFile := baseName + ".ll"
-		llArgs := append(slices.Clone(args), "-emit-llvm", "-S", "-o", llFile, "-c", cFile)
-		if verbose {
-			fmt.Fprintln(os.Stderr, "clang", llArgs)
+	// If GenLL/GenBC is enabled, first emit .ll/.bc for debugging, then compile to .o
+	if ctx.buildConf.GenLL || ctx.buildConf.GenBC {
+		if ctx.buildConf.GenLL {
+			llFile := baseName + ".ll"
+			llArgs := append(slices.Clone(args), "-emit-llvm", "-S", "-o", llFile, "-c", cFile)
+			if verbose {
+				fmt.Fprintln(os.Stderr, "clang", llArgs)
+			}
+			cmd := ctx.compiler()
+			err := cmd.Compile(llArgs...)
+			check(err)
 		}
-		cmd := ctx.compiler()
-		err := cmd.Compile(llArgs...)
-		check(err)
+		if ctx.buildConf.GenBC {
+			bcFile := baseName + ".bc"
+			bcArgs := append(slices.Clone(args), "-emit-llvm", "-o", bcFile, "-c", cFile)
+			if verbose {
+				fmt.Fprintln(os.Stderr, "clang", bcArgs)
+			}
+			cmd := ctx.compiler()
+			err := cmd.Compile(bcArgs...)
+			check(err)
+		}
 	}
 
 	// Always compile to .o for linking
