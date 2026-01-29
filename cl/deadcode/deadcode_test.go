@@ -72,7 +72,7 @@ func TestReachabilityFromTestdata(t *testing.T) {
 			if len(roots) == 0 {
 				t.Fatalf("no roots found for %s", pkgDir)
 			}
-			res := deadcode.Analyze(graph, roots)
+			res := deadcode.Analyze(graph, roots, deadcode.Options{})
 			got := formatReachability(pkgs, res)
 			if updateDeadcodeTestdata {
 				if err := os.WriteFile(outPath, got, 0644); err != nil {

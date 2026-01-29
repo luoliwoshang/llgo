@@ -31,7 +31,7 @@ func TestFloodReachability(t *testing.T) {
 		{Owner: "A", Target: "B", Kind: irgraph.EdgeCall},
 		{Owner: "B", Target: "C", Kind: irgraph.EdgeRef},
 	}}
-	res := Analyze(g, []irgraph.SymID{"A"})
+	res := Analyze(g, []irgraph.SymID{"A"}, Options{})
 	assertReachable(t, res, "A", "B", "C")
 }
 
@@ -43,7 +43,7 @@ func TestFloodMultipleRoots(t *testing.T) {
 		{Owner: "pkgA.Entry", Target: "pkgA.Helper", Kind: irgraph.EdgeCall},
 		{Owner: "plugin.Init", Target: "plugin.Hook", Kind: irgraph.EdgeRef},
 	}}
-	res := Analyze(g, []irgraph.SymID{"pkgA.Entry", "plugin.Init"})
+	res := Analyze(g, []irgraph.SymID{"pkgA.Entry", "plugin.Init"}, Options{})
 	assertReachable(t, res, "pkgA.Entry", "pkgA.Helper", "plugin.Init", "plugin.Hook")
 }
 
@@ -55,7 +55,7 @@ func TestFloodUsesCallAndRef(t *testing.T) {
 		{Owner: "main.A", Target: "lib.DoWork", Kind: irgraph.EdgeCall},
 		{Owner: "main.A", Target: "lib.Config", Kind: irgraph.EdgeRef},
 	}}
-	res := Analyze(g, []irgraph.SymID{"main.A"})
+	res := Analyze(g, []irgraph.SymID{"main.A"}, Options{})
 	assertReachable(t, res, "main.A", "lib.DoWork", "lib.Config")
 }
 
@@ -67,16 +67,16 @@ func TestFloodCycle(t *testing.T) {
 		{Owner: "pkg.Step1", Target: "pkg.Step2", Kind: irgraph.EdgeCall},
 		{Owner: "pkg.Step2", Target: "pkg.Init", Kind: irgraph.EdgeCall},
 	}}
-	res := Analyze(g, []irgraph.SymID{"pkg.Init"})
+	res := Analyze(g, []irgraph.SymID{"pkg.Init"}, Options{})
 	assertReachable(t, res, "pkg.Init", "pkg.Step1", "pkg.Step2")
 }
 
 func TestFloodEmptyInputs(t *testing.T) {
-	res := Analyze(nil, nil)
+	res := Analyze(nil, nil, Options{})
 	if len(res.Reachable) != 0 {
 		t.Fatalf("expected empty reachability, got %v", res.Reachable)
 	}
-	res = Analyze(&irgraph.Graph{Relocs: nil}, nil)
+	res = Analyze(&irgraph.Graph{Relocs: nil}, nil, Options{})
 	if len(res.Reachable) != 0 {
 		t.Fatalf("expected empty reachability, got %v", res.Reachable)
 	}
@@ -101,7 +101,7 @@ func TestUsedInIfacePropagation(t *testing.T) {
 			{Owner: "TypeA", Target: "MethodBType", Kind: irgraph.EdgeRelocTypeRef},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	if !res.UsedInIface["TypeA"] {
 		t.Fatalf("expected UsedInIface to include TypeA")
 	}
@@ -136,7 +136,7 @@ func TestUsedInIfaceMethodOffPropagation(t *testing.T) {
 			{Owner: "TypeA", Target: "MethodBTfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 1},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	if !res.UsedInIface["TypeA"] {
 		t.Fatalf("expected UsedInIface to include TypeA")
 	}
@@ -165,7 +165,7 @@ func TestUseIfaceMethodRecorded(t *testing.T) {
 			{Owner: "CallSite", Target: ftype, Kind: irgraph.EdgeRelocUseIfaceMethod, Addend: 1, Name: "IfaceSym", FnType: ftype},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	key := MethodSig{Name: "IfaceSym", Typ: ftype}
 	if !res.IfaceMethods[key] {
 		t.Fatalf("expected iface method usage recorded for IfaceSym")
@@ -196,7 +196,7 @@ func TestUseIfaceMethodMarksConcreteMethod(t *testing.T) {
 			{Owner: "T", Target: "T.N$tfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 1},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	assertReachable(t, res, "main", "Use", "T", "T.M$type", "T.M$ifn", "T.M$tfn")
 	assertReachableMethods(t, res, map[string][]int{
 		"T": {0},
@@ -236,7 +236,7 @@ func TestMarkableMethodsFromChildTypes(t *testing.T) {
 			{Owner: "ChildType", Target: "ChildMethodTfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 0},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	assertMarkableMethods(t, res, map[string][]int{
 		"TypeA":     {0},
 		"ChildType": {0},
@@ -282,7 +282,7 @@ func TestIfaceChainCrossPackage(t *testing.T) {
 			{Owner: "bpkg.K", Target: "bpkg.K.N2$tfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 1},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	assertReachable(t, res,
 		"main", "Use", "T", "T.M$type", "T.M$ifn", "T.M$tfn",
 		"bpkg.K", "bpkg.K.N$type", "bpkg.K.N$ifn", "bpkg.K.N$tfn")
@@ -311,7 +311,7 @@ func TestMethodOffIgnoredWithoutUseIface(t *testing.T) {
 			{Owner: "TypeA", Target: "MethodATfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 0},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	if len(res.UsedInIface) != 0 {
 		t.Fatalf("expected UsedInIface empty, got %v", res.UsedInIface)
 	}
@@ -332,7 +332,7 @@ func TestMethodOffIgnoredWhenCallsiteUnreachable(t *testing.T) {
 			{Owner: "TypeA", Target: "MethodATfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 0},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	if len(res.UsedInIface) != 0 {
 		t.Fatalf("expected UsedInIface empty, got %v", res.UsedInIface)
 	}
@@ -382,7 +382,7 @@ func TestMarkableMethodsMultipleTypes(t *testing.T) {
 			{Owner: "TypeB", Target: "MethodDTfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 1},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	assertMarkableMethods(t, res, map[string][]int{
 		"TypeA": {0, 1},
 		"TypeB": {0, 1},
@@ -481,7 +481,7 @@ func TestReflectMethodKeepsAllMethods(t *testing.T) {
 			{Owner: "TypeT", Target: "BarTfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 1},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	// With reflectSeen=true, all methods should be reachable
 	assertReachableMethods(t, res, map[string][]int{
 		"TypeT": {0, 1},
@@ -507,7 +507,7 @@ func TestNamedMethodKeepsSpecificMethod(t *testing.T) {
 			{Owner: "TypeT", Target: "BarTfn", Kind: irgraph.EdgeRelocMethodOff, Addend: 1},
 		},
 	}
-	res := Analyze(g, []irgraph.SymID{"main"})
+	res := Analyze(g, []irgraph.SymID{"main"}, Options{})
 	// Only Foo should be reachable (index 0), not Bar (index 1)
 	assertReachableMethods(t, res, map[string][]int{
 		"TypeT": {0},
