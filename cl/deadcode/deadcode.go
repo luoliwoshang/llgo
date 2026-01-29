@@ -34,11 +34,9 @@ type Result struct {
 	ReachableMethods map[irgraph.SymID]map[int]bool // methods confirmed reachable by iface calls
 }
 
-var verbose bool
-
-// SetVerbose enables verbose debugging output during Analyze.
-func SetVerbose(v bool) {
-	verbose = v
+// Options controls deadcode analysis behavior.
+type Options struct {
+	Verbose bool // enable verbose debugging output
 }
 
 // MethodSig identifies a method by name and signature type descriptor.
@@ -68,7 +66,7 @@ type deadcodePass struct {
 }
 
 // Analyze computes reachability from roots using call+ref edges.
-func Analyze(g *irgraph.Graph, roots []irgraph.SymID) Result {
+func Analyze(g *irgraph.Graph, roots []irgraph.SymID, opts Options) Result {
 	pass := newDeadcodePass(g, len(roots))
 	pass.markRoots(roots)
 	pass.flood()
@@ -80,7 +78,7 @@ func Analyze(g *irgraph.Graph, roots []irgraph.SymID) Result {
 		IfaceMethods:     pass.ifaceMethods,
 		ReachableMethods: pass.reachableMethods,
 	}
-	if verbose {
+	if opts.Verbose {
 		logResult(res, roots)
 	}
 	return res

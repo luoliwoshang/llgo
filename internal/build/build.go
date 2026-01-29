@@ -1280,8 +1280,7 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 				nodes, edges, call, ref, reloc := graphSummary(graph)
 				fmt.Fprintf(os.Stderr, "[dce] graph nodes=%d edges=%d call=%d ref=%d reloc=%d\n", nodes, edges, call, ref, reloc)
 			}
-			deadcode.SetVerbose(verbose)
-			res := deadcode.Analyze(graph, roots)
+			res := deadcode.Analyze(graph, roots, deadcode.Options{Verbose: verbose})
 			if verbose {
 				fmt.Fprintf(os.Stderr, "[dce] reachable=%d\n", len(res.Reachable))
 				fmt.Fprintln(os.Stderr, "[dce] pass begin")
