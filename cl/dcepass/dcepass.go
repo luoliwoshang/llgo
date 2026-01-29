@@ -64,8 +64,8 @@ func removeRelocTables(mod llvm.Module) {
 	removeSet := make(map[string]bool)
 	for g := mod.FirstGlobal(); !g.IsNil(); g = llvm.NextGlobal(g) {
 		name := g.Name()
-		// Match __llgo_relocs, __llgo_relocs.123, etc.
-		if name == "__llgo_relocs" || strings.HasPrefix(name, "__llgo_relocs.") {
+		// Match __llgo_relocs only.
+		if name == "__llgo_relocs" {
 			toRemove = append(toRemove, g)
 			removeSet[name] = true
 		}
