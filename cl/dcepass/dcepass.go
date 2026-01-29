@@ -38,8 +38,7 @@ type Options struct{}
 
 // Apply runs the DCE pass over mod using the reachability result.
 //
-// Note: This removes bodies of unreachable functions and marks them external.
-// Method table/reloc-aware pruning is handled in later stages.
+// Note: Method table/reloc-aware pruning zeros out unreachable method entries.
 func Apply(mod llvm.Module, res deadcode.Result, _ Options) Stats {
 	stats := Stats{
 		Reachable:           len(res.Reachable),
@@ -108,26 +107,6 @@ func removeRelocTables(mod llvm.Module) {
 	for _, g := range toRemove {
 		g.EraseFromParentAsGlobal()
 	}
-}
-
-func demoteToDecl(mod llvm.Module, fn llvm.Value) {
-	name := fn.Name()
-	ft := fn.GlobalValueType()
-	fn.SetName("")
-	decl := llvm.AddFunction(mod, name, ft)
-	decl.SetLinkage(llvm.ExternalLinkage)
-	decl.SetFunctionCallConv(fn.FunctionCallConv())
-	for _, attr := range fn.GetFunctionAttributes() {
-		decl.AddAttributeAtIndex(-1, attr)
-	}
-	if gc := fn.GC(); gc != "" {
-		decl.SetGC(gc)
-	}
-	if sp := fn.Subprogram(); !sp.IsNil() {
-		decl.SetSubprogram(sp)
-	}
-	fn.ReplaceAllUsesWith(decl)
-	fn.EraseFromParentAsFunction()
 }
 
 // clearUnreachableMethods zeros Mtyp/Ifn/Tfn for unreachable methods in type
