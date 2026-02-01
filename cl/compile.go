@@ -484,12 +484,6 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 		p.debugParams(b, block.Parent())
 	}
 
-	// Handle init$hasPatch: split dependency init calls into separate function
-	if doModInit && p.state == pkgHasPatch {
-		baseName := strings.TrimSuffix(p.fn.Name(), "$hasPatch")
-		instrs = p.createInitDepsFunction(pkg, baseName, instrs)
-	}
-
 	if doModInit {
 		if pyModInit = p.pyMod != ""; pyModInit {
 			last = len(instrs) - 1
@@ -508,15 +502,7 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	isCgoCmacro := isCgoCmacro(fnName)
 	for i, instr := range instrs {
 		if i == 1 && doModInit && p.state == pkgInPatch { // in patch package but no pkgFNoOldInit
-			name := p.fn.Name()
-			initFnNameOld := initFnNameOfHasPatch(name)
-			initPatchDepsFnName := initDepsFnNameOfHasPatch(name)
-
-			// Call deps function first
-			fnDeps := pkg.NewFunc(initPatchDepsFnName, llssa.NoArgsNoRet, llssa.InC)
-			b.Call(fnDeps.Expr)
-
-			// Then call hasPatch (global vars)
+			initFnNameOld := initFnNameOfHasPatch(p.fn.Name())
 			fnOld := pkg.NewFunc(initFnNameOld, llssa.NoArgsNoRet, llssa.InC)
 			b.Call(fnOld.Expr)
 		}
