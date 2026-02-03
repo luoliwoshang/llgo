@@ -246,8 +246,9 @@ func (b Builder) checkIndex(idx Expr, max Expr) Expr {
 		typ = prog.Uint()
 	}
 	if prog.SizeOf(idx.Type) != prog.SizeOf(typ) {
+		srcType := idx.Type
 		idx.Type = typ
-		idx.impl = castUintptr(b, idx.impl, typ)
+		idx.impl = castUintptr(b, idx.impl, srcType, typ)
 	}
 	// check range expr
 	var check Expr
@@ -429,8 +430,9 @@ func (b Builder) fitIntSize(n Expr) Expr {
 	prog := b.Prog
 	typ := prog.Int()
 	if prog.SizeOf(n.Type) != prog.SizeOf(typ) {
+		srcType := n.Type
 		n.Type = typ
-		n.impl = castInt(b, n.impl, typ)
+		n.impl = castInt(b, n.impl, srcType, typ)
 	}
 	return n
 }
@@ -502,6 +504,13 @@ func (b Builder) Lookup(x, key Expr, commaOk bool) (ret Expr) {
 //
 //	t0[t1] = t2
 func (b Builder) MapUpdate(m, k, v Expr) {
+	// Convert function declarations to proper closure form when stored in maps.
+	// This ensures function values are correctly wrapped as closures, similar to
+	// interface assignment (see MakeInterface).
+	if v.kind == vkFuncDecl {
+		typ := b.Prog.Type(v.raw.Type, InGo)
+		v = checkExpr(v, typ.raw.Type, b)
+	}
 	if debugInstr {
 		log.Printf("MapUpdate %v[%v] = %v\n", m.impl, k.impl, v.impl)
 	}
@@ -745,6 +754,11 @@ func (b Builder) Select(states []*SelectState, blocking bool) (ret Expr) {
 		}
 	}
 	return b.aggregateValue(b.Prog.Struct(typs...), results...)
+}
+
+func lastParamType(prog Program, fn Expr) Type {
+	params := fn.raw.Type.(*types.Signature).Params()
+	return prog.rawType(params.At(params.Len() - 1).Type())
 }
 
 func (b Builder) chanOp(s *SelectState) Expr {

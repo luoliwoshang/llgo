@@ -38,7 +38,6 @@ var hasAltPkg = map[string]none{
 	"internal/runtime/atomic":  {},
 	"internal/runtime/maps":    {},
 	"internal/runtime/sys":     {},
-	"internal/sync":            {},
 	"internal/syscall/execenv": {},
 	"internal/syscall/unix":    {},
 	"math":                     {},
@@ -60,4 +59,8 @@ var hasAltPkg = map[string]none{
 	"runtime/internal/syscall": {},
 	"io":                       {},
 	"io/fs":                    {},
+	"internal/weak":            {}, // Go1.23
+	"weak":                     {}, // Go1.24
+	"unique":                   {},
+	"crypto/internal/fips140":  {},
 }

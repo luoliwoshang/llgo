@@ -496,8 +496,8 @@ func (b Builder) BinOp(op token.Token, x, y Expr) Expr {
 					llvm.CreateBinOp(b.impl, llvm.FDiv, xi, d),
 					llvm.CreateBinOp(b.impl, llvm.FDiv,
 						llvm.CreateBinOp(b.impl, llvm.FSub,
-							llvm.CreateBinOp(b.impl, llvm.FMul, xr, yi),
 							llvm.CreateBinOp(b.impl, llvm.FMul, xi, yr),
+							llvm.CreateBinOp(b.impl, llvm.FMul, xr, yi),
 						),
 						d,
 					),
@@ -814,7 +814,7 @@ func (b Builder) Convert(t Type, x Expr) (ret Expr) {
 	case *types.Basic:
 		switch typ.Kind() {
 		case types.Uintptr:
-			ret.impl = castUintptr(b, x.impl, t)
+			ret.impl = castUintptr(b, x.impl, x.Type, t)
 			return
 		case types.UnsafePointer:
 			ret.impl = castPtr(b.impl, x.impl, t.ll)
@@ -834,8 +834,9 @@ func (b Builder) Convert(t Type, x Expr) (ret Expr) {
 				}
 			case *types.Basic:
 				if x.Type != b.Prog.Int32() {
+					srcType := x.Type
 					x.Type = b.Prog.Int32()
-					x.impl = castInt(b, x.impl, b.Prog.Int32())
+					x.impl = castInt(b, x.impl, srcType, b.Prog.Int32())
 				}
 				ret.impl = b.InlineCall(b.Func.Pkg.rtFunc("StringFromRune"), x).impl
 				return
@@ -858,14 +859,10 @@ func (b Builder) Convert(t Type, x Expr) (ret Expr) {
 			if typ.Info()&types.IsInteger != 0 {
 				// int <- int/float
 				if xtyp.Info()&types.IsInteger != 0 {
-					ret.impl = castInt(b, x.impl, t)
+					ret.impl = castInt(b, x.impl, x.Type, t)
 					return
 				} else if xtyp.Info()&types.IsFloat != 0 {
-					if typ.Info()&types.IsUnsigned != 0 {
-						ret.impl = llvm.CreateFPToUI(b.impl, x.impl, t.ll)
-					} else {
-						ret.impl = llvm.CreateFPToSI(b.impl, x.impl, t.ll)
-					}
+					ret.impl = castFloatToInt(b, x.impl, t)
 					return
 				}
 			} else if typ.Info()&types.IsFloat != 0 {
@@ -913,23 +910,53 @@ func (b Builder) Convert(t Type, x Expr) (ret Expr) {
 	panic("todo")
 }
 
-func castUintptr(b Builder, x llvm.Value, typ Type) llvm.Value {
+func castUintptr(b Builder, x llvm.Value, xtyp Type, typ Type) llvm.Value {
 	if x.Type().TypeKind() == llvm.PointerTypeKind {
 		return llvm.CreatePtrToInt(b.impl, x, typ.ll)
 	}
-	return castInt(b, x, typ)
+	return castInt(b, x, xtyp, typ)
 }
 
-func castInt(b Builder, x llvm.Value, typ Type) llvm.Value {
+func castInt(b Builder, x llvm.Value, xtyp Type, typ Type) llvm.Value {
 	xsize := b.Prog.td.TypeAllocSize(x.Type())
 	size := b.Prog.td.TypeAllocSize(typ.ll)
 	if xsize > size {
 		return llvm.CreateTrunc(b.impl, x, typ.ll)
-	} else if typ.kind == vkUnsigned {
+	} else if xtyp.kind == vkUnsigned {
+		// Source is unsigned, use zero extension
 		return llvm.CreateZExt(b.impl, x, typ.ll)
 	} else {
+		// Source is signed, use sign extension
 		return llvm.CreateSExt(b.impl, x, typ.ll)
 	}
+}
+
+func castFloatToInt(b Builder, x llvm.Value, typ Type) llvm.Value {
+	dstSize := b.Prog.td.TypeAllocSize(typ.ll)
+	if dstSize < 8 {
+		i64 := b.Prog.Int64()
+		if typ.kind == vkUnsigned {
+			// note(zzy): for unsigned targets, split negative vs non-negative.
+			// Negative values need signed expansion (FPToSI) before truncation;
+			// non-negative values can use unsigned expansion (FPToUI). This avoids
+			// direct float->narrow-unsigned conversions and preserves wrap/trunc behavior.
+			zero := llvm.ConstNull(x.Type())
+			isNeg := b.impl.CreateFCmp(llvm.FloatOLT, x, zero, "")
+			neg := llvm.CreateFPToSI(b.impl, x, i64.ll)
+			pos := llvm.CreateFPToUI(b.impl, x, i64.ll)
+			tmp := b.impl.CreateSelect(isNeg, neg, pos, "")
+			return llvm.CreateTrunc(b.impl, tmp, typ.ll)
+		}
+		tmp := llvm.CreateFPToSI(b.impl, x, i64.ll)
+		return llvm.CreateTrunc(b.impl, tmp, typ.ll)
+	}
+	// note(zzy): dst is already 64-bit wide, so no extra widen+trunc roundtrip is needed here;
+	// see LLVM fptoui/fptosi semantics: https://llvm.org/docs/LangRef.html#fptoui-to-instruction
+	// and https://llvm.org/docs/LangRef.html#fptosi-to-instruction
+	if typ.kind == vkUnsigned {
+		return llvm.CreateFPToUI(b.impl, x, typ.ll)
+	}
+	return llvm.CreateFPToSI(b.impl, x, typ.ll)
 }
 
 func castFloat(b Builder, x llvm.Value, typ Type) llvm.Value {
@@ -967,20 +994,13 @@ func (b Builder) MakeClosure(fn Expr, bindings []Expr) Expr {
 	prog := b.Prog
 	tfn := fn.Type
 	sig := tfn.raw.Type.(*types.Signature)
-	tctx := sig.Params().At(0).Type().Underlying().(*types.Pointer).Elem().(*types.Struct)
-	flds := llvmFields(bindings, tctx, b)
-	data := b.aggregateAllocU(prog.rawType(tctx), flds...)
-	return b.aggregateValue(prog.Closure(removeCtx(sig)), fn.impl, data)
-}
-
-func removeCtx(sig *types.Signature) *types.Signature {
-	params := sig.Params()
-	n := params.Len()
-	args := make([]*types.Var, n-1)
-	for i := 0; i < n-1; i++ {
-		args[i] = params.At(i + 1)
+	data := prog.Nil(prog.VoidPtr()).impl
+	if ctxParam := closureCtxParam(sig); ctxParam != nil {
+		tctx := ctxParam.Type().Underlying().(*types.Pointer).Elem().(*types.Struct)
+		ptr := b.aggregateAllocU(prog.rawType(tctx), llvmFields(bindings, tctx, b)...)
+		data = ptr
 	}
-	return types.NewSignature(sig.Recv(), types.NewTuple(args...), sig.Results(), sig.Variadic())
+	return b.aggregateValue(prog.Closure(removeCtx(sig)), fn.impl, data)
 }
 
 // -----------------------------------------------------------------------------
@@ -1016,9 +1036,13 @@ func (b Builder) Call(fn Expr, args ...Expr) (ret Expr) {
 	case vkClosure:
 		data = b.Field(fn, 1)
 		fn = b.Field(fn, 0)
+		sig = fn.raw.Type.(*types.Signature)
 		ctx := types.NewParam(token.NoPos, nil, closureCtx, types.Typ[types.UnsafePointer])
-		raw = FuncAddCtx(ctx, fn.raw.Type.(*types.Signature))
-		fallthrough
+		sigCtx := FuncAddCtx(ctx, sig)
+		ret.Type = b.Prog.retType(sig)
+		ll = b.Prog.FuncDecl(sigCtx, InC).ll
+		ret.impl = llvm.CreateCall(b.impl, ll, fn.impl, llvmParamsEx(data, args, sigCtx.Params(), b))
+		return ret
 	case vkFuncPtr:
 		sig = raw.Underlying().(*types.Signature)
 		ll = b.Prog.FuncDecl(sig, InC).ll
@@ -1031,10 +1055,29 @@ func (b Builder) Call(fn Expr, args ...Expr) (ret Expr) {
 	default:
 		log.Panicf("unreachable: %d(%T), %v\n", kind, raw, fn.RawType())
 	}
+	pkg := b.Pkg
+	if !pkg.NeedAbiInit && pkg.Path() != "reflect" {
+		if _, ok := reflectFunc[fn.Name()]; ok {
+			pkg.NeedAbiInit = true
+		}
+	}
 	ret.Type = b.Prog.retType(sig)
 	ret.impl = llvm.CreateCall(b.impl, ll, fn.impl, llvmParamsEx(data, args, sig.Params(), b))
 	return
 }
+
+var (
+	reflectFunc = map[string]struct{}{
+		"reflect.ArrayOf":            {},
+		"reflect.ChanOf":             {},
+		"reflect.FuncOf":             {},
+		"reflect.MapOf":              {},
+		"reflect.SliceOf":            {},
+		"reflect.StructOf":           {},
+		"reflect.Value.Method":       {},
+		"reflect.Value.MethodByName": {},
+	}
+)
 
 func logCall(da string, fn Expr, args []Expr) {
 	if fn.kind == vkBuiltin {
@@ -1361,9 +1404,28 @@ func (b Builder) PrintEx(ln bool, args ...Expr) (ret Expr) {
 
 func checkExpr(v Expr, t types.Type, b Builder) Expr {
 	if st, ok := t.Underlying().(*types.Struct); ok && IsClosure(st) {
-		if v.kind != vkClosure {
-			return b.Pkg.closureStub(b, t, v)
+		if v.kind == vkClosure {
+			return v
 		}
+		prog := b.Prog
+		origKind := v.kind
+		tclosure := prog.rawType(t)
+		fnType := prog.Field(tclosure, 0)
+		if v.Type != fnType {
+			// Signature conversions are representationally identical.
+			if v.Type.kind == vkFuncDecl || v.Type.kind == vkFuncPtr {
+				v = b.ChangeType(fnType, v)
+			} else {
+				v = b.Convert(fnType, v)
+			}
+		}
+		data := prog.Nil(prog.VoidPtr())
+		if origKind == vkFuncDecl || origKind == vkFuncPtr {
+			if sig, ok := fnType.raw.Type.(*types.Signature); ok && closureCtxParam(sig) == nil {
+				v, data = b.Pkg.closureStub(b, v, sig, origKind)
+			}
+		}
+		return b.aggregateValue(tclosure, v.impl, data.impl)
 	}
 	return v
 }
