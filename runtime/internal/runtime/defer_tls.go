@@ -1,3 +1,5 @@
+//go:build !baremetal
+
 /*
  * Copyright (c) 2025 The GoPlus Authors (goplus.org). All rights reserved.
  *

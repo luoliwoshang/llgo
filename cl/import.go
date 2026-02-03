@@ -418,8 +418,13 @@ func funcName(pkg *types.Package, fn *ssa.Function, org bool) string {
 		recv = parent.Signature.Recv()
 	} else {
 		recv = fn.Signature.Recv()
-		// check $bound
-		if recv == nil && strings.HasSuffix(fn.Name(), "$bound") && len(fn.FreeVars) == 1 {
+		// check $thunk and $bound
+		if recv == nil && strings.HasSuffix(fn.Name(), "$thunk") {
+			// For thunks, extract receiver from first parameter
+			if params := fn.Signature.Params(); params.Len() > 0 {
+				recv = params.At(0)
+			}
+		} else if recv == nil && strings.HasSuffix(fn.Name(), "$bound") && len(fn.FreeVars) == 1 {
 			recv = types.NewVar(token.NoPos, nil, "", fn.FreeVars[0].Type())
 		}
 	}
@@ -516,6 +521,18 @@ const (
 	llgoAtomicOpLast = llgoAtomicOpBase + int(llssa.OpUMin)
 )
 
+func recvNamed(typ types.Type) *types.Named {
+retry:
+	switch t := types.Unalias(typ).(type) {
+	case *types.Named:
+		return t
+	case *types.Pointer:
+		typ = t.Elem()
+		goto retry
+	}
+	panic(fmt.Errorf("invalid recv type: %v", typ))
+}
+
 func (p *context) funcName(fn *ssa.Function) (*types.Package, string, int) {
 	var pkg *types.Package
 	var orgName string
@@ -538,6 +555,9 @@ func (p *context) funcName(fn *ssa.Function) (*types.Package, string, int) {
 		}
 		if fnPkg := fn.Pkg; fnPkg != nil {
 			pkg = fnPkg.Pkg
+		} else if recv := fn.Type().(*types.Signature).Recv(); recv != nil && recv.Origin() != recv {
+			/* check if this is an instantiated generic method (receiver's origin differs from receiver itself)*/
+			pkg = recvNamed(recv.Type()).Obj().Pkg()
 		} else {
 			pkg = p.goTyps
 		}

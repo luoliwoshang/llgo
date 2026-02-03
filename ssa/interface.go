@@ -68,7 +68,19 @@ func iMethodOf(rawIntf *types.Interface, name string) int {
 func (b Builder) Imethod(intf Expr, method *types.Func) Expr {
 	prog := b.Prog
 	rawIntf := intf.raw.Type.Underlying().(*types.Interface)
-	tclosure := prog.Type(method.Type(), InGo)
+	sig := method.Type().(*types.Signature)
+	if sig.Recv() == nil && sig.Params().Len() > 0 {
+		pt := types.Unalias(sig.Params().At(0).Type())
+		if types.Identical(pt, rawIntf) {
+			n := sig.Params().Len()
+			vars := make([]*types.Var, n-1)
+			for i := 1; i < n; i++ {
+				vars[i-1] = sig.Params().At(i)
+			}
+			sig = types.NewSignatureType(nil, nil, nil, types.NewTuple(vars...), sig.Results(), sig.Variadic())
+		}
+	}
+	tclosure := prog.Type(sig, InGo)
 	i := iMethodOf(rawIntf, method.Name())
 	data := b.InlineCall(b.Pkg.rtFunc("IfacePtrData"), intf)
 	impl := intf.impl
@@ -158,12 +170,12 @@ func (b Builder) valFromData(typ Type, data llvm.Value) Expr {
 	case abi.Pointer:
 		return b.buildVal(typ, data, lvl)
 	case abi.Integer:
-		x := castUintptr(b, data, prog.Uintptr())
-		return b.buildVal(typ, castInt(b, x, t), lvl)
+		x := castUintptr(b, data, prog.VoidPtr(), prog.Uintptr())
+		return b.buildVal(typ, castInt(b, x, prog.Uintptr(), t), lvl)
 	case abi.BitCast:
-		x := castUintptr(b, data, prog.Uintptr())
+		x := castUintptr(b, data, prog.VoidPtr(), prog.Uintptr())
 		if int(prog.SizeOf(t)) != prog.PointerSize() {
-			x = castInt(b, x, prog.Int32())
+			x = castInt(b, x, prog.Uintptr(), prog.Int32())
 		}
 		return b.buildVal(typ, llvm.CreateBitCast(b.impl, x, t.ll), lvl)
 	}
@@ -250,6 +262,9 @@ func (b Builder) TypeAssert(x Expr, assertedTyp Type, commaOk bool) Expr {
 		if rawIntf, ok := assertedTyp.raw.Type.Underlying().(*types.Interface); ok {
 			eq = b.InlineCall(b.Pkg.rtFunc("Implements"), tabi, tx)
 			val = func() Expr { return Expr{b.unsafeInterface(rawIntf, tx, b.faceData(x.impl)), assertedTyp} }
+		} else if assertedTyp.kind == vkClosure {
+			eq = b.InlineCall(b.Pkg.rtFunc("MatchesClosure"), tabi, tx)
+			val = func() Expr { return b.valFromData(assertedTyp, b.faceData(x.impl)) }
 		} else {
 			eq = b.BinOp(token.EQL, tx, tabi)
 			val = func() Expr { return b.valFromData(assertedTyp, b.faceData(x.impl)) }

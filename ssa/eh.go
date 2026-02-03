@@ -16,22 +16,6 @@
 
 package ssa
 
-/*
-#include <setjmp.h>
-#ifdef WIN32
-#if defined(__MINGW64__) && !defined(_UCRT)
-typedef intptr_t sigjmp_buf[5];
-#define sigsetjmp(x,y) __builtin_setjmp(x)
-#define siglongjmp __builtin_longjmp
-#else
-#define sigjmp_buf jmp_buf
-#define sigsetjmp(x,y) setjmp(x)
-#define siglongjmp longjmp
-#endif
-#endif
-*/
-import "C"
-
 import (
 	"go/token"
 	"go/types"
@@ -42,8 +26,6 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-
-type sigjmpbuf = C.sigjmp_buf
 
 // func setjmp(env unsafe.Pointer) c.Int
 func (p Program) tySetjmp() *types.Signature {
@@ -103,8 +85,9 @@ func (p Program) tyStacksave() *types.Signature {
 
 func (b Builder) AllocaSigjmpBuf() Expr {
 	prog := b.Prog
-	n := unsafe.Sizeof(sigjmpbuf{})
-	size := prog.IntVal(uint64(n), prog.Uintptr())
+	sigjmpBufTy := prog.rtType("SigjmpBuf") // Get type from runtime (target architecture)
+	n := prog.SizeOf(sigjmpBufTy)           // Get size for target architecture
+	size := prog.IntVal(n, prog.Uintptr())
 	return b.Alloca(size)
 }
 
@@ -114,8 +97,20 @@ func (b Builder) StackSave() Expr {
 	return b.InlineCall(fn)
 }
 
+// addReturnsTwiceAttr adds the returns_twice attribute to a function.
+// This attribute tells LLVM that the function returns twice (once directly, once via longjmp),
+// ensuring that variables used across setjmp/longjmp boundaries are placed in
+// callee-saved registers or spilled to stack, preventing them from becoming invalid
+// after longjmp returns (e.g., the caller's DeferFrame pointer).
+func (b Builder) addReturnsTwiceAttr(fn Expr) {
+	ctx := b.Pkg.mod.Context()
+	attr := ctx.CreateEnumAttribute(llvm.AttributeKindID("returns_twice"), 0)
+	fn.impl.AddFunctionAttr(attr)
+}
+
 func (b Builder) Sigsetjmp(jb, savemask Expr) Expr {
-	if b.Prog.target.GOARCH == "wasm" {
+	// Use setjmp for wasm or targets specified via -target flag (baremetal, etc.)
+	if b.Prog.target.GOARCH == "wasm" || b.Prog.target.Target != "" {
 		return b.Setjmp(jb)
 	}
 	fname := "sigsetjmp"
@@ -123,11 +118,13 @@ func (b Builder) Sigsetjmp(jb, savemask Expr) Expr {
 		fname = "__sigsetjmp"
 	}
 	fn := b.Pkg.cFunc(fname, b.Prog.tySigsetjmp())
+	b.addReturnsTwiceAttr(fn)
 	return b.Call(fn, jb, savemask)
 }
 
 func (b Builder) Siglongjmp(jb, retval Expr) {
-	if b.Prog.target.GOARCH == "wasm" {
+	// Use longjmp for wasm or targets specified via -target flag (baremetal, etc.)
+	if b.Prog.target.GOARCH == "wasm" || b.Prog.target.Target != "" {
 		b.Longjmp(jb, retval)
 		return
 	}
@@ -138,6 +135,7 @@ func (b Builder) Siglongjmp(jb, retval Expr) {
 
 func (b Builder) Setjmp(jb Expr) Expr {
 	fn := b.Pkg.cFunc("setjmp", b.Prog.tySetjmp())
+	b.addReturnsTwiceAttr(fn)
 	return b.Call(fn, jb)
 }
 

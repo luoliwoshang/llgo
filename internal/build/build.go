@@ -32,6 +32,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"unsafe"
 
 	"golang.org/x/tools/go/ssa"
@@ -118,6 +119,7 @@ type Config struct {
 	AppExt        string  // ".exe" on Windows, empty on Unix
 	OutFile       string  // only valid for ModeBuild when len(pkgs) == 1
 	OutFmts       OutFmts // Output format specifications (only for Target != "")
+	CompileOnly   bool    // compile test binary but do not run it (only valid for ModeTest)
 	Emulator      bool    // run in emulator mode
 	Port          string  // target port for flashing
 	BaudRate      int     // baudrate for serial communication
@@ -127,11 +129,17 @@ type Config struct {
 	AbiMode       AbiMode
 	GenExpect     bool // only valid for ModeCmpTest
 	Verbose       bool
+	PrintCommands bool
 	GenLL         bool // generate pkg .ll files
 	CheckLLFiles  bool // check .ll files valid
 	CheckLinkArgs bool // check linkargs valid
 	ForceEspClang bool // force to use esp-clang
+	ForceRebuild  bool // force rebuilding of packages that are already up-to-date
 	Tags          string
+	SizeReport    bool   // print size report after successful build
+	SizeFormat    string // size report format: text,json (default text)
+	SizeLevel     string // size aggregation level: full,module,package (default module)
+	CompilerHash  string // metadata hash for the running compiler (development builds only)
 	// GlobalRewrites specifies compile-time overrides for global string variables.
 	// Keys are fully qualified package paths (e.g. "main" or "github.com/user/pkg").
 	// Each Rewrites entry maps variable names to replacement string values. Only
@@ -205,6 +213,15 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	if conf.BuildMode == "" {
 		conf.BuildMode = BuildModeExe
 	}
+	if conf.SizeReport && conf.SizeFormat == "" {
+		conf.SizeFormat = "text"
+	}
+	if conf.SizeReport && conf.SizeLevel == "" {
+		conf.SizeLevel = "module"
+	}
+	if err := ensureSizeReporting(conf); err != nil {
+		return nil, err
+	}
 	// Handle crosscompile configuration first to set correct GOOS/GOARCH
 	forceEspClang := conf.ForceEspClang || conf.Target != ""
 	export, err := crosscompile.Use(conf.Goos, conf.Goarch, conf.Target, IsWasiThreadsEnabled(), forceEspClang)
@@ -227,7 +244,7 @@ func Do(args []string, conf *Config) ([]Package, error) {
 
 	verbose := conf.Verbose
 	patterns := args
-	tags := "llgo,math_big_pure_go"
+	tags := "llgo,math_big_pure_go,purego"
 	if conf.Tags != "" {
 		tags += "," + conf.Tags
 	}
@@ -245,11 +262,12 @@ func Do(args []string, conf *Config) ([]Package, error) {
 		cfg.Mode |= packages.NeedForTest
 	}
 
+	goroot, err := env.GOROOT()
+	check(err)
 	cfg.Overlay = make(map[string][]byte)
-	clearRuntime(cfg.Overlay, filepath.Join(env.GOROOT(), "src", "runtime"))
 	for file, src := range llruntime.OverlayFiles {
 		overlay := unsafe.Slice(unsafe.StringData(src), len(src))
-		cfg.Overlay[filepath.Join(env.GOROOT(), "src", file)] = overlay
+		cfg.Overlay[filepath.Join(goroot, "src", file)] = overlay
 	}
 
 	cl.EnableDebug(IsDbgEnabled())
@@ -260,6 +278,7 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	target := &llssa.Target{
 		GOOS:   conf.Goos,
 		GOARCH: conf.Goarch,
+		Target: conf.Target,
 	}
 
 	prog := llssa.NewProgram(target)
@@ -303,6 +322,10 @@ func Do(args []string, conf *Config) ([]Package, error) {
 				}
 			}
 			initial = newInitial
+			// Check -o flag after filtering to only test packages
+			if len(initial) > 1 && conf.OutFile != "" {
+				return nil, fmt.Errorf("cannot use -o flag with multiple packages")
+			}
 		}
 	}
 
@@ -311,9 +334,7 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...)
 	check(err)
 
-	noRt := 1
 	prog.SetRuntime(func() *types.Package {
-		noRt = 0
 		return altPkgs[0].Types
 	})
 	prog.SetPython(func() *types.Package {
@@ -339,31 +360,36 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	output := conf.OutFile != ""
 	ctx := &context{env: env, conf: cfg, progSSA: progSSA, prog: prog, dedup: dedup,
 		patches: patches, built: make(map[string]none), initial: initial, mode: mode,
-		output:       output,
-		needRt:       make(map[*packages.Package]bool),
-		needPyInit:   make(map[*packages.Package]bool),
-		buildConf:    conf,
-		crossCompile: export,
-		cTransformer: cabi.NewTransformer(prog, export.LLVMTarget, export.TargetABI, conf.AbiMode, cabiOptimize),
+		fingerprinting: make(map[string]bool),
+		pkgs:           map[*packages.Package]Package{},
+		pkgByID:        map[string]Package{},
+		output:         output,
+		buildConf:      conf,
+		crossCompile:   export,
+		cTransformer:   cabi.NewTransformer(prog, export.LLVMTarget, export.TargetABI, conf.AbiMode, cabiOptimize),
 	}
 
 	// default runtime globals must be registered before packages are built
 	addGlobalString(conf, "runtime.defaultGOROOT="+runtime.GOROOT(), nil)
 	addGlobalString(conf, "runtime.buildVersion="+runtime.Version(), nil)
-	pkgs, err := buildAllPkgs(ctx, initial, verbose)
+	pkgs, err := buildSSAPkgs(ctx, initial, verbose)
 	check(err)
+	depPkgs, err := buildSSAPkgs(ctx, altPkgs, verbose)
+	check(err)
+
+	allPkgs := append([]*aPackage{}, pkgs...)
+	allPkgs = append(allPkgs, depPkgs...)
+	allPkgs, err = buildAllPkgs(ctx, allPkgs, verbose)
+	check(err)
+
 	if mode == ModeGen {
-		for _, pkg := range pkgs {
+		for _, pkg := range allPkgs {
 			if pkg.Package == initial[0] {
 				return []*aPackage{pkg}, nil
 			}
 		}
 		return nil, fmt.Errorf("initial package not found")
 	}
-	dpkg, err := buildAllPkgs(ctx, altPkgs[noRt:], verbose)
-	check(err)
-	allPkgs := append([]*aPackage{}, pkgs...)
-	allPkgs = append(allPkgs, dpkg...)
 
 	for _, pkg := range initial {
 		if needLink(pkg, mode) {
@@ -379,6 +405,11 @@ func Do(args []string, conf *Config) ([]Package, error) {
 			err = linkMainPkg(ctx, pkg, allPkgs, outFmts.Out, verbose)
 			if err != nil {
 				return nil, err
+			}
+			if conf.Mode == ModeBuild && conf.SizeReport {
+				if err := reportBinarySize(outFmts.Out, conf.SizeFormat, conf.SizeLevel, allPkgs); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: size report failed: %v\n", err)
+				}
 			}
 
 			// Generate C headers for c-archive and c-shared modes before linking
@@ -452,24 +483,7 @@ func Do(args []string, conf *Config) ([]Package, error) {
 		mockable.Exit(1)
 	}
 
-	return dpkg, nil
-}
-
-func clearRuntime(overlay map[string][]byte, runtimePath string) {
-	files, err := filepath.Glob(runtimePath + "/*.go")
-	if err != nil {
-		panic(err)
-	}
-	for _, file := range files {
-		overlay[file] = []byte("package runtime\n")
-	}
-	files, err = filepath.Glob(runtimePath + "/*.s")
-	if err != nil {
-		panic(err)
-	}
-	for _, file := range files {
-		overlay[file] = []byte("\n")
-	}
+	return allPkgs, nil
 }
 
 func needLink(pkg *packages.Package, mode Mode) bool {
@@ -479,14 +493,14 @@ func needLink(pkg *packages.Package, mode Mode) bool {
 	return pkg.Name == "main"
 }
 
-func setNeedRuntimeOrPyInit(ctx *context, pkg *packages.Package, needRuntime, needPyInit bool) {
-	ctx.needRt[pkg] = needRuntime
-	ctx.needPyInit[pkg] = needPyInit
+func (p Package) setNeedRuntimeOrPyInit(needRuntime, needPyInit bool) {
+	p.NeedRt = needRuntime
+	p.NeedPyInit = needPyInit
 }
 
-func isNeedRuntimeOrPyInit(ctx *context, pkg *packages.Package) (needRuntime, needPyInit bool) {
-	needRuntime = ctx.needRt[pkg]
-	needPyInit = ctx.needPyInit[pkg]
+func (p Package) isNeedRuntimeOrPyInit() (needRuntime, needPyInit bool) {
+	needRuntime = p.NeedRt
+	needPyInit = p.NeedPyInit
 	return
 }
 
@@ -495,20 +509,20 @@ const (
 )
 
 type context struct {
-	env     *llvm.Env
-	conf    *packages.Config
-	progSSA *ssa.Program
-	prog    llssa.Program
-	dedup   packages.Deduper
-	patches cl.Patches
-	built   map[string]none
-	initial []*packages.Package
-	mode    Mode
-	nLibdir int
-	output  bool
-
-	needRt     map[*packages.Package]bool
-	needPyInit map[*packages.Package]bool
+	env            *llvm.Env
+	conf           *packages.Config
+	progSSA        *ssa.Program
+	prog           llssa.Program
+	dedup          packages.Deduper
+	patches        cl.Patches
+	built          map[string]none
+	fingerprinting map[string]bool
+	initial        []*packages.Package
+	pkgs           map[*packages.Package]Package // cache for lookup
+	pkgByID        map[string]Package            // cache for lookup by pkg.ID
+	mode           Mode
+	nLibdir        int32
+	output         bool
 
 	buildConf    *Config
 	crossCompile crosscompile.Export
@@ -516,6 +530,10 @@ type context struct {
 	cTransformer *cabi.Transformer
 
 	testFail bool
+
+	// Cache related fields
+	cacheManager *cacheManager
+	llvmVersion  string
 }
 
 func (c *context) compiler() *clang.Cmd {
@@ -527,7 +545,7 @@ func (c *context) compiler() *clang.Cmd {
 		c.crossCompile.Linker,
 	)
 	cmd := clang.NewCompiler(config)
-	cmd.Verbose = c.buildConf.Verbose
+	cmd.Verbose = c.shouldPrintCommands(false)
 	return cmd
 }
 
@@ -540,96 +558,189 @@ func (c *context) linker() *clang.Cmd {
 		c.crossCompile.Linker,
 	)
 	cmd := clang.NewLinker(config)
-	cmd.Verbose = c.buildConf.Verbose
+	cmd.Verbose = c.shouldPrintCommands(false)
 	return cmd
 }
 
-func buildAllPkgs(ctx *context, initial []*packages.Package, verbose bool) (pkgs []*aPackage, err error) {
-	pkgs, errPkgs := allPkgs(ctx, initial, verbose)
-	for _, errPkg := range errPkgs {
-		for _, err := range errPkg.Errors {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		fmt.Fprintln(os.Stderr, "cannot build SSA for package", errPkg)
+// shouldPrintCommands reports whether command tracing should be enabled.
+func (c *context) shouldPrintCommands(verbose bool) bool {
+	return c.buildConf.PrintCommands || c.buildConf.Verbose || verbose
+}
+
+// normalizeToArchive creates an archive from object files and sets ArchiveFile.
+// This ensures the link step always consumes .a archives regardless of cache state.
+func normalizeToArchive(ctx *context, aPkg *aPackage, verbose bool) error {
+	if len(aPkg.ObjFiles) == 0 {
+		return nil
 	}
-	if len(errPkgs) > 0 {
-		return nil, fmt.Errorf("cannot build SSA for packages")
+
+	archiveFile, err := os.CreateTemp("", "pkg-*.a")
+	if err != nil {
+		return fmt.Errorf("create temp archive: %w", err)
 	}
+	archiveFile.Close()
+	archivePath := archiveFile.Name()
+
+	if err := ctx.createArchiveFile(archivePath, aPkg.ObjFiles, verbose); err != nil {
+		os.Remove(archivePath)
+		return fmt.Errorf("create archive for %s: %w", aPkg.PkgPath, err)
+	}
+
+	aPkg.ObjFiles = nil
+	aPkg.ArchiveFile = archivePath
+	return nil
+}
+
+func buildAllPkgs(ctx *context, pkgs []*aPackage, verbose bool) ([]*aPackage, error) {
 	built := ctx.built
-	for _, aPkg := range pkgs {
+
+	// Split packages into runtime tree vs others so we can defer runtime build.
+	var runtimePkgs []*aPackage
+	var normalPkgs []*aPackage
+	for _, p := range pkgs {
+		if isRuntimePkg(p.PkgPath) {
+			runtimePkgs = append(runtimePkgs, p)
+		} else {
+			normalPkgs = append(normalPkgs, p)
+		}
+	}
+
+	var needRuntime, needPyInit bool
+
+	buildOne := func(aPkg *aPackage) error {
 		pkg := aPkg.Package
 		if _, ok := built[pkg.ID]; ok {
-			pkg.ExportFile = ""
-			continue
+			// Already built, skip but keep ExportFile for linking
+			return nil
 		}
 		built[pkg.ID] = none{}
+
 		switch kind, param := cl.PkgKindOf(pkg.Types); kind {
 		case cl.PkgDeclOnly:
-			// skip packages that only contain declarations
-			// and set no export file
 			pkg.ExportFile = ""
 		case cl.PkgLinkIR, cl.PkgLinkExtern, cl.PkgPyModule:
 			if len(pkg.GoFiles) > 0 {
-				err := buildPkg(ctx, aPkg, verbose)
-				if err != nil {
-					return nil, err
+				if err := ctx.collectFingerprint(aPkg); err != nil {
+					return err
+				}
+				ctx.tryLoadFromCache(aPkg)
+				if verbose {
+					if aPkg.CacheHit {
+						fmt.Fprintf(os.Stderr, "CACHE HIT: %s\n", pkg.PkgPath)
+					} else {
+						fmt.Fprintf(os.Stderr, "CACHE MISS: %s\n", pkg.PkgPath)
+					}
+				}
+				if err := buildPkg(ctx, aPkg, verbose); err != nil {
+					return err
+				}
+				if !aPkg.CacheHit {
+					if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
+						return err
+					}
+					if kind == cl.PkgLinkExtern {
+						appendExternalLinkArgs(ctx, aPkg, param)
+					}
+					if err := ctx.saveToCache(aPkg); err != nil && verbose {
+						fmt.Fprintf(os.Stderr, "warning: failed to save cache for %s: %v\n", pkg.PkgPath, err)
+					}
 				}
 			} else {
-				// panic("todo")
-				// TODO(xsw): support packages out of llgo
 				pkg.ExportFile = ""
-			}
-			if kind == cl.PkgLinkExtern {
-				// need to be linked with external library
-				// format: ';' separated alternative link methods. e.g.
-				//   link: $LLGO_LIB_PYTHON; $(pkg-config --libs python3-embed); -lpython3
-				altParts := strings.Split(param, ";")
-				expdArgs := make([]string, 0, len(altParts))
-				for _, param := range altParts {
-					param = strings.TrimSpace(param)
-					if strings.ContainsRune(param, '$') {
-						expdArgs = append(expdArgs, xenv.ExpandEnvToArgs(param)...)
-						ctx.nLibdir++
-					} else {
-						fields := strings.Fields(param)
-						expdArgs = append(expdArgs, fields...)
-					}
-					if len(expdArgs) > 0 {
-						break
-					}
+				if kind == cl.PkgLinkExtern {
+					appendExternalLinkArgs(ctx, aPkg, param)
 				}
-				if len(expdArgs) == 0 {
-					panic(fmt.Sprintf("'%s' cannot locate the external library", param))
-				}
-
-				pkgLinkArgs := make([]string, 0, 3)
-				if expdArgs[0][0] == '-' {
-					pkgLinkArgs = append(pkgLinkArgs, expdArgs...)
-				} else {
-					linkFile := expdArgs[0]
-					dir, lib := filepath.Split(linkFile)
-					pkgLinkArgs = append(pkgLinkArgs, "-l"+lib)
-					if dir != "" {
-						pkgLinkArgs = append(pkgLinkArgs, "-L"+dir)
-						ctx.nLibdir++
-					}
-				}
-				if ctx.buildConf.CheckLinkArgs {
-					if err := ctx.compiler().CheckLinkArgs(pkgLinkArgs, isWasmTarget(ctx.buildConf.Goos)); err != nil {
-						panic(fmt.Sprintf("test link args '%s' failed\n\texpanded to: %v\n\tresolved to: %v\n\terror: %v", param, expdArgs, pkgLinkArgs, err))
-					}
-				}
-				aPkg.LinkArgs = append(aPkg.LinkArgs, pkgLinkArgs...)
 			}
 		default:
-			err := buildPkg(ctx, aPkg, verbose)
-			if err != nil {
-				return nil, err
+			if err := ctx.collectFingerprint(aPkg); err != nil {
+				return err
 			}
-			setNeedRuntimeOrPyInit(ctx, pkg, aPkg.LPkg.NeedRuntime, aPkg.LPkg.NeedPyInit)
+			ctx.tryLoadFromCache(aPkg)
+			if verbose {
+				if aPkg.CacheHit {
+					fmt.Fprintf(os.Stderr, "CACHE HIT: %s\n", pkg.PkgPath)
+				} else {
+					fmt.Fprintf(os.Stderr, "CACHE MISS: %s\n", pkg.PkgPath)
+				}
+			}
+			if err := buildPkg(ctx, aPkg, verbose); err != nil {
+				return err
+			}
+			aPkg.setNeedRuntimeOrPyInit(aPkg.LPkg.NeedRuntime, aPkg.LPkg.NeedPyInit)
+			needRuntime = needRuntime || aPkg.NeedRt
+			needPyInit = needPyInit || aPkg.NeedPyInit
+			if !aPkg.CacheHit {
+				if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
+					return err
+				}
+				if err := ctx.saveToCache(aPkg); err != nil && verbose {
+					fmt.Fprintf(os.Stderr, "warning: failed to save cache for %s: %v\n", pkg.PkgPath, err)
+				}
+			}
+		}
+		return nil
+	}
+
+	// Build non-runtime packages first, so we know whether runtime is actually needed.
+	for _, p := range normalPkgs {
+		if err := buildOne(p); err != nil {
+			return nil, err
 		}
 	}
-	return
+
+	// Only build runtime packages when required (or host build with empty Target).
+	if needRuntime || needPyInit || ctx.buildConf.Target == "" {
+		for _, p := range runtimePkgs {
+			if err := buildOne(p); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return pkgs, nil
+}
+
+func appendExternalLinkArgs(ctx *context, aPkg *aPackage, spec string) {
+	// need to be linked with external library
+	// format: ';' separated alternative link methods. e.g.
+	//   link: $LLGO_LIB_PYTHON; $(pkg-config --libs python3-embed); -lpython3
+	altParts := strings.Split(spec, ";")
+	expdArgs := make([]string, 0, len(altParts))
+	for _, alt := range altParts {
+		alt = strings.TrimSpace(alt)
+		if strings.ContainsRune(alt, '$') {
+			expdArgs = append(expdArgs, xenv.ExpandEnvToArgs(alt)...)
+			atomic.AddInt32(&ctx.nLibdir, 1)
+		} else {
+			fields := strings.Fields(alt)
+			expdArgs = append(expdArgs, fields...)
+		}
+		if len(expdArgs) > 0 {
+			break
+		}
+	}
+	if len(expdArgs) == 0 {
+		panic(fmt.Sprintf("'%s' cannot locate the external library", spec))
+	}
+
+	pkgLinkArgs := make([]string, 0, 3)
+	if expdArgs[0][0] == '-' {
+		pkgLinkArgs = append(pkgLinkArgs, expdArgs...)
+	} else {
+		linkFile := expdArgs[0]
+		dir, lib := filepath.Split(linkFile)
+		pkgLinkArgs = append(pkgLinkArgs, "-l"+lib)
+		if dir != "" {
+			pkgLinkArgs = append(pkgLinkArgs, "-L"+dir)
+			atomic.AddInt32(&ctx.nLibdir, 1)
+		}
+	}
+	if ctx.buildConf.CheckLinkArgs {
+		if err := ctx.compiler().CheckLinkArgs(pkgLinkArgs, isWasmTarget(ctx.buildConf.Goos)); err != nil {
+			panic(fmt.Sprintf("test link args '%s' failed\n\texpanded to: %v\n\tresolved to: %v\n\terror: %v", spec, expdArgs, pkgLinkArgs, err))
+		}
+	}
+	aPkg.LinkArgs = append(aPkg.LinkArgs, pkgLinkArgs...)
 }
 
 var (
@@ -697,6 +808,7 @@ func compileExtraFiles(ctx *context, verbose bool) ([]string, error) {
 		return nil, nil
 	}
 
+	printCmds := ctx.shouldPrintCommands(verbose)
 	var objFiles []string
 	llgoRoot := env.LLGoROOT()
 
@@ -710,96 +822,130 @@ func compileExtraFiles(ctx *context, verbose bool) ([]string, error) {
 		}
 
 		// Generate output file name
-		objFile, err := os.CreateTemp("", "extra-*"+filepath.Base(extraFile))
+		tmpFile, err := os.CreateTemp("", "extra-*"+filepath.Base(extraFile))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temp file for %s: %w", extraFile, err)
 		}
-		objFile.Close()
+		tmpFile.Close()
+		baseName := tmpFile.Name()
 
-		var outputFile string
 		ext := filepath.Ext(srcFile)
 
-		if ctx.buildConf.GenLL {
-			outputFile = objFile.Name() + ".ll"
-		} else {
-			outputFile = objFile.Name() + ".o"
-		}
-
-		// Prepare compilation arguments
-		var args []string
+		// Prepare base compilation arguments
+		var baseArgs []string
 
 		// Handle different file types
 		switch ext {
 		case ".c":
-			args = append(args, "-x", "c")
+			baseArgs = append(baseArgs, "-x", "c")
 		case ".S", ".s":
-			args = append(args, "-x", "assembler-with-cpp")
+			baseArgs = append(baseArgs, "-x", "assembler-with-cpp")
 		}
 
-		// Add output flags
+		// If GenLL is enabled, first emit .ll for debugging
 		if ctx.buildConf.GenLL {
-			args = append(args, "-emit-llvm", "-S", "-o", outputFile, "-c", srcFile)
-		} else {
-			args = append(args, "-o", outputFile, "-c", srcFile)
+			llFile := baseName + ".ll"
+			llArgs := append(slices.Clone(baseArgs), "-emit-llvm", "-S", "-o", llFile, "-c", srcFile)
+			if printCmds {
+				fmt.Fprintf(os.Stderr, "Compiling extra file (ll): clang %s\n", strings.Join(llArgs, " "))
+			}
+			cmd := ctx.compiler()
+			if err := cmd.Compile(llArgs...); err != nil {
+				return nil, fmt.Errorf("failed to compile extra file %s to .ll: %w", srcFile, err)
+			}
 		}
 
-		if verbose {
-			fmt.Fprintf(os.Stderr, "Compiling extra file: clang %s\n", strings.Join(args, " "))
+		// Always compile to .o for linking
+		objFile := baseName + ".o"
+		objArgs := append(baseArgs, "-o", objFile, "-c", srcFile)
+		if printCmds {
+			fmt.Fprintf(os.Stderr, "Compiling extra file: clang %s\n", strings.Join(objArgs, " "))
 		}
-
-		// Compile the file
 		cmd := ctx.compiler()
-		if err := cmd.Compile(args...); err != nil {
+		if err := cmd.Compile(objArgs...); err != nil {
 			return nil, fmt.Errorf("failed to compile extra file %s: %w", srcFile, err)
 		}
 
-		objFiles = append(objFiles, outputFile)
-		os.Remove(objFile.Name()) // Remove the temp file we created for naming
+		objFiles = append(objFiles, objFile)
+		os.Remove(baseName) // Remove the temp file we created for naming
 	}
 
 	return objFiles, nil
 }
 
 func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPath string, verbose bool) error {
-
 	needRuntime := false
 	needPyInit := false
-	pkgsMap := make(map[*packages.Package]*aPackage, len(pkgs))
+	needAbiInit := false
 	allPkgs := []*packages.Package{pkg}
 	for _, v := range pkgs {
-		pkgsMap[v.Package] = v
 		allPkgs = append(allPkgs, v.Package)
 	}
-	var objFiles []string
+	// linkInputs contains .a archives from all packages and .o files from main module
+	var linkInputs []string
 	var linkArgs []string
+	var rtLinkInputs []string
+	var rtLinkArgs []string
+	linkedPkgs := make(map[string]bool) // Track linked packages by ID to avoid duplicates
 	packages.Visit(allPkgs, nil, func(p *packages.Package) {
-		aPkg := pkgsMap[p]
+		// Skip if already linked this package (by ID)
+		if linkedPkgs[p.ID] {
+			return
+		}
+		aPkg := ctx.pkgs[p]
+		if aPkg == nil {
+			// Fallback: lookup by pkg.ID for packages that may be different instances
+			aPkg = ctx.pkgByID[p.ID]
+		}
 		if p.ExportFile != "" && aPkg != nil { // skip packages that only contain declarations
-			linkArgs = append(linkArgs, aPkg.LinkArgs...)
-			objFiles = append(objFiles, aPkg.LLFiles...)
-			need1, need2 := isNeedRuntimeOrPyInit(ctx, p)
-			if !needRuntime {
-				needRuntime = need1
+			linkedPkgs[p.ID] = true
+
+			// Defer linking runtime packages unless we actually need the runtime.
+			if isRuntimePkg(p.PkgPath) {
+				rtLinkArgs = append(rtLinkArgs, aPkg.LinkArgs...)
+				if aPkg.ArchiveFile != "" {
+					rtLinkInputs = append(rtLinkInputs, aPkg.ArchiveFile)
+				}
+				return
+			} else {
+				// Only let non-runtime packages influence whether runtime is needed.
+				need1, need2 := aPkg.isNeedRuntimeOrPyInit()
+				needRuntime = needRuntime || need1
+				needPyInit = needPyInit || need2
 			}
-			if !needPyInit {
-				needPyInit = need2
+			if aPkg.LPkg.NeedAbiInit {
+				needAbiInit = true
+			}
+
+			linkArgs = append(linkArgs, aPkg.LinkArgs...)
+			if aPkg.ArchiveFile != "" {
+				linkInputs = append(linkInputs, aPkg.ArchiveFile)
 			}
 		}
 	})
+
+	// Only link runtime objects when needed (or for host builds where runtime is always required).
+	if needRuntime || needPyInit || ctx.buildConf.Target == "" {
+		linkArgs = append(linkArgs, rtLinkArgs...)
+		linkInputs = append(linkInputs, rtLinkInputs...)
+	}
+
 	// Generate main module file (needed for global variables even in library modes)
-	entryPkg := genMainModule(ctx, llssa.PkgRuntime, pkg, needRuntime, needPyInit)
-	entryObjFile, err := exportObject(ctx, entryPkg.PkgPath, entryPkg.ExportFile, []byte(entryPkg.LPkg.String()))
+	// This is compiled directly to .o and added to linkInputs (not cached)
+	// Use a stable synthetic name to avoid confusing it with the real main package in traces/logs.
+	entryPkg := genMainModule(ctx, llssa.PkgRuntime, pkg, needRuntime, needPyInit, needAbiInit)
+	entryObjFile, err := exportObject(ctx, "entry_main", entryPkg.ExportFile, []byte(entryPkg.LPkg.String()))
 	if err != nil {
 		return err
 	}
-	objFiles = append(objFiles, entryObjFile)
+	linkInputs = append(linkInputs, entryObjFile)
 
 	// Compile extra files from target configuration
 	extraObjFiles, err := compileExtraFiles(ctx, verbose)
 	if err != nil {
 		return err
 	}
-	objFiles = append(objFiles, extraObjFiles...)
+	linkInputs = append(linkInputs, extraObjFiles...)
 
 	if IsFullRpathEnabled() {
 		// Treat every link-time library search path, specified by the -L parameter, as a runtime search path as well.
@@ -818,7 +964,7 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 		}
 	}
 
-	err = linkObjFiles(ctx, outputPath, objFiles, linkArgs, verbose)
+	err = linkObjFiles(ctx, outputPath, linkInputs, linkArgs, verbose)
 	if err != nil {
 		return err
 	}
@@ -826,10 +972,17 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 	return nil
 }
 
+// isRuntimePkg reports whether the package path belongs to the llgo runtime tree.
+func isRuntimePkg(pkgPath string) bool {
+	rtRoot := env.LLGoRuntimePkg
+	return pkgPath == rtRoot || strings.HasPrefix(pkgPath, rtRoot+"/")
+}
+
 func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose bool) error {
+	printCmds := ctx.shouldPrintCommands(verbose)
 	// Handle c-archive mode differently - use ar tool instead of linker
 	if ctx.buildConf.BuildMode == BuildModeCArchive {
-		return createStaticArchive(ctx, app, objFiles, verbose)
+		return ctx.createArchiveFile(app, objFiles, printCmds)
 	}
 
 	buildArgs := []string{"-o", app}
@@ -854,7 +1007,7 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 			if strings.HasSuffix(objFile, ".ll") {
 				oFile := strings.TrimSuffix(objFile, ".ll") + ".o"
 				args := []string{"-o", oFile, "-c", objFile, "-Wno-override-module"}
-				if verbose {
+				if printCmds {
 					fmt.Fprintln(os.Stderr, "clang", args)
 				}
 				if err := ctx.compiler().Compile(args...); err != nil {
@@ -871,28 +1024,73 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 	buildArgs = append(buildArgs, objFiles...)
 
 	cmd := ctx.linker()
-	cmd.Verbose = verbose
+	cmd.Verbose = printCmds
 	return cmd.Link(buildArgs...)
 }
 
-func createStaticArchive(ctx *context, archivePath string, objFiles []string, verbose bool) error {
-	// Use ar tool to create static archive
-	args := []string{"rcs", archivePath}
-	args = append(args, objFiles...)
-
-	if verbose {
-		fmt.Fprintf(os.Stderr, "ar %s\n", strings.Join(args, " "))
-	}
-
-	cmd := exec.Command("ar", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if verbose && len(output) > 0 {
-			fmt.Fprintf(os.Stderr, "ar output: %s\n", output)
+// archiver returns the archiving tool to use for the current context.
+// For wasm targets, it prefers llvm-ar because wasm-ld requires archives
+// created with llvm-ar (system ar cannot create valid wasm archive indexes).
+func (c *context) archiver() string {
+	// First check toolchain directory (for cross-compilation)
+	if c.crossCompile.CC != "" {
+		clangDir := filepath.Dir(c.crossCompile.CC)
+		if clangDir != "" {
+			llvmAr := filepath.Join(clangDir, "llvm-ar")
+			if _, err := os.Stat(llvmAr); err == nil {
+				return llvmAr
+			}
 		}
-		return fmt.Errorf("ar command failed: %w", err)
+	}
+	// Allow user override
+	if ar := os.Getenv("LLGO_AR"); ar != "" {
+		return ar
+	}
+	// For wasm targets, prefer llvm-ar from PATH (system ar cannot create valid wasm archives)
+	if c.buildConf.Goarch == "wasm" || strings.Contains(c.crossCompile.LLVMTarget, "wasm") {
+		if llvmAr, err := exec.LookPath("llvm-ar"); err == nil {
+			return llvmAr
+		}
+	}
+	return "ar"
+}
+
+// createArchiveFile builds an archive at archivePath atomically to avoid races when
+// multiple builds target the same output concurrently.
+func (c *context) createArchiveFile(archivePath string, objFiles []string, verbose ...bool) error {
+	if len(objFiles) == 0 {
+		return fmt.Errorf("no object files provided for archive %s", archivePath)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(archivePath), filepath.Base(archivePath)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmp.Close()
+	tmpName := tmp.Name()
+	// Remove the placeholder so ar can create the archive fresh.
+	_ = os.Remove(tmpName)
+
+	args := append([]string{"rcs", tmpName}, objFiles...)
+	arCmd := c.archiver()
+	cmd := exec.Command(arCmd, args...)
+	printCmds := c.shouldPrintCommands(len(verbose) > 0 && verbose[0])
+	if printCmds {
+		fmt.Fprintf(os.Stderr, "%s %s\n", filepath.Base(arCmd), strings.Join(args, " "))
+	}
+	if output, err := cmd.CombinedOutput(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("create archive %s: %w\n%s", archivePath, err, output)
+	}
+
+	if err := os.Rename(tmpName, archivePath); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("publish archive %s: %w", archivePath, err)
+	}
 	return nil
 }
 
@@ -944,23 +1142,30 @@ func buildPkg(ctx *context, aPkg *aPackage, verbose bool) error {
 	}
 	check(err)
 
+	aPkg.LPkg = ret
+
+	// If cache hit, we only needed to register types - skip compilation
+	if aPkg.CacheHit {
+		return nil
+	}
+
 	ctx.cTransformer.TransformModule(ret.Path(), ret.Module())
 
-	aPkg.LPkg = ret
-	cgoLLFiles, cgoLdflags, err := buildCgo(ctx, aPkg, aPkg.Package.Syntax, externs, verbose)
+	printCmds := ctx.shouldPrintCommands(verbose)
+	cgoLLFiles, cgoLdflags, err := buildCgo(ctx, aPkg, aPkg.Package.Syntax, externs, printCmds)
 	if err != nil {
 		return fmt.Errorf("build cgo of %v failed: %v", pkgPath, err)
 	}
-	aPkg.LLFiles = append(aPkg.LLFiles, cgoLLFiles...)
-	aPkg.LLFiles = append(aPkg.LLFiles, concatPkgLinkFiles(ctx, pkg, verbose)...)
+	aPkg.ObjFiles = append(aPkg.ObjFiles, cgoLLFiles...)
+	aPkg.ObjFiles = append(aPkg.ObjFiles, concatPkgLinkFiles(ctx, pkg, printCmds)...)
 	aPkg.LinkArgs = append(aPkg.LinkArgs, cgoLdflags...)
 	if aPkg.AltPkg != nil {
-		altLLFiles, altLdflags, e := buildCgo(ctx, aPkg, aPkg.AltPkg.Syntax, externs, verbose)
+		altLLFiles, altLdflags, e := buildCgo(ctx, aPkg, aPkg.AltPkg.Syntax, externs, printCmds)
 		if e != nil {
 			return fmt.Errorf("build cgo of %v failed: %v", pkgPath, e)
 		}
-		aPkg.LLFiles = append(aPkg.LLFiles, altLLFiles...)
-		aPkg.LLFiles = append(aPkg.LLFiles, concatPkgLinkFiles(ctx, aPkg.AltPkg.Package, verbose)...)
+		aPkg.ObjFiles = append(aPkg.ObjFiles, altLLFiles...)
+		aPkg.ObjFiles = append(aPkg.ObjFiles, concatPkgLinkFiles(ctx, aPkg.AltPkg.Package, printCmds)...)
 		aPkg.LinkArgs = append(aPkg.LinkArgs, altLdflags...)
 	}
 	if pkg.ExportFile != "" {
@@ -968,7 +1173,7 @@ func buildPkg(ctx *context, aPkg *aPackage, verbose bool) error {
 		if err != nil {
 			return fmt.Errorf("export object of %v failed: %v", pkgPath, err)
 		}
-		aPkg.LLFiles = append(aPkg.LLFiles, exportFile)
+		aPkg.ObjFiles = append(aPkg.ObjFiles, exportFile)
 		if debugBuild || verbose {
 			fmt.Fprintf(os.Stderr, "==> Export %s: %s\n", aPkg.PkgPath, pkg.ExportFile)
 		}
@@ -995,21 +1200,26 @@ func exportObject(ctx *context, pkgPath string, exportFile string, data []byte) 
 			fmt.Fprintf(os.Stderr, "==> lcc %v: %v\n%v\n", pkgPath, f.Name(), msg)
 		}
 	}
+	// If GenLL is enabled, keep a copy of the .ll file for debugging
 	if ctx.buildConf.GenLL {
-		exportFile += ".ll"
-		err = os.Chmod(f.Name(), 0644)
-		if err != nil {
-			return exportFile, err
+		llFile := exportFile + ".ll"
+		if err := os.Chmod(f.Name(), 0644); err != nil {
+			return "", err
 		}
-		return exportFile, os.Rename(f.Name(), exportFile)
+		// Copy instead of rename so we can still compile to .o
+		if err := copyFileAtomic(f.Name(), llFile); err != nil {
+			return "", err
+		}
 	}
+	// Always compile .ll to .o for linking
 	objFile, err := os.CreateTemp("", base+"-*.o")
 	if err != nil {
 		return "", err
 	}
 	objFile.Close()
 	args := []string{"-o", objFile.Name(), "-c", f.Name(), "-Wno-override-module"}
-	if ctx.buildConf.Verbose {
+	if ctx.shouldPrintCommands(false) {
+		fmt.Fprintf(os.Stderr, "# compiling %s for pkg: %s\n", f.Name(), pkgPath)
 		fmt.Fprintln(os.Stderr, "clang", args)
 	}
 	cmd := ctx.compiler()
@@ -1067,36 +1277,69 @@ type aPackage struct {
 	AltPkg *packages.Cached
 	LPkg   llssa.Package
 
+	NeedRt     bool
+	NeedPyInit bool
+
 	LinkArgs    []string
-	LLFiles     []string
+	ObjFiles    []string // object files: .o or .ll (output of compiler, input to archiver)
+	ArchiveFile string   // archive file: .a (output of archiver, used for linking)
 	rewriteVars map[string]string
+
+	// Cache related fields
+	Fingerprint string // fingerprint digest
+	Manifest    string // manifest text content
+	CacheHit    bool   // whether cache was hit
 }
 
 type Package = *aPackage
 
-func allPkgs(ctx *context, initial []*packages.Package, verbose bool) (all []*aPackage, errs []*packages.Package) {
+func buildSSAPkgs(ctx *context, initial []*packages.Package, verbose bool) ([]*aPackage, error) {
 	prog := ctx.progSSA
-	built := ctx.built
+	var all []*aPackage
+	var errs []*packages.Package
 	packages.Visit(initial, nil, func(p *packages.Package) {
 		if p.Types != nil && !p.IllTyped {
 			pkgPath := p.PkgPath
-			if _, ok := built[pkgPath]; ok || strings.HasPrefix(pkgPath, altPkgPathPrefix) {
+			// Use p.ID to check duplicates since same pkgPath may have different IDs
+			if _, ok := ctx.pkgByID[p.ID]; ok || strings.HasPrefix(pkgPath, altPkgPathPrefix) {
 				return
 			}
 			var altPkg *packages.Cached
-			var ssaPkg = createSSAPkg(prog, p, verbose)
+			var ssaPkg = createSSAPkg(ctx, prog, p, verbose)
 			if llruntime.HasAltPkg(pkgPath) {
 				if altPkg = ctx.dedup.Check(altPkgPathPrefix + pkgPath); altPkg == nil {
 					return
 				}
 			}
 			rewrites := collectRewriteVars(ctx, pkgPath)
-			all = append(all, &aPackage{p, ssaPkg, altPkg, nil, nil, nil, rewrites})
+			aPkg := &aPackage{
+				Package:     p,
+				SSA:         ssaPkg,
+				AltPkg:      altPkg,
+				LPkg:        nil,
+				NeedRt:      false,
+				NeedPyInit:  false,
+				LinkArgs:    nil,
+				ObjFiles:    nil,
+				rewriteVars: rewrites,
+			}
+			ctx.pkgs[p] = aPkg
+			ctx.pkgByID[p.ID] = aPkg
+			all = append(all, aPkg)
 		} else {
 			errs = append(errs, p)
 		}
 	})
-	return
+	if len(errs) > 0 {
+		for _, errPkg := range errs {
+			for _, err := range errPkg.Errors {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			fmt.Fprintln(os.Stderr, "cannot build SSA for package", errPkg)
+		}
+		return nil, fmt.Errorf("cannot build SSA for packages")
+	}
+	return all, nil
 }
 
 func collectRewriteVars(ctx *context, pkgPath string) map[string]string {
@@ -1125,12 +1368,89 @@ func cloneRewrites(src Rewrites) map[string]string {
 	return dup
 }
 
-func createSSAPkg(prog *ssa.Program, p *packages.Package, verbose bool) *ssa.Package {
+func toTypeList(args *types.TypeList) []types.Type {
+	if args == nil {
+		return nil
+	}
+	result := make([]types.Type, args.Len())
+	for i := 0; i < args.Len(); i++ {
+		result[i] = args.At(i)
+	}
+	return result
+}
+
+// fixUntypedShiftTypes fixes a bug in go/types where non-constant shift expressions
+// with untyped constant left operands have type "untyped int" instead of "int".
+//
+// According to the Go spec: "If the left operand of a non-constant shift expression
+// is an untyped constant, it is first implicitly converted to the type it would assume
+// if the shift expression were replaced by its left operand alone."
+//
+// This causes go/ssa sanity check to fail when the type remains untyped.
+// See: https://github.com/golang/go/issues/77067
+func fixUntypedShiftTypes(p *packages.Package) {
+	// First pass: identify expressions needing fixes
+	// (avoid modifying map during iteration)
+	var toFix []ast.Expr
+	for expr, tv := range p.TypesInfo.Types {
+		switch e := expr.(type) {
+		case *ast.BinaryExpr:
+			if e.Op != token.SHL && e.Op != token.SHR {
+				break
+			}
+			basic, ok := tv.Type.(*types.Basic)
+			if !ok || basic.Info()&types.IsUntyped == 0 {
+				break
+			}
+			toFix = append(toFix, expr)
+		}
+	}
+
+	// Second pass: apply fixes
+	for _, expr := range toFix {
+		tv := p.TypesInfo.Types[expr]
+		p.TypesInfo.Types[expr] = types.TypeAndValue{
+			Type:  types.Default(tv.Type),
+			Value: tv.Value,
+		}
+	}
+}
+
+func applyPatches(ctx *context, p *packages.Package, verbose bool) {
+	// Fix untyped shift types before SSA build
+	// See: https://github.com/golang/go/issues/77067
+	fixUntypedShiftTypes(p)
+
+	// fix instance patch
+	for id, inst := range p.TypesInfo.Instances {
+		if obj := p.TypesInfo.Uses[id]; obj != nil && obj.Pkg() != nil && obj.Pkg() != p.Types {
+			if pkg := obj.Pkg(); pkg != nil && pkg != p.Types {
+				if patch, ok := ctx.patches[pkg.Path()]; ok {
+					if robj := patch.Alt.Pkg.Scope().Lookup(obj.Name()); robj != nil {
+						typ, err := types.Instantiate(nil, robj.Type(), toTypeList(inst.TypeArgs), true)
+						if err != nil {
+							if debugBuild || verbose {
+								log.Printf("==> Instance patch failed for %q: %v\n", obj.Id(), err)
+							}
+							continue
+						}
+						inst.Type = typ
+						p.TypesInfo.Instances[id] = inst
+						p.TypesInfo.Uses[id] = robj
+					}
+				}
+			}
+		}
+	}
+}
+
+func createSSAPkg(ctx *context, prog *ssa.Program, p *packages.Package, verbose bool) *ssa.Package {
 	pkgSSA := prog.ImportedPackage(p.ID)
 	if pkgSSA == nil {
 		if debugBuild || verbose {
 			log.Println("==> BuildSSA", p.ID)
 		}
+		applyPatches(ctx, p, verbose)
 		pkgSSA = prog.CreatePackage(p.Types, p.Syntax, p.TypesInfo, true)
 		pkgSSA.Build() // TODO(xsw): build concurrently
 	}
@@ -1166,6 +1486,7 @@ const llgoWasmRuntime = "LLGO_WASM_RUNTIME"
 const llgoWasiThreads = "LLGO_WASI_THREADS"
 const llgoStdioNobuf = "LLGO_STDIO_NOBUF"
 const llgoFullRpath = "LLGO_FULL_RPATH"
+const llgoBuildCache = "LLGO_BUILD_CACHE"
 
 const defaultWasmRuntime = "wasmtime"
 
@@ -1183,6 +1504,12 @@ func isEnvOn(env string, defVal bool) bool {
 		return defVal
 	}
 	return envVal == "1" || envVal == "true" || envVal == "on"
+}
+
+// cacheEnabled checks if build cache is enabled.
+// Cache can be disabled by setting LLGO_BUILD_CACHE=off|0
+func cacheEnabled() bool {
+	return isEnvOn(llgoBuildCache, true)
 }
 
 func IsTraceEnabled() bool {
@@ -1249,32 +1576,44 @@ func clFiles(ctx *context, files string, pkg *packages.Package, procFile func(li
 	}
 	for _, file := range strings.Split(files, ";") {
 		cFile := filepath.Join(dir, strings.TrimSpace(file))
-		clFile(ctx, args, cFile, expFile, procFile, verbose)
+		clFile(ctx, args, cFile, expFile, pkg.PkgPath, procFile, verbose)
 	}
 }
 
-func clFile(ctx *context, args []string, cFile, expFile string, procFile func(linkFile string), verbose bool) {
-	llFile := expFile + filepath.Base(cFile)
+func clFile(ctx *context, args []string, cFile, expFile, pkgPath string, procFile func(linkFile string), verbose bool) {
+	baseName := expFile + filepath.Base(cFile)
 	ext := filepath.Ext(cFile)
 
 	// default clang++ will use c++ to compile c file,will cause symbol be mangled
 	if ext == ".c" {
 		args = append(args, "-x", "c")
 	}
+
+	// If GenLL is enabled, first emit .ll for debugging, then compile to .o
+	printCmds := ctx.shouldPrintCommands(verbose)
 	if ctx.buildConf.GenLL {
-		llFile += ".ll"
-		args = append(args, "-emit-llvm", "-S", "-o", llFile, "-c", cFile)
-	} else {
-		llFile += ".o"
-		args = append(args, "-o", llFile, "-c", cFile)
+		llFile := baseName + ".ll"
+		llArgs := append(slices.Clone(args), "-emit-llvm", "-S", "-o", llFile, "-c", cFile)
+		if printCmds {
+			fmt.Fprintf(os.Stderr, "# compiling %s for pkg: %s\n", llFile, pkgPath)
+			fmt.Fprintln(os.Stderr, "clang", llArgs)
+		}
+		cmd := ctx.compiler()
+		err := cmd.Compile(llArgs...)
+		check(err)
 	}
-	if verbose {
-		fmt.Fprintln(os.Stderr, "clang", args)
+
+	// Always compile to .o for linking
+	objFile := baseName + ".o"
+	objArgs := append(args, "-o", objFile, "-c", cFile)
+	if printCmds {
+		fmt.Fprintf(os.Stderr, "# compiling %s for pkg: %s\n", objFile, pkgPath)
+		fmt.Fprintln(os.Stderr, "clang", objArgs)
 	}
 	cmd := ctx.compiler()
-	err := cmd.Compile(args...)
+	err := cmd.Compile(objArgs...)
 	check(err)
-	procFile(llFile)
+	procFile(objFile)
 }
 
 func pkgExists(initial []*packages.Package, pkg *packages.Package) bool {

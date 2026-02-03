@@ -284,6 +284,17 @@ func isCgoVar(name string) bool {
 	return strings.HasPrefix(name, "__cgo_")
 }
 
+// isInstance reports whether f is an instance method or generic instantiation.
+func isInstance(f *ssa.Function) bool {
+	if f.Origin() != nil {
+		return true
+	}
+	if recv := f.Type().(*types.Signature).Recv(); recv != nil {
+		return recv.Origin() != recv
+	}
+	return false
+}
+
 func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Function, llssa.PyObjRef, int) {
 	pkgTypes, name, ftype := p.funcName(f)
 	if ftype != goFunc {
@@ -317,13 +328,11 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		}
 	}
 	if fn == nil {
-		fn = pkg.NewFuncEx(name, sig, llssa.Background(ftype), hasCtx, f.Origin() != nil)
+		fn = pkg.NewFuncEx(name, sig, llssa.Background(ftype), hasCtx, isInstance(f))
 		if disableInline {
 			fn.Inline(llssa.NoInline)
 		}
 	}
-	// set compiled to check generic function global instantiation
-	pkg.Prog.SetFuncCompiled(name)
 	isCgo := isCgoExternSymbol(f)
 	if nblk := len(f.Blocks); nblk > 0 {
 		p.cgoCalled = false
@@ -474,6 +483,13 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	if enableDbgSyms && block.Parent().Origin() == nil && block.Index == 0 {
 		p.debugParams(b, block.Parent())
 	}
+
+	// Handle init$hasPatch: split dependency init calls into separate function
+	if doModInit && p.state == pkgHasPatch {
+		baseName := strings.TrimSuffix(p.fn.Name(), "$hasPatch")
+		instrs = p.createInitDepsFunction(pkg, baseName, instrs)
+	}
+
 	if doModInit {
 		if pyModInit = p.pyMod != ""; pyModInit {
 			last = len(instrs) - 1
@@ -485,13 +501,22 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 			}
 		}
 	}
+
 	fnName := block.Parent().Name()
 	cgoReturned := false
 	isCgoCfunc := isCgoCfunc(fnName)
 	isCgoCmacro := isCgoCmacro(fnName)
 	for i, instr := range instrs {
 		if i == 1 && doModInit && p.state == pkgInPatch { // in patch package but no pkgFNoOldInit
-			initFnNameOld := initFnNameOfHasPatch(p.fn.Name())
+			name := p.fn.Name()
+			initFnNameOld := initFnNameOfHasPatch(name)
+			initPatchDepsFnName := initDepsFnNameOfHasPatch(name)
+
+			// Call deps function first
+			fnDeps := pkg.NewFunc(initPatchDepsFnName, llssa.NoArgsNoRet, llssa.InC)
+			b.Call(fnDeps.Expr)
+
+			// Then call hasPatch (global vars)
 			fnOld := pkg.NewFunc(initFnNameOld, llssa.NoArgsNoRet, llssa.InC)
 			b.Call(fnOld.Expr)
 		}
@@ -1112,7 +1137,7 @@ func NewPackageEx(prog llssa.Program, patches Patches, rewrites map[string]strin
 	ctx.initPyModule()
 	ctx.initFiles(pkgPath, files, pkgName == "C")
 	ctx.prog.SetPatch(ctx.patchType)
-	ret.SetPatch(ctx.patchType)
+	ctx.prog.SetCompileMethods(ctx.checkCompileMethods)
 	ret.SetResolveLinkname(ctx.resolveLinkname)
 
 	if hasPatch {
@@ -1149,6 +1174,79 @@ func initFnNameOfHasPatch(name string) string {
 	return name + "$hasPatch"
 }
 
+func initDepsFnNameOfHasPatch(name string) string {
+	return name + "$patchDeps"
+}
+
+// findFirstNonInitInstruction finds the index of the first non-init instruction
+// in the given instructions. Returns -1 if all instructions are init calls.
+// Skips non-call instructions (like store for guard).
+func findFirstNonInitInstruction(instrs []ssa.Instruction) int {
+	for i, instr := range instrs {
+		call, ok := instr.(*ssa.Call)
+		if !ok {
+			// Skip non-call instructions (like guard store)
+			continue
+		}
+		fn, ok := call.Call.Value.(*ssa.Function)
+		if !ok {
+			// Not a direct function call
+			return i
+		}
+		if fn.Name() == "init" && fn.Signature.Recv() == nil {
+			// This is an init call, continue looking
+			continue
+		}
+		// Found a non-init call
+		return i
+	}
+	return -1
+}
+
+// createInitDepsFunction creates and fills the init$patchDeps function
+// for the given init function, extracting dependency init calls from instrs.
+// Returns the remaining instructions after removing dependency inits.
+func (p *context) createInitDepsFunction(pkg llssa.Package, baseName string, instrs []ssa.Instruction) []ssa.Instruction {
+	// Create deps function
+	depsName := initDepsFnNameOfHasPatch(baseName)
+	depsFn := pkg.NewFunc(depsName, llssa.NoArgsNoRet, llssa.InC)
+	depsFn.MakeBlocks(1)
+	depsBuilder := depsFn.NewBuilder()
+	depsBuilder.SetBlock(depsFn.Block(0))
+
+	// Find and split dependency init calls
+	firstNonInit := findFirstNonInitInstruction(instrs)
+	var depsInstrs []ssa.Instruction
+	if firstNonInit > 0 {
+		depsInstrs = instrs[:firstNonInit]
+		instrs = instrs[firstNonInit:]
+
+		// Fill deps function body with dependency init calls
+		for _, instr := range depsInstrs {
+			if call, ok := instr.(*ssa.Call); ok {
+				if fn, ok := call.Call.Value.(*ssa.Function); ok {
+					if fn.Name() == "init" && fn.Signature.Recv() == nil {
+						// Skip packages that don't need init (like unsafe)
+						if p.pkgNoInit(fn.Pkg.Pkg) {
+							continue
+						}
+						// This is a dependency init call
+						// Use funcName to get the correct function name (handles patches, linkname, etc.)
+						_, depInitName, ftype := p.funcName(fn)
+						if ftype == goFunc {
+							depInitFn := pkg.NewFunc(depInitName, llssa.NoArgsNoRet, llssa.InC)
+							depsBuilder.Call(depInitFn.Expr)
+						}
+					}
+				}
+			}
+		}
+	}
+	depsBuilder.Return()
+
+	return instrs
+}
+
 func processPkg(ctx *context, ret llssa.Package, pkg *ssa.Package) {
 	type namedMember struct {
 		name string
@@ -1183,21 +1281,6 @@ func processPkg(ctx *context, ret llssa.Package, pkg *ssa.Package) {
 				ctx.compileGlobal(ret, member)
 			}
 		}
-	}
-
-	// check instantiate named in RuntimeTypes
-	var typs []*types.Named
-	for _, T := range pkg.Prog.RuntimeTypes() {
-		if typ, ok := T.(*types.Named); ok && typ.TypeArgs() != nil && typ.Obj().Pkg() == pkg.Pkg {
-			typs = append(typs, typ)
-		}
-	}
-	sort.Slice(typs, func(i, j int) bool {
-		return typs[i].String() < typs[j].String()
-	})
-	for _, typ := range typs {
-		ctx.compileMethods(ret, typ)
-		ctx.compileMethods(ret, types.NewPointer(typ))
 	}
 }
 
@@ -1265,6 +1348,32 @@ func (p *context) resolveLinkname(name string) string {
 		return ltarget
 	}
 	return name
+}
+
+// checkCompileMethods ensures that all methods attached to the given type
+// (and to the types it refers to) are compiled and emitted into the
+// current SSA package. Generic named types and struct types are the
+// primary targets; pointer types are followed until a non-pointer is
+// reached. non-generic named have their methods compiled elsewhere.
+func (p *context) checkCompileMethods(pkg llssa.Package, typ types.Type) {
+	nt := typ
+retry:
+	switch t := nt.(type) {
+	case *types.Named:
+		if t.TypeArgs() == nil {
+			obj := t.Obj()
+			// skip package-level type
+			if obj.Parent() == obj.Pkg().Scope() {
+				return
+			}
+		}
+		p.compileMethods(pkg, typ)
+	case *types.Struct:
+		p.compileMethods(pkg, typ)
+	case *types.Pointer:
+		nt = t.Elem()
+		goto retry
+	}
 }
 
 // -----------------------------------------------------------------------------

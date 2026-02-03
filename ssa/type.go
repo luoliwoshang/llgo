@@ -99,6 +99,9 @@ func (p *goProgram) Alignof(T types.Type) int64 {
 func (p *goProgram) Offsetsof(fields []*types.Var) (ret []int64) {
 	prog := Program(unsafe.Pointer(p))
 	ptrSize := int64(prog.PointerSize())
+	if abi.IsClosureFields(fields) {
+		return []int64{0, ptrSize}
+	}
 	extra := int64(0)
 	ret = p.sizes.Offsetsof(fields)
 	for i, f := range fields {
@@ -134,6 +137,9 @@ retry:
 	case *types.Signature:
 		return ptrSize
 	case *types.Struct:
+		if IsClosure(t) {
+			return
+		}
 		n := t.NumFields()
 		for i := 0; i < n; i++ {
 			f := t.Field(i)
@@ -397,15 +403,14 @@ func (p Program) toType(raw types.Type) Type {
 	panic(fmt.Sprintf("toLLVMType: todo - %T\n", raw))
 }
 
-func (p Program) toLLVMNamedStruct(name string, raw *types.Struct) llvm.Type {
-	if typ, ok := p.named[name]; ok {
-		return typ
-	}
+func (p Program) toLLVMNamedStruct(name string, raw *types.Named, st *types.Struct, kind valueKind) Type {
 	t := p.ctx.StructCreateNamed(name)
-	p.named[name] = t
-	fields := p.toLLVMFields(raw)
+	typ := &aType{t, rawType{raw}, kind}
+	p.named[name] = typ
+	p.typs.Set(raw, typ)
+	fields := p.toLLVMFields(st)
 	t.StructSetBody(fields, false)
-	return t
+	return typ
 }
 
 func (p Program) toLLVMStruct(raw *types.Struct) (ret llvm.Type, kind valueKind) {
@@ -420,14 +425,7 @@ func (p Program) toLLVMStruct(raw *types.Struct) (ret llvm.Type, kind valueKind)
 }
 
 func IsClosure(raw *types.Struct) bool {
-	n := raw.NumFields()
-	if n == 2 {
-		f1, f2 := raw.Field(0), raw.Field(1)
-		if _, ok := f1.Type().(*types.Signature); ok && f1.Name() == "$f" {
-			return f2.Type() == types.Typ[types.UnsafePointer] && f2.Name() == "$data"
-		}
-	}
-	return false
+	return abi.IsClosure(raw)
 }
 
 func (p Program) toLLVMFields(raw *types.Struct) (fields []llvm.Type) {
@@ -504,14 +502,17 @@ func (p Program) llvmNameOf(named *types.Named) (name string) {
 }
 
 func (p Program) toNamed(raw *types.Named) Type {
+	name := p.llvmNameOf(raw)
+	if typ, ok := p.named[name]; ok {
+		return typ
+	}
 	switch t := raw.Underlying().(type) {
 	case *types.Struct:
-		name := p.llvmNameOf(raw)
 		kind := vkStruct
 		if IsClosure(t) {
 			kind = vkClosure
 		}
-		return &aType{p.toLLVMNamedStruct(name, t), rawType{raw}, kind}
+		return p.toLLVMNamedStruct(name, raw, t, kind)
 	default:
 		typ := p.rawType(t)
 		return &aType{typ.ll, rawType{raw}, typ.kind}
@@ -540,13 +541,17 @@ func FuncName(pkg *types.Package, name string, recv *types.Var, org bool) string
 	if recv != nil {
 		named, ptr := recvNamed(recv.Type())
 		var tName string
-		if org {
-			tName = named.Obj().Name()
+		if named != nil {
+			if org {
+				tName = named.Obj().Name()
+			} else {
+				tName = abi.NamedName(named)
+			}
+			if ptr {
+				tName = "(*" + tName + ")"
+			}
 		} else {
-			tName = abi.NamedName(named)
-		}
-		if ptr {
-			tName = "(*" + tName + ")"
+			tName = types.TypeString(recv.Type(), PathOf)
 		}
 		return PathOf(pkg) + "." + tName + "." + name
 	}
