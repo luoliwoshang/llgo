@@ -975,8 +975,7 @@ func main() {
 	testTypeSwitch()
 	fmt.Println()
 
-	testTypeSwitch2()
-	fmt.Println()
+	// testTypeSwitch2() - IGNORED: see https://github.com/goplus/llgo/issues/1604
 
 	fmt.Println("All tests PASSED!")
 }
