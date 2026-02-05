@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -328,12 +328,12 @@ free(node)
 */
 
 func (b Builder) saveDeferArgs(self *aDefer, fn Expr, args []Expr) Type {
-	if fn.kind != vkClosure && len(args) == 0 {
+	if !isClosureKind(fn.kind) && len(args) == 0 {
 		return nil
 	}
 	prog := b.Prog
 	offset := 1
-	if fn.kind == vkClosure {
+	if isClosureKind(fn.kind) {
 		offset++
 	}
 	typs := make([]Type, len(args)+offset)
@@ -372,7 +372,7 @@ func (b Builder) callDefer(self *aDefer, typ Type, fn Expr, args []Expr) {
 		offset := 1
 		b.Store(self.argsPtr, Expr{b.getField(data, 0).impl, prog.VoidPtr()})
 		callFn := fn
-		if callFn.kind == vkClosure {
+		if isClosureKind(callFn.kind) {
 			callFn = b.getField(data, 1)
 			offset++
 		}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ const (
 	vkFuncDecl
 	vkFuncPtr
 	vkClosure
+	vkImethodClosure
 	vkBuiltin
 	vkPyFuncRef
 	vkPyVarRef
@@ -61,6 +62,10 @@ const (
 )
 
 // -----------------------------------------------------------------------------
+
+func isClosureKind(kind valueKind) bool {
+	return kind == vkClosure || kind == vkImethodClosure
+}
 
 func indexType(t types.Type) types.Type {
 	typ := t
@@ -169,6 +174,13 @@ type aType struct {
 }
 
 type Type = *aType
+
+func (t Type) withKind(kind valueKind) Type {
+	if t.kind == kind {
+		return t
+	}
+	return &aType{ll: t.ll, raw: t.raw, kind: kind}
+}
 
 // RawType returns the raw type.
 func (t Type) RawType() types.Type {

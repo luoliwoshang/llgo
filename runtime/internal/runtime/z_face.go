@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -182,15 +182,22 @@ func IfacePtrData(i iface) unsafe.Pointer {
 	if i.tab == nil {
 		panic(errorString("invalid memory address or nil pointer dereference").Error())
 	}
-	switch i.tab._type.Kind() {
+	if DirectIfaceData(i.tab._type) {
+		return unsafe.Pointer(&i.data)
+	}
+	return i.data
+}
+
+func DirectIfaceData(typ *abi.Type) bool {
+	switch typ.Kind() {
 	case abi.Bool, abi.Int, abi.Int8, abi.Int16, abi.Int32, abi.Int64,
 		abi.Uint, abi.Uint8, abi.Uint16, abi.Uint32, abi.Uint64, abi.Uintptr,
 		abi.Float32, abi.Float64, abi.Array, abi.Struct:
-		if isDirectIface(i.tab._type) {
-			return unsafe.Pointer(&i.data)
+		if isDirectIface(typ) {
+			return true
 		}
 	}
-	return i.data
+	return false
 }
 
 // MatchesClosure reports whether the type V matches the closure type T for

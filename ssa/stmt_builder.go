@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -151,8 +151,8 @@ func notInit(instr llvm.Value) bool {
 		if n := instr.OperandsCount(); n == 1 {
 			fn := instr.Operand(0)
 			name := fn.Name()
-			// Skip .init and .init$patchDeps calls
-			return !strings.HasSuffix(name, ".init") && !strings.HasSuffix(name, ".init$patchDeps")
+			// Skip .init calls
+			return !strings.HasSuffix(name, ".init")
 		}
 	}
 	return true

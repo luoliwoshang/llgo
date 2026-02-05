@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -425,8 +425,10 @@ var llgoInstrs = map[string]int{
 	"_cgoCheckPointer":     llgoCgoCheckPointer,
 	"_cgo_runtime_cgocall": llgoCgoCgocall,
 
-	"asm":       llgoAsm,
-	"stackSave": llgoStackSave,
+	"asm":           llgoAsm,
+	"stackSave":     llgoStackSave,
+	"getClosurePtr": llgoGetClosurePtr,
+	"setClosurePtr": llgoSetClosurePtr,
 }
 
 // funcOf returns a function by name and set ftype = goFunc, cFunc, etc.
@@ -506,7 +508,7 @@ func (p *context) call(b llssa.Builder, act llssa.DoAction, call *ssa.CallCommon
 	cv := call.Value
 	if mthd := call.Method; mthd != nil {
 		o := p.compileValue(b, cv)
-		fn := b.Imethod(o, mthd)
+		fn := b.ImethodEx(o, mthd, act != llssa.Call)
 		hasVArg := fnNormal
 		if llssa.HasNameValist(call.Signature()) {
 			hasVArg = fnHasVArg
@@ -604,6 +606,17 @@ func (p *context) call(b llssa.Builder, act llssa.DoAction, call *ssa.CallCommon
 			p.siglongjmp(b, args)
 		case llgoStackSave:
 			ret = b.StackSave()
+		case llgoGetClosurePtr:
+			if b.Func.HasEnvParam() {
+				ret = b.Func.EnvParam()
+			} else {
+				ret = b.ReadCtxReg()
+			}
+		case llgoSetClosurePtr:
+			if len(args) != 1 {
+				panic("setClosurePtr(ptr): invalid arguments")
+			}
+			b.WriteCtxReg(p.compileValue(b, args[0]))
 		case llgoSigjmpbuf: // func sigjmpbuf()
 			ret = b.AllocaSigjmpBuf()
 		case llgoDeferData: // func deferData() *Defer
