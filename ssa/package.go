@@ -22,7 +22,6 @@ import (
 	"go/types"
 	"runtime"
 	"strconv"
-	"testing"
 	"unsafe"
 
 	"github.com/goplus/llgo/internal/env"
@@ -422,7 +421,6 @@ func (p Program) NewPackage(name, pkgPath string) Package {
 	// if p.target.GOARCH != runtime.GOARCH && p.target.GOOS != runtime.GOOS {
 	// 	mod.SetTarget(p.target.Spec().Triple)
 	// }
-	testing.Testing()
 
 	// TODO(xsw): Finalize may cause panic, so comment it.
 	// mod.Finalize()

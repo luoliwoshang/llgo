@@ -1694,6 +1694,29 @@ attributes #0 = { returns_twice }
 `)
 }
 
+func TestTargetMachineAndDataLayout(t *testing.T) {
+	tests := []struct {
+		goos       string
+		goarch     string
+		dataLayout string
+		triple     string
+	}{
+		{"linux", "amd64", "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", "x86_64-unknown-linux"},
+		{"linux", "arm64", "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32", "aarch64-unknown-linux"},
+		{"darwin", "amd64", "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", "x86_64-apple-macosx"},
+		{"darwin", "arm64", "e-m:o-i64:64-i128:128-n32:64-S128-Fn32", "arm64-apple-macosx"},
+	}
+	for _, tt := range tests {
+		prog := NewProgram(&Target{GOOS: tt.goos, GOARCH: tt.goarch})
+		if dl := prog.DataLayout(); dl != tt.dataLayout {
+			t.Fatalf("%s/%s DataLayout mismatch: got %q, want %q", tt.goos, tt.goarch, dl, tt.dataLayout)
+		}
+		if triple := prog.Target().Spec().Triple; triple != tt.triple {
+			t.Fatalf("%s/%s Triple mismatch: got %q, want %q", tt.goos, tt.goarch, triple, tt.triple)
+		}
+	}
+}
+
 func TestAbiTables(t *testing.T) {
 	prog := NewProgram(nil)
 	prog.sizes = types.SizesFor("gc", runtime.GOARCH)
