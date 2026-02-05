@@ -22,6 +22,7 @@ import (
 	"go/types"
 	"runtime"
 	"strconv"
+	"testing"
 	"unsafe"
 
 	"github.com/goplus/llgo/internal/env"
@@ -117,9 +118,9 @@ type aProgram struct {
 	py    *types.Package
 	pyget func() *types.Package
 
-	target *Target
-	td     llvm.TargetData
-	// tm  llvm.TargetMachine
+	target  *Target
+	td      llvm.TargetData
+	tm      llvm.TargetMachine
 	named   map[string]Type
 	fnnamed map[string]int
 
@@ -247,7 +248,7 @@ func NewProgram(target *Target) Program {
 		}
 	}
 	ctx := llvm.NewContext()
-	td := target.targetData() // TODO(xsw): target config
+	td, tm := target.targetInfo()
 	/*
 		arch := target.GOARCH
 		if arch == "" {
@@ -261,7 +262,7 @@ func NewProgram(target *Target) Program {
 	is32Bits := (td.PointerSize() == 4 || is32Bits(target.GOARCH))
 	return &aProgram{
 		ctx: ctx, gocvt: newGoTypes(),
-		target: target, td: td, is32Bits: is32Bits,
+		target: target, td: td, tm: tm, is32Bits: is32Bits,
 		ptrSize: td.PointerSize(), named: make(map[string]Type), fnnamed: make(map[string]int),
 		linkname: make(map[string]string), abiSymbol: make(map[string]Type),
 	}
@@ -273,6 +274,14 @@ func (p Program) Target() *Target {
 
 func (p Program) TargetData() llvm.TargetData {
 	return p.td
+}
+
+func (p Program) TargetMachine() llvm.TargetMachine {
+	return p.tm
+}
+
+func (p Program) DataLayout() string {
+	return p.td.String()
 }
 
 func (p Program) SetPatch(patchType func(types.Type) types.Type) {
@@ -413,6 +422,7 @@ func (p Program) NewPackage(name, pkgPath string) Package {
 	// if p.target.GOARCH != runtime.GOARCH && p.target.GOOS != runtime.GOOS {
 	// 	mod.SetTarget(p.target.Spec().Triple)
 	// }
+	testing.Testing()
 
 	// TODO(xsw): Finalize may cause panic, so comment it.
 	// mod.Finalize()
