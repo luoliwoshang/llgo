@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 
 	t := typ.common()
 	ftyp := (*funcType)(unsafe.Pointer(t))
-	sig, err := toFFISig(append([]*abi.Type{unsafePointerType}, ftyp.In...), ftyp.Out)
+	sig, err := makeFuncSig(ftyp)
 	if err != nil {
 		panic(err)
 	}
@@ -55,7 +55,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 			fd := (*funcData)(userdata)
 			ins := make([]Value, fd.nin)
 			for i := 0; i < fd.nin; i++ {
-				ins[i] = ffiToValue(ffi.Index(args, uintptr(i+1)), fd.ftyp.In[i])
+				ins[i] = ffiToValue(ffi.Index(args, makeFuncArgIndex(i)), fd.ftyp.In[i])
 			}
 			fd.fn(ins)
 		}, unsafe.Pointer(&funcData{ftyp: ftyp, fn: fn, nin: len(ftyp.In)}))
@@ -64,7 +64,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 			fd := (*funcData)(userdata)
 			ins := make([]Value, fd.nin)
 			for i := 0; i < fd.nin; i++ {
-				ins[i] = ffiToValue(ffi.Index(args, uintptr(i+1)), fd.ftyp.In[i])
+				ins[i] = ffiToValue(ffi.Index(args, makeFuncArgIndex(i)), fd.ftyp.In[i])
 			}
 			out := fd.fn(ins)
 			if fd.ftyp.Out[0].IfaceIndir() {
@@ -78,7 +78,7 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 			fd := (*funcData)(userdata)
 			ins := make([]Value, fd.nin)
 			for i := 0; i < fd.nin; i++ {
-				ins[i] = ffiToValue(ffi.Index(args, uintptr(i+1)), fd.ftyp.In[i])
+				ins[i] = ffiToValue(ffi.Index(args, makeFuncArgIndex(i)), fd.ftyp.In[i])
 			}
 			outs := fd.fn(ins)
 			var offset uintptr = 0
@@ -95,13 +95,6 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	if err != nil {
 		panic("libffi error: " + err.Error())
 	}
-	// styp := runtime.Struct("", 2*unsafe.Sizeof(0), abi.StructField{
-	// 	Name_: "$f",
-	// 	Typ:   &ftyp.Type,
-	// }, abi.StructField{
-	// 	Name_: "$data",
-	// 	Typ:   unsafePointerType,
-	// })
 	styp := closureOf(ftyp)
 	fv := &struct {
 		fn  unsafe.Pointer
@@ -222,21 +215,15 @@ func makeMethodValue(op string, v Value) Value {
 	rcvr := Value{v.typ(), v.ptr, fl}
 
 	// v.Type returns the actual type of the method value.
-	ftyp := (*funcType)(unsafe.Pointer(v.Type().(*rtype)))
-	// typ := runtime.Struct("", 2*unsafe.Sizeof(0), abi.StructField{
-	// 	Name_: "$f",
-	// 	Typ:   &ftyp.Type,
-	// }, abi.StructField{
-	// 	Name_: "$data",
-	// 	Typ:   unsafePointerType,
-	// })
-	typ := closureOf(ftyp)
-	typ.TFlag |= abi.TFlagClosure
 	_, _, fn := methodReceiver(op, rcvr, int(v.flag)>>flagMethodShift)
+	var ptr unsafe.Pointer
+	storeRcvr(v, unsafe.Pointer(&ptr))
 	fv := &struct {
 		fn  unsafe.Pointer
 		env unsafe.Pointer
-	}{fn, v.ptr}
+	}{fn, ptr}
+	ftyp := (*funcType)(unsafe.Pointer(v.Type().(*rtype)))
+	typ := closureOf(ftyp)
 	// Cause panic if method is not appropriate.
 	// The panic would still happen during the call if we omit this,
 	// but we want Interface() and other operations to fail early.

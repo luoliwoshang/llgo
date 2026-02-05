@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1239,7 +1239,10 @@ func FuncOf(in, out []Type, variadic bool) Type {
 
 	// Make a func type.
 	var ifunc any = (func())(nil)
-	prototype := *(**funcType)(unsafe.Pointer(&ifunc))
+	// Closures are always struct{fn *funcType, data unsafe.Pointer}
+	// This is guaranteed by closureOf() construction
+	closureType := *(**abi.StructType)(unsafe.Pointer(&ifunc))
+	prototype := closureType.Fields[0].Typ.FuncType()
 	ft := &funcType{}
 	*ft = *prototype
 	ft.In = make([]*abi.Type, len(in))

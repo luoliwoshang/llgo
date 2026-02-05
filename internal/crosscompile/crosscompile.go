@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/goplus/llgo/internal/crosscompile/compile"
@@ -78,6 +79,31 @@ func buildEnvMap(llgoRoot string) map[string]string {
 	// envs["zip"] = ""      // Path to zip file
 
 	return envs
+}
+
+func appendMissingFlags(dst []string, flags []string) []string {
+	for i := 0; i < len(flags); i++ {
+		flag := flags[i]
+		if flag == "-Xclang" && i+1 < len(flags) {
+			arg := flags[i+1]
+			found := false
+			for j := 0; j+1 < len(dst); j++ {
+				if dst[j] == "-Xclang" && dst[j+1] == arg {
+					found = true
+					break
+				}
+			}
+			if !found {
+				dst = append(dst, flag, arg)
+			}
+			i++
+			continue
+		}
+		if !slices.Contains(dst, flag) {
+			dst = append(dst, flag)
+		}
+	}
+	return dst
 }
 
 // getCanonicalArchName returns the canonical architecture name for a target triple
@@ -224,6 +250,9 @@ func use(goos, goarch string, wasiThreads, forceEspClang bool) (export Export, e
 			"-Wno-unused-command-line-argument",
 			"-Wl,--error-limit=0",
 			"-fuse-ld=lld",
+			// Enable ICF (Identical Code Folding) to reduce binary size
+			"-Xlinker",
+			"--icf=safe",
 		}
 		if clangRoot != "" {
 			clangLib := filepath.Join(clangRoot, "lib")
@@ -247,7 +276,6 @@ func use(goos, goarch string, wasiThreads, forceEspClang bool) (export Export, e
 			"-Qunused-arguments",
 			"-Wno-unused-command-line-argument",
 		}
-
 		// Add sysroot for macOS only
 		if goos == "darwin" {
 			sysrootPath, sysrootErr := getMacOSSysroot()
@@ -280,7 +308,6 @@ func use(goos, goarch string, wasiThreads, forceEspClang bool) (export Export, e
 				"-ffunction-sections",
 				"-Xlinker",
 				"--gc-sections",
-				"-lm",
 				"-latomic",
 				// libpthread & libdl is built-in since glibc 2.34 (2021-08-01); we need to support earlier versions.
 				"-lpthread",
@@ -485,7 +512,8 @@ func UseTarget(targetName string) (export Export, err error) {
 	envs := buildEnvMap(env.LLGoROOT())
 
 	// Convert LLVMTarget, CPU, Features to CCFLAGS/LDFLAGS
-	ldflags := []string{"-S"}
+	// Enable ICF (Identical Code Folding) to reduce binary size
+	ldflags := []string{"-S", "--icf=safe"}
 	ccflags := []string{"-Oz"}
 	cflags := []string{"-Wno-override-module", "-Qunused-arguments", "-Wno-unused-command-line-argument"}
 	if config.LLVMTarget != "" {
