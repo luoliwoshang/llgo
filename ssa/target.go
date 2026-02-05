@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ type Target struct {
 	GOOS   string
 	GOARCH string
 	GOARM  string // "5", "6", "7" (default)
+	Target string // target name from -target flag (e.g., "esp32", "arm7tdmi", "wasi")
 }
 
 func (p *Target) targetData() llvm.TargetData {

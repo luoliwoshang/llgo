@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 The GoPlus Authors (goplus.org). All rights reserved.
+ * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -109,7 +109,8 @@ func (b Builder) addReturnsTwiceAttr(fn Expr) {
 }
 
 func (b Builder) Sigsetjmp(jb, savemask Expr) Expr {
-	if b.Prog.target.GOARCH == "wasm" {
+	// Use setjmp for wasm or targets specified via -target flag (baremetal, etc.)
+	if b.Prog.target.GOARCH == "wasm" || b.Prog.target.Target != "" {
 		return b.Setjmp(jb)
 	}
 	fname := "sigsetjmp"
@@ -122,7 +123,8 @@ func (b Builder) Sigsetjmp(jb, savemask Expr) Expr {
 }
 
 func (b Builder) Siglongjmp(jb, retval Expr) {
-	if b.Prog.target.GOARCH == "wasm" {
+	// Use longjmp for wasm or targets specified via -target flag (baremetal, etc.)
+	if b.Prog.target.GOARCH == "wasm" || b.Prog.target.Target != "" {
 		b.Longjmp(jb, retval)
 		return
 	}
