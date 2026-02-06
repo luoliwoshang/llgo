@@ -1202,9 +1202,25 @@ func TestTargetMachineAndDataLayout(t *testing.T) {
 	}
 	for _, tt := range tests {
 		prog := NewProgram(&Target{GOOS: tt.goos, GOARCH: tt.goarch})
+
+		// Test TargetMachine() returns a valid target machine
+		tm := prog.TargetMachine()
+		if tm.C == nil {
+			t.Fatalf("%s/%s TargetMachine() returned nil", tt.goos, tt.goarch)
+		}
+
+		// Test TargetData() returns a valid target data
+		td := prog.TargetData()
+		if td.C == nil {
+			t.Fatalf("%s/%s TargetData() returned nil", tt.goos, tt.goarch)
+		}
+
+		// Test DataLayout() returns the expected data layout string
 		if dl := prog.DataLayout(); dl != tt.dataLayout {
 			t.Fatalf("%s/%s DataLayout mismatch: got %q, want %q", tt.goos, tt.goarch, dl, tt.dataLayout)
 		}
+
+		// Test Target().Spec().Triple returns the expected triple
 		if triple := prog.Target().Spec().Triple; triple != tt.triple {
 			t.Fatalf("%s/%s Triple mismatch: got %q, want %q", tt.goos, tt.goarch, triple, tt.triple)
 		}
