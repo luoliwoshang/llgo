@@ -36,7 +36,7 @@ get_system_info() {
 
     echo "${OS}-${ARCH}"
 }
-
+# 
 # Function to install from local source
 install_local() {
     echo "Installing llgo from local source..."
