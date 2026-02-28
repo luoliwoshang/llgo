@@ -943,6 +943,16 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 		linkInputs = append(linkInputs, rtLinkInputs...)
 	}
 
+	if invokeLoweringEnabled() && ctx.mode != ModeTest && ctx.mode != ModeCmpTest {
+		invokePatchObj, err := buildInvokeLoweringPatchObject(ctx, linkedPkgs, verbose)
+		if err != nil {
+			return err
+		}
+		if invokePatchObj != "" {
+			linkInputs = append(linkInputs, invokePatchObj)
+		}
+	}
+
 	// Generate main module file (needed for global variables even in library modes)
 	// This is compiled directly to .o and added to linkInputs (not cached)
 	// Use a stable synthetic name to avoid confusing it with the real main package in traces/logs.
@@ -1161,6 +1171,14 @@ func buildPkg(ctx *context, aPkg *aPackage, verbose bool) error {
 	check(err)
 
 	aPkg.LPkg = ret
+	aPkg.BitcodeFile = ""
+	if pkg.ExportFile != "" {
+		bitcodeFile, err := exportBitcode(ctx, pkgPath, pkg.ExportFile, ret.Module())
+		if err != nil {
+			return fmt.Errorf("export bitcode of %v failed: %v", pkgPath, err)
+		}
+		aPkg.BitcodeFile = bitcodeFile
+	}
 
 	// If cache hit, we only needed to register types - skip compilation
 	if aPkg.CacheHit {
@@ -1280,6 +1298,31 @@ func exportObject(ctx *context, pkgPath string, exportFile string, data []byte) 
 	return objFile.Name(), cmd.Compile(args...)
 }
 
+func exportBitcode(ctx *context, pkgPath string, exportFile string, mod gllvm.Module) (string, error) {
+	base := filepath.Base(exportFile)
+	f, err := os.CreateTemp("", base+"-*.bc")
+	if err != nil {
+		return "", err
+	}
+	if err := gllvm.WriteBitcodeToFile(mod, f); err != nil {
+		f.Close()
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	if ctx.buildConf.GenLL {
+		bcFile := exportFile + ".bc"
+		if err := copyFileAtomic(f.Name(), bcFile); err != nil {
+			return "", err
+		}
+	}
+	if debugBuild {
+		fmt.Fprintf(os.Stderr, "==> ExportBC %s: %s\n", pkgPath, f.Name())
+	}
+	return f.Name(), nil
+}
+
 func llcCheck(env *llvm.Env, exportFile string) (msg string, err error) {
 	bin := filepath.Join(env.BinDir(), "llc")
 	cmd := exec.Command(bin, "-filetype=null", exportFile)
@@ -1343,6 +1386,7 @@ type aPackage struct {
 	LinkArgs    []string
 	ObjFiles    []string // object files: .o or .ll (output of compiler, input to archiver)
 	ArchiveFile string   // archive file: .a (output of archiver, used for linking)
+	BitcodeFile string   // bitcode file: .bc (for global invoke-lowering analysis)
 	rewriteVars map[string]string
 
 	// Cache related fields
@@ -1381,6 +1425,7 @@ func buildSSAPkgs(ctx *context, initial []*packages.Package, verbose bool) ([]*a
 				NeedPyInit:  false,
 				LinkArgs:    nil,
 				ObjFiles:    nil,
+				BitcodeFile: "",
 				rewriteVars: rewrites,
 			}
 			ctx.pkgs[p] = aPkg
