@@ -268,6 +268,11 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	cl.EnableDbgSyms(IsDbgSymsEnabled())
 	cl.EnableTrace(IsTraceEnabled())
 	llssa.Initialize(llssa.InitAll)
+	lateMethodBinding := IsMethodLateBindingEnabled()
+	if lateMethodBinding && !invokeLoweringEnabled() {
+		return nil, fmt.Errorf("LLGO_METHOD_LATE_BINDING requires LLGO_INVOKE_LOWERING=1")
+	}
+	llssa.SetMethodLateBinding(lateMethodBinding)
 
 	target := &llssa.Target{
 		GOOS:   conf.Goos,
@@ -1592,6 +1597,7 @@ const llgoWasiThreads = "LLGO_WASI_THREADS"
 const llgoStdioNobuf = "LLGO_STDIO_NOBUF"
 const llgoFullRpath = "LLGO_FULL_RPATH"
 const llgoBuildCache = "LLGO_BUILD_CACHE"
+const llgoMethodLateBinding = "LLGO_METHOD_LATE_BINDING"
 
 // for Plan9 asm translation debug
 const llgoPlan9ASMPkgs = "LLGO_PLAN9ASM_PKGS"
@@ -1646,6 +1652,10 @@ func IsWasiThreadsEnabled() bool {
 
 func IsFullRpathEnabled() bool {
 	return isEnvOn(llgoFullRpath, true)
+}
+
+func IsMethodLateBindingEnabled() bool {
+	return isEnvOn(llgoMethodLateBinding, false)
 }
 
 func Plan9ASMPkgs() string {
