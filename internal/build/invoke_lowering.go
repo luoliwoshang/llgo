@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	llssa "github.com/goplus/llgo/ssa"
 	gllvm "github.com/goplus/llvm"
 )
 
@@ -16,6 +17,8 @@ const (
 	invokeThunkPrefix    = "__llgo_invoke."
 	ifacePtrDataFuncName = "github.com/goplus/llgo/runtime/internal/runtime.IfacePtrData"
 )
+
+const llvmFunctionAttributeIndex = -1
 
 var invokeThunkNameRE = regexp.MustCompile(`^__llgo_invoke\.(.+)\$m([0-9]+)\.[^.]+$`)
 
@@ -54,6 +57,11 @@ func buildInvokeLoweringPatchObject(ctx *context, linkedPkgIDs map[string]bool, 
 		return "", err
 	}
 	defer mergedMod.Dispose()
+	if IsMethodLateBindingEnabled() {
+		if err := runInvokePreLoweringPasses(ctx, mergedMod); err != nil {
+			return "", err
+		}
+	}
 
 	plans := collectInvokeThunkPlans(mergedMod)
 	if len(plans) == 0 {
@@ -118,6 +126,15 @@ func parseAndLinkBitcodeModules(llctx gllvm.Context, files []string) (gllvm.Modu
 		return gllvm.Module{}, nil
 	}
 	return merged, nil
+}
+
+func runInvokePreLoweringPasses(ctx *context, mod gllvm.Module) error {
+	pbo := gllvm.NewPassBuilderOptions()
+	defer pbo.Dispose()
+	if err := mod.RunPasses("globaldce", ctx.prog.TargetMachine(), pbo); err != nil {
+		return fmt.Errorf("run invoke pre-lowering passes failed: %w", err)
+	}
+	return nil
 }
 
 func collectInvokeThunkPlans(mod gllvm.Module) []invokeThunkPlan {
@@ -257,6 +274,51 @@ func parseInterfaceMethods(mod gllvm.Module, ifaceSym string) []invokeIfaceMetho
 }
 
 func collectConcreteTypeMethods(mod gllvm.Module) []invokeTypeMethods {
+	if out := collectConcreteTypeMethodsFromAttrs(mod); len(out) != 0 {
+		return out
+	}
+	return collectConcreteTypeMethodsFromAbiMethodTable(mod)
+}
+
+func collectConcreteTypeMethodsFromAttrs(mod gllvm.Module) []invokeTypeMethods {
+	types := make(map[string]map[string]string)
+	for fn := mod.FirstFunction(); !isNilValue(fn); fn = gllvm.NextFunction(fn) {
+		name := fn.Name()
+		if name == "" {
+			continue
+		}
+		attr := fn.GetStringAttributeAtIndex(llvmFunctionAttributeIndex, llssa.MethodBindingAttrIFN)
+		if attr.IsNil() {
+			continue
+		}
+		for _, entry := range llssa.DecodeMethodBindingAttrValue(attr.GetStringValue()) {
+			m, ok := types[entry.TypeSymbol]
+			if !ok {
+				m = make(map[string]string)
+				types[entry.TypeSymbol] = m
+			}
+			m[methodKey(entry.MethodName, entry.MethodTypeSymbol)] = name
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	typeNames := make([]string, 0, len(types))
+	for typeSym := range types {
+		typeNames = append(typeNames, typeSym)
+	}
+	sort.Strings(typeNames)
+	out := make([]invokeTypeMethods, 0, len(typeNames))
+	for _, typeSym := range typeNames {
+		out = append(out, invokeTypeMethods{
+			TypeSymbol: typeSym,
+			Methods:    types[typeSym],
+		})
+	}
+	return out
+}
+
+func collectConcreteTypeMethodsFromAbiMethodTable(mod gllvm.Module) []invokeTypeMethods {
 	var out []invokeTypeMethods
 	for g := mod.FirstGlobal(); !isNilValue(g); g = gllvm.NextGlobal(g) {
 		name := g.Name()
