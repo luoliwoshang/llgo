@@ -109,6 +109,12 @@ func addItab(i *Itab) {
 	itabTable.Unlock()
 }
 
+func missingIfaceMethodInvoke() {
+	panic(errorString("interface method target is unavailable").Error())
+}
+
+var missingIfaceMethodText = abi.Text(c.Func(missingIfaceMethodInvoke))
+
 // NewItab returns a new itab.
 func NewItab(inter *InterfaceType, typ *Type) *Itab {
 	if typ == nil {
@@ -139,10 +145,10 @@ func NewItab(inter *InterfaceType, typ *Type) *Itab {
 				break
 			}
 			if fn == nil {
-				// matched but no function pointer (e.g. stripped/unreachable after DCE);
-				// keep itab entry with a placeholder so the itab stays intact
-				// and only panics on call, not at assertion time.
-				fn = abi.Text(uintptr(0))
+				// Matched but no function pointer (e.g. late-bound metadata before
+				// global lowering). Keep itab entries valid so assertions succeed
+				// and panic only when the method is actually called.
+				fn = missingIfaceMethodText
 			}
 			*c.Advance(data, i) = uintptr(fn)
 		}

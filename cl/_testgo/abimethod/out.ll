@@ -656,7 +656,7 @@ _llgo_0:
   %5 = call ptr @"__llgo_invoke._llgo_iface$uinGjIxPTfzB5e5h5gH-0VIvLl5rQdJ_yx2UsrxQqds$m0.Load"(%"github.com/goplus/llgo/runtime/internal/runtime.iface" %3)
   %6 = load %"github.com/goplus/llgo/runtime/internal/runtime.eface", ptr %5, align 8
   %7 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %6, 0
-  %8 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_int, ptr %7)
+  %8 = call i1 @__llgo_typeassert.concrete._llgo_int(ptr %7)
   br i1 %8, label %_llgo_3, label %_llgo_4
 
 _llgo_1:                                          ; preds = %_llgo_3
@@ -1757,6 +1757,12 @@ _llgo_0:
   %8 = extractvalue { ptr, ptr } %6, 0
   %9 = tail call ptr %8(ptr %7)
   ret ptr %9
+}
+
+define weak_odr i1 @__llgo_typeassert.concrete._llgo_int(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_int, ptr %0)
+  ret i1 %1
 }
 
 declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr, ptr)

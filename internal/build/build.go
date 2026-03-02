@@ -328,6 +328,28 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	altPkgs, err := packages.LoadEx(dedup, sizes, cfg, altPkgPaths...)
 	check(err)
 
+	lateMethodBinding := IsMethodLateBindingEnabled()
+	if lateMethodBinding && hasReflectPackage(initial) {
+		// Keep reflect.Method/Value.Method semantics stable for now.
+		lateMethodBinding = false
+		if conf.Verbose || conf.PrintCommands {
+			fmt.Fprintln(os.Stderr, "note: disable late method binding because reflect is linked")
+		}
+	}
+	if lateMethodBinding && (mode == ModeTest || mode == ModeCmpTest || mode == ModeRun) {
+		lateMethodBinding = false
+		if conf.Verbose || conf.PrintCommands {
+			fmt.Fprintln(os.Stderr, "note: disable late method binding in non-build run/test modes")
+		}
+	}
+	if lateMethodBinding && !invokeLoweringEnabled() {
+		lateMethodBinding = false
+		if conf.Verbose || conf.PrintCommands {
+			fmt.Fprintln(os.Stderr, "note: disable late method binding because invoke lowering is disabled")
+		}
+	}
+	llssa.SetMethodLateBinding(lateMethodBinding)
+
 	prog.SetRuntime(func() *types.Package {
 		return altPkgs[0].Types
 	})
@@ -356,6 +378,7 @@ func Do(args []string, conf *Config) ([]Package, error) {
 	os.Setenv("PATH", env.BinDir()+":"+os.Getenv("PATH")) // TODO(xsw): check windows
 
 	output := conf.OutFile != ""
+	globalBCMode := IsGlobalBCEnabled() && conf.BuildMode == BuildModeExe && mode != ModeTest && mode != ModeCmpTest
 	ctx := &context{env: env, conf: cfg, progSSA: progSSA, prog: prog, dedup: dedup,
 		patches: patches, built: make(map[string]none), initial: initial, mode: mode,
 		fingerprinting: make(map[string]bool),
@@ -363,6 +386,7 @@ func Do(args []string, conf *Config) ([]Package, error) {
 		pkgByID:        map[string]Package{},
 		output:         output,
 		passOpt:        passOpt,
+		globalBCMode:   globalBCMode,
 		buildConf:      conf,
 		crossCompile:   export,
 		cTransformer:   cabi.NewTransformer(prog, export.LLVMTarget, export.TargetABI, conf.AbiMode, cabiOptimize),
@@ -523,6 +547,7 @@ type context struct {
 	nLibdir        int32
 	output         bool
 	passOpt        bool
+	globalBCMode   bool
 
 	buildConf    *Config
 	crossCompile crosscompile.Export
@@ -648,14 +673,18 @@ func buildAllPkgs(ctx *context, pkgs []*aPackage, verbose bool) ([]*aPackage, er
 					return err
 				}
 				if !aPkg.CacheHit {
-					if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
-						return err
+					if !ctx.globalBCMode {
+						if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
+							return err
+						}
 					}
 					if kind == cl.PkgLinkExtern {
 						appendExternalLinkArgs(ctx, aPkg, param)
 					}
-					if err := ctx.saveToCache(aPkg); err != nil && verbose {
-						fmt.Fprintf(os.Stderr, "warning: failed to save cache for %s: %v\n", pkg.PkgPath, err)
+					if !ctx.globalBCMode {
+						if err := ctx.saveToCache(aPkg); err != nil && verbose {
+							fmt.Fprintf(os.Stderr, "warning: failed to save cache for %s: %v\n", pkg.PkgPath, err)
+						}
 					}
 				}
 			} else {
@@ -683,11 +712,15 @@ func buildAllPkgs(ctx *context, pkgs []*aPackage, verbose bool) ([]*aPackage, er
 			needRuntime = needRuntime || aPkg.NeedRt
 			needPyInit = needPyInit || aPkg.NeedPyInit
 			if !aPkg.CacheHit {
-				if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
-					return err
+				if !ctx.globalBCMode {
+					if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
+						return err
+					}
 				}
-				if err := ctx.saveToCache(aPkg); err != nil && verbose {
-					fmt.Fprintf(os.Stderr, "warning: failed to save cache for %s: %v\n", pkg.PkgPath, err)
+				if !ctx.globalBCMode {
+					if err := ctx.saveToCache(aPkg); err != nil && verbose {
+						fmt.Fprintf(os.Stderr, "warning: failed to save cache for %s: %v\n", pkg.PkgPath, err)
+					}
 				}
 			}
 		}
@@ -887,6 +920,14 @@ func compileExtraFiles(ctx *context, verbose bool) ([]string, error) {
 }
 
 func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPath string, verbose bool) error {
+	if ctx.globalBCMode {
+		if err := linkMainPkgGlobal(ctx, pkg, pkgs, outputPath, verbose); err == nil {
+			return nil
+		} else if verbose || ctx.shouldPrintCommands(false) {
+			fmt.Fprintf(os.Stderr, "warning: global-bc link failed, fallback to legacy link: %v\n", err)
+		}
+	}
+
 	needRuntime := false
 	needPyInit := false
 	needAbiInit := false
@@ -918,6 +959,8 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 				rtLinkArgs = append(rtLinkArgs, aPkg.LinkArgs...)
 				if aPkg.ArchiveFile != "" {
 					rtLinkInputs = append(rtLinkInputs, aPkg.ArchiveFile)
+				} else if len(aPkg.ObjFiles) > 0 {
+					rtLinkInputs = append(rtLinkInputs, aPkg.ObjFiles...)
 				}
 				return
 			} else {
@@ -933,6 +976,8 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 			linkArgs = append(linkArgs, aPkg.LinkArgs...)
 			if aPkg.ArchiveFile != "" {
 				linkInputs = append(linkInputs, aPkg.ArchiveFile)
+			} else if len(aPkg.ObjFiles) > 0 {
+				linkInputs = append(linkInputs, aPkg.ObjFiles...)
 			}
 		}
 	})
@@ -943,8 +988,35 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 		linkInputs = append(linkInputs, rtLinkInputs...)
 	}
 
+	// Generate main module file (needed for global variables even in library modes)
+	// This is compiled directly to .o and added to linkInputs (not cached)
+	// Use a stable synthetic name to avoid confusing it with the real main package in traces/logs.
+	entryPkg := genMainModule(ctx, llssa.PkgRuntime, pkg, needRuntime, needPyInit, needAbiInit)
+	entryIRData := []byte(entryPkg.LPkg.String())
+	entryObjFile, err := exportObject(ctx, "entry_main", entryPkg.ExportFile, entryIRData)
+	if err != nil {
+		return err
+	}
+	linkInputs = append(linkInputs, entryObjFile)
+
+	var extraModuleInputs []linkedModuleInput
+	if invokeLoweringEnabled() {
+		entryIRFile, err := exportIR(ctx, "entry_main", entryPkg.ExportFile, entryIRData)
+		if err != nil {
+			return err
+		}
+		entryBCFile, err := exportBitcode(ctx, "entry_main", entryPkg.ExportFile, entryPkg.LPkg.Module())
+		if err != nil {
+			return err
+		}
+		extraModuleInputs = append(extraModuleInputs, linkedModuleInput{
+			BitcodeFile: entryBCFile,
+			IRFile:      entryIRFile,
+		})
+	}
+
 	if invokeLoweringEnabled() && ctx.mode != ModeTest && ctx.mode != ModeCmpTest {
-		invokePatchObj, err := buildInvokeLoweringPatchObject(ctx, linkedPkgs, verbose)
+		invokePatchObj, err := buildInvokeLoweringPatchObject(ctx, linkedPkgs, extraModuleInputs, verbose)
 		if err != nil {
 			return err
 		}
@@ -952,16 +1024,6 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 			linkInputs = append(linkInputs, invokePatchObj)
 		}
 	}
-
-	// Generate main module file (needed for global variables even in library modes)
-	// This is compiled directly to .o and added to linkInputs (not cached)
-	// Use a stable synthetic name to avoid confusing it with the real main package in traces/logs.
-	entryPkg := genMainModule(ctx, llssa.PkgRuntime, pkg, needRuntime, needPyInit, needAbiInit)
-	entryObjFile, err := exportObject(ctx, "entry_main", entryPkg.ExportFile, []byte(entryPkg.LPkg.String()))
-	if err != nil {
-		return err
-	}
-	linkInputs = append(linkInputs, entryObjFile)
 
 	// Compile extra files from target configuration
 	extraObjFiles, err := compileExtraFiles(ctx, verbose)
@@ -992,6 +1054,132 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 		return err
 	}
 
+	return nil
+}
+
+func linkMainPkgGlobal(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPath string, verbose bool) error {
+	needRuntime := false
+	needPyInit := false
+	needAbiInit := false
+	allPkgs := []*packages.Package{pkg}
+	for _, v := range pkgs {
+		allPkgs = append(allPkgs, v.Package)
+	}
+
+	var linkInputs []string
+	var linkArgs []string
+	var rtLinkInputs []string
+	var rtLinkArgs []string
+	var moduleInputs []linkedModuleInput
+	var rtModuleInputs []linkedModuleInput
+	linkedPkgs := make(map[string]bool)
+
+	packages.Visit(allPkgs, nil, func(p *packages.Package) {
+		if linkedPkgs[p.ID] {
+			return
+		}
+		aPkg := ctx.pkgs[p]
+		if aPkg == nil {
+			aPkg = ctx.pkgByID[p.ID]
+		}
+		if p.ExportFile == "" || aPkg == nil {
+			return
+		}
+		linkedPkgs[p.ID] = true
+
+		mi := linkedModuleInput{BitcodeFile: aPkg.BitcodeFile, IRFile: aPkg.IRFile}
+		if isRuntimePkg(p.PkgPath) {
+			rtLinkArgs = append(rtLinkArgs, aPkg.LinkArgs...)
+			if aPkg.NonGoArchiveFile != "" {
+				rtLinkInputs = append(rtLinkInputs, aPkg.NonGoArchiveFile)
+			} else {
+				rtLinkInputs = append(rtLinkInputs, aPkg.NonGoObjs...)
+			}
+			if mi.BitcodeFile != "" || mi.IRFile != "" {
+				rtModuleInputs = append(rtModuleInputs, mi)
+			}
+			return
+		}
+
+		need1, need2 := aPkg.isNeedRuntimeOrPyInit()
+		needRuntime = needRuntime || need1
+		needPyInit = needPyInit || need2
+		if aPkg.LPkg != nil && aPkg.LPkg.NeedAbiInit {
+			needAbiInit = true
+		}
+
+		linkArgs = append(linkArgs, aPkg.LinkArgs...)
+		if aPkg.NonGoArchiveFile != "" {
+			linkInputs = append(linkInputs, aPkg.NonGoArchiveFile)
+		} else {
+			linkInputs = append(linkInputs, aPkg.NonGoObjs...)
+		}
+		if mi.BitcodeFile != "" || mi.IRFile != "" {
+			moduleInputs = append(moduleInputs, mi)
+		}
+	})
+
+	if needRuntime || needPyInit || ctx.buildConf.Target == "" {
+		linkArgs = append(linkArgs, rtLinkArgs...)
+		linkInputs = append(linkInputs, rtLinkInputs...)
+		moduleInputs = append(moduleInputs, rtModuleInputs...)
+	}
+
+	entryPkg := genMainModule(ctx, llssa.PkgRuntime, pkg, needRuntime, needPyInit, needAbiInit)
+	entryIRData := []byte(entryPkg.LPkg.String())
+	entryIRFile, err := exportIR(ctx, "entry_main", entryPkg.ExportFile, entryIRData)
+	if err != nil {
+		return err
+	}
+	entryBCFile, err := exportBitcode(ctx, "entry_main", entryPkg.ExportFile, entryPkg.LPkg.Module())
+	if err != nil {
+		return err
+	}
+	entryInput := linkedModuleInput{BitcodeFile: entryBCFile, IRFile: entryIRFile}
+	moduleInputs = append(moduleInputs, entryInput)
+
+	globalObj, err := buildGlobalMergedObject(ctx, moduleInputs, verbose)
+	if err != nil {
+		return err
+	}
+	if globalObj == "" {
+		return fmt.Errorf("global merged object is empty")
+	}
+	linkInputs = append(linkInputs, globalObj)
+
+	if invokeLoweringEnabled() {
+		invokePatchObj, err := buildInvokeLoweringPatchObject(ctx, map[string]bool{}, moduleInputs, verbose)
+		if err != nil {
+			return err
+		}
+		if invokePatchObj != "" {
+			linkInputs = append(linkInputs, invokePatchObj)
+		}
+	}
+
+	extraObjFiles, err := compileExtraFiles(ctx, verbose)
+	if err != nil {
+		return err
+	}
+	linkInputs = append(linkInputs, extraObjFiles...)
+
+	if IsFullRpathEnabled() {
+		rpaths := make(map[string]none)
+		for _, arg := range linkArgs {
+			if strings.HasPrefix(arg, "-L") {
+				path := arg[2:]
+				if _, ok := rpaths[path]; ok {
+					continue
+				}
+				rpaths[path] = none{}
+				linkArgs = append(linkArgs, "-rpath", path)
+			}
+		}
+	}
+
+	if err := linkObjFiles(ctx, outputPath, linkInputs, linkArgs, verbose); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1171,8 +1359,20 @@ func buildPkg(ctx *context, aPkg *aPackage, verbose bool) error {
 	check(err)
 
 	aPkg.LPkg = ret
+	aPkg.GoObjFile = ""
+	aPkg.NonGoObjs = nil
+	aPkg.NonGoArchiveFile = ""
 	aPkg.BitcodeFile = ""
+	aPkg.IRFile = ""
+	var irData []byte
 	if pkg.ExportFile != "" {
+		irData = []byte(ret.String())
+		irFile, err := exportIR(ctx, pkgPath, pkg.ExportFile, irData)
+		if err != nil {
+			return fmt.Errorf("export IR of %v failed: %v", pkgPath, err)
+		}
+		aPkg.IRFile = irFile
+
 		bitcodeFile, err := exportBitcode(ctx, pkgPath, pkg.ExportFile, ret.Module())
 		if err != nil {
 			return fmt.Errorf("export bitcode of %v failed: %v", pkgPath, err)
@@ -1240,17 +1440,56 @@ func buildPkg(ctx *context, aPkg *aPackage, verbose bool) error {
 		aPkg.LinkArgs = append(aPkg.LinkArgs, altLdflags...)
 		aPkg.LinkArgs = append(aPkg.LinkArgs, goCgoLinkArgs(ctx.buildConf.Goos, aPkg.AltPkg.Syntax)...)
 	}
+	aPkg.NonGoObjs = append(aPkg.NonGoObjs[:0], aPkg.ObjFiles...)
+	if ctx.globalBCMode && len(aPkg.NonGoObjs) > 0 {
+		archiveFile, err := os.CreateTemp("", "pkg-nongo-*.a")
+		if err != nil {
+			return fmt.Errorf("create non-go archive temp for %v failed: %v", pkgPath, err)
+		}
+		archiveFile.Close()
+		if err := ctx.createArchiveFile(archiveFile.Name(), aPkg.NonGoObjs, verbose); err != nil {
+			_ = os.Remove(archiveFile.Name())
+			return fmt.Errorf("create non-go archive for %v failed: %v", pkgPath, err)
+		}
+		aPkg.NonGoArchiveFile = archiveFile.Name()
+	}
 	if pkg.ExportFile != "" {
-		exportFile, err := exportObject(ctx, pkg.PkgPath, pkg.ExportFile, []byte(ret.String()))
+		exportFile, err := exportObject(ctx, pkg.PkgPath, pkg.ExportFile, irData)
 		if err != nil {
 			return fmt.Errorf("export object of %v failed: %v", pkgPath, err)
 		}
+		aPkg.GoObjFile = exportFile
 		aPkg.ObjFiles = append(aPkg.ObjFiles, exportFile)
 		if debugBuild || verbose {
 			fmt.Fprintf(os.Stderr, "==> Export %s: %s\n", aPkg.PkgPath, pkg.ExportFile)
 		}
 	}
 	return nil
+}
+
+func exportIR(ctx *context, pkgPath string, exportFile string, data []byte) (string, error) {
+	base := filepath.Base(exportFile)
+	f, err := os.CreateTemp("", base+"-*.ll")
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	if ctx.buildConf.GenLL {
+		llFile := exportFile + ".ll"
+		if err := copyFileAtomic(f.Name(), llFile); err != nil {
+			return "", err
+		}
+	}
+	if debugBuild {
+		fmt.Fprintf(os.Stderr, "==> ExportIR %s: %s\n", pkgPath, f.Name())
+	}
+	return f.Name(), nil
 }
 
 func exportObject(ctx *context, pkgPath string, exportFile string, data []byte) (string, error) {
@@ -1383,11 +1622,15 @@ type aPackage struct {
 	NeedRt     bool
 	NeedPyInit bool
 
-	LinkArgs    []string
-	ObjFiles    []string // object files: .o or .ll (output of compiler, input to archiver)
-	ArchiveFile string   // archive file: .a (output of archiver, used for linking)
-	BitcodeFile string   // bitcode file: .bc (for global invoke-lowering analysis)
-	rewriteVars map[string]string
+	LinkArgs         []string
+	ObjFiles         []string // object files: .o or .ll (output of compiler, input to archiver)
+	GoObjFile        string   // primary object emitted from package LLVM IR
+	NonGoObjs        []string // non-Go objects (cgo/asm/external-compiled objects)
+	NonGoArchiveFile string   // archive of non-Go objects for global-bc link path
+	ArchiveFile      string   // archive file: .a (output of archiver, used for linking)
+	BitcodeFile      string   // bitcode file: .bc (for global invoke-lowering analysis)
+	IRFile           string   // textual LLVM IR file: .ll (fallback for invoke-lowering analysis)
+	rewriteVars      map[string]string
 
 	// Cache related fields
 	Fingerprint string // fingerprint digest
@@ -1417,16 +1660,20 @@ func buildSSAPkgs(ctx *context, initial []*packages.Package, verbose bool) ([]*a
 			}
 			rewrites := collectRewriteVars(ctx, pkgPath)
 			aPkg := &aPackage{
-				Package:     p,
-				SSA:         ssaPkg,
-				AltPkg:      altPkg,
-				LPkg:        nil,
-				NeedRt:      false,
-				NeedPyInit:  false,
-				LinkArgs:    nil,
-				ObjFiles:    nil,
-				BitcodeFile: "",
-				rewriteVars: rewrites,
+				Package:          p,
+				SSA:              ssaPkg,
+				AltPkg:           altPkg,
+				LPkg:             nil,
+				NeedRt:           false,
+				NeedPyInit:       false,
+				LinkArgs:         nil,
+				ObjFiles:         nil,
+				GoObjFile:        "",
+				NonGoObjs:        nil,
+				NonGoArchiveFile: "",
+				BitcodeFile:      "",
+				IRFile:           "",
+				rewriteVars:      rewrites,
 			}
 			ctx.pkgs[p] = aPkg
 			ctx.pkgByID[p.ID] = aPkg
@@ -1592,6 +1839,9 @@ const llgoWasiThreads = "LLGO_WASI_THREADS"
 const llgoStdioNobuf = "LLGO_STDIO_NOBUF"
 const llgoFullRpath = "LLGO_FULL_RPATH"
 const llgoBuildCache = "LLGO_BUILD_CACHE"
+const llgoMethodLateBinding = "LLGO_METHOD_LATE_BINDING"
+const llgoGlobalBC = "LLGO_GLOBAL_BC"
+const llgoGlobalBCPasses = "LLGO_GLOBAL_BC_PASSES"
 
 // for Plan9 asm translation debug
 const llgoPlan9ASMPkgs = "LLGO_PLAN9ASM_PKGS"
@@ -1646,6 +1896,24 @@ func IsWasiThreadsEnabled() bool {
 
 func IsFullRpathEnabled() bool {
 	return isEnvOn(llgoFullRpath, true)
+}
+
+func IsMethodLateBindingEnabled() bool {
+	return isEnvOn(llgoMethodLateBinding, true)
+}
+
+func IsGlobalBCEnabled() bool {
+	return isEnvOn(llgoGlobalBC, true)
+}
+
+func hasReflectPackage(initial []*packages.Package) bool {
+	found := false
+	packages.Visit(initial, nil, func(p *packages.Package) {
+		if p.PkgPath == "reflect" {
+			found = true
+		}
+	})
+	return found
 }
 
 func Plan9ASMPkgs() string {
