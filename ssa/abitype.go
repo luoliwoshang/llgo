@@ -406,6 +406,8 @@ func (b Builder) abiUncommonMethods(t types.Type, mset *types.MethodSet) llvm.Va
 	ft := prog.rtType("Method")
 	n := mset.Len()
 	fields := make([]llvm.Value, n)
+	typeSymbol, _ := b.Pkg.abi.TypeName(t)
+	lateBinding := MethodLateBindingEnabled()
 	pkg, _ := b.abiUncommonPkg(t)
 	anonymous := pkg == nil
 	if anonymous {
@@ -415,28 +417,63 @@ func (b Builder) abiUncommonMethods(t types.Type, mset *types.MethodSet) llvm.Va
 		m := mset.At(i)
 		obj := m.Obj()
 		mName := obj.Name()
+		methName := mName
 		name := b.Str(mName).impl
 		if !token.IsExported(mName) {
-			name = b.Str(abi.FullName(obj.Pkg(), mName)).impl
+			methName = abi.FullName(obj.Pkg(), mName)
+			name = b.Str(methName).impl
 		}
 		mSig := m.Type().(*types.Signature)
-		var tfn, ifn llvm.Value
-		tfn = b.abiMethodFunc(anonymous, pkg, mName, mSig)
-		ifn = tfn
+		tfnImpl := b.abiMethodFunc(anonymous, pkg, mName, mSig)
+		ifnImpl := tfnImpl
 		if _, ok := m.Recv().Underlying().(*types.Pointer); !ok {
 			pRecv := types.NewVar(token.NoPos, pkg, "", types.NewPointer(mSig.Recv().Type()))
 			pSig := types.NewSignature(pRecv, mSig.Params(), mSig.Results(), mSig.Variadic())
-			ifn = b.abiMethodFunc(anonymous, pkg, mName, pSig)
+			ifnImpl = b.abiMethodFunc(anonymous, pkg, mName, pSig)
+		}
+		ftyp := funcType(prog, m.Type())
+		if lateBinding {
+			mtypSym, _ := b.Pkg.abi.TypeName(ftyp)
+			payload := encodeMethodBindingPayload(typeSymbol, methName, mtypSym)
+			b.attachMethodBindingAttr(ifnImpl, MethodBindingAttrIFN, payload)
+			b.attachMethodBindingAttr(tfnImpl, MethodBindingAttrTFN, payload)
+		}
+
+		var ifn, tfn llvm.Value
+		if lateBinding {
+			nilText := prog.Nil(prog.VoidPtr()).impl
+			ifn = nilText
+			tfn = nilText
+		} else {
+			ifn = ifnImpl
+			tfn = tfnImpl
 		}
 		var values []llvm.Value
 		values = append(values, name)
-		ftyp := funcType(prog, m.Type())
 		values = append(values, b.abiType(ftyp).impl)
 		values = append(values, ifn)
 		values = append(values, tfn)
 		fields[i] = llvm.ConstNamedStruct(ft.ll, values)
 	}
 	return llvm.ConstArray(ft.ll, fields)
+}
+
+const llvmFunctionAttributeIndex = -1
+
+func (b Builder) attachMethodBindingAttr(fn llvm.Value, key, payload string) {
+	if fn.C == nil || key == "" || payload == "" {
+		return
+	}
+	if attr := fn.GetStringAttributeAtIndex(llvmFunctionAttributeIndex, key); !attr.IsNil() {
+		merged := mergeMethodBindingPayload(attr.GetStringValue(), payload)
+		if merged == attr.GetStringValue() {
+			return
+		}
+		fn.RemoveStringAttributeAtIndex(llvmFunctionAttributeIndex, key)
+		payload = merged
+	}
+	attr := b.Pkg.mod.Context().CreateStringAttribute(key, payload)
+	fn.AddFunctionAttr(attr)
 }
 
 // closure func type

@@ -24,7 +24,7 @@ source_filename = "github.com/goplus/llgo/cl/_testrt/float2any"
 define void @"github.com/goplus/llgo/cl/_testrt/float2any.check32"(%"github.com/goplus/llgo/runtime/internal/runtime.eface" %0) {
 _llgo_0:
   %1 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %0, 0
-  %2 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_float32, ptr %1)
+  %2 = call i1 @__llgo_typeassert.concrete._llgo_float32(ptr %1)
   br i1 %2, label %_llgo_3, label %_llgo_4
 
 _llgo_1:                                          ; preds = %_llgo_3
@@ -56,7 +56,7 @@ _llgo_4:                                          ; preds = %_llgo_0
 define void @"github.com/goplus/llgo/cl/_testrt/float2any.check64"(%"github.com/goplus/llgo/runtime/internal/runtime.eface" %0) {
 _llgo_0:
   %1 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %0, 0
-  %2 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_float64, ptr %1)
+  %2 = call i1 @__llgo_typeassert.concrete._llgo_float64(ptr %1)
   br i1 %2, label %_llgo_3, label %_llgo_4
 
 _llgo_1:                                          ; preds = %_llgo_3
@@ -122,6 +122,12 @@ _llgo_0:
   ret void
 }
 
+define weak_odr i1 @__llgo_typeassert.concrete._llgo_float32(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_float32, ptr %0)
+  ret i1 %1
+}
+
 declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.f32equal"(ptr, ptr)
 
 define linkonce i1 @"__llgo_stub.github.com/goplus/llgo/runtime/internal/runtime.f32equal"(ptr %0, ptr %1, ptr %2) {
@@ -151,6 +157,12 @@ _llgo_0:
 declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.AllocU"(i64)
 
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.Panic"(%"github.com/goplus/llgo/runtime/internal/runtime.eface")
+
+define weak_odr i1 @__llgo_typeassert.concrete._llgo_float64(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_float64, ptr %0)
+  ret i1 %1
+}
 
 declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.f64equal"(ptr, ptr)
 

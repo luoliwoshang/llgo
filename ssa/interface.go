@@ -18,8 +18,10 @@ package ssa
 
 import (
 	"go/constant"
+	"go/token"
 	"go/types"
 	"log"
+	"strconv"
 
 	"github.com/goplus/llgo/ssa/abi"
 	"github.com/goplus/llvm"
@@ -63,10 +65,16 @@ func iMethodOf(rawIntf *types.Interface, name string) int {
 	return -1
 }
 
-// Imethod returns closure of an interface method.
-func (b Builder) Imethod(intf Expr, method *types.Func) Expr {
-	prog := b.Prog
-	rawIntf := intf.raw.Type.Underlying().(*types.Interface)
+const invokeThunkPrefix = "__llgo_invoke."
+const typeAssertThunkPrefix = "__llgo_typeassert."
+
+const (
+	typeAssertThunkKindIface    = "iface"
+	typeAssertThunkKindConcrete = "concrete"
+	typeAssertThunkKindClosure  = "closure"
+)
+
+func invokeMethodSig(rawIntf *types.Interface, method *types.Func) *types.Signature {
 	sig := method.Type().(*types.Signature)
 	if sig.Recv() == nil && sig.Params().Len() > 0 {
 		pt := types.Unalias(sig.Params().At(0).Type())
@@ -79,6 +87,111 @@ func (b Builder) Imethod(intf Expr, method *types.Func) Expr {
 			sig = types.NewSignatureType(nil, nil, nil, types.NewTuple(vars...), sig.Results(), sig.Variadic())
 		}
 	}
+	return sig
+}
+
+func (p Package) invokeThunkName(rawIntf *types.Interface, methodName string, methodIdx int) string {
+	ifaceName, _ := p.abi.InterfaceName(rawIntf)
+	return invokeThunkPrefix + ifaceName + "$m" + strconv.Itoa(methodIdx) + "." + methodName
+}
+
+func (p Package) invokeThunk(rawIntf *types.Interface, method *types.Func, sig *types.Signature) Function {
+	methodName := method.Name()
+	methodIdx := iMethodOf(rawIntf, methodName)
+	if methodIdx < 0 {
+		panic("invokeThunk: interface method not found: " + methodName)
+	}
+	name := p.invokeThunkName(rawIntf, methodName, methodIdx)
+	if thunk := p.FuncOf(name); thunk != nil {
+		return thunk
+	}
+
+	n := sig.Params().Len()
+	vars := make([]*types.Var, 1, n+1)
+	vars[0] = types.NewParam(token.NoPos, nil, "", rawIntf)
+	for i := 0; i < n; i++ {
+		vars = append(vars, sig.Params().At(i))
+	}
+	thunkSig := types.NewSignatureType(nil, nil, nil, types.NewTuple(vars...), sig.Results(), sig.Variadic())
+	thunk := p.NewFunc(name, thunkSig, InGo)
+	thunk.impl.SetLinkage(llvm.WeakODRLinkage)
+
+	b := thunk.MakeBody(1)
+	fn := b.Imethod(thunk.Param(0), method)
+	args := make([]Expr, n)
+	for i := 0; i < n; i++ {
+		args[i] = thunk.Param(i + 1)
+	}
+	ret := b.Call(fn, args...)
+	closureWrapReturn(b, sig, ret)
+	return thunk
+}
+
+func typeAssertThunkKind(assertedTyp Type) string {
+	if _, ok := assertedTyp.raw.Type.Underlying().(*types.Interface); ok {
+		return typeAssertThunkKindIface
+	}
+	if assertedTyp.kind == vkClosure {
+		return typeAssertThunkKindClosure
+	}
+	return typeAssertThunkKindConcrete
+}
+
+func (p Package) typeAssertThunkName(assertedTyp Type) string {
+	typeSym, _ := p.abi.TypeName(assertedTyp.raw.Type)
+	return typeAssertThunkPrefix + typeAssertThunkKind(assertedTyp) + "." + typeSym
+}
+
+func (p Package) typeAssertThunk(assertedTyp Type) Function {
+	name := p.typeAssertThunkName(assertedTyp)
+	if thunk := p.FuncOf(name); thunk != nil {
+		return thunk
+	}
+
+	prog := p.Prog
+	param := types.NewParam(token.NoPos, nil, "", prog.AbiTypePtr().raw.Type)
+	result := types.NewVar(token.NoPos, nil, "", types.Typ[types.Bool])
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(param), types.NewTuple(result), false)
+
+	thunk := p.NewFunc(name, sig, InGo)
+	thunk.impl.SetLinkage(llvm.WeakODRLinkage)
+
+	b := thunk.MakeBody(1)
+	actualType := thunk.Param(0)
+	targetType := b.abiType(assertedTyp.raw.Type)
+
+	var ok Expr
+	switch typeAssertThunkKind(assertedTyp) {
+	case typeAssertThunkKindIface:
+		ok = b.InlineCall(p.rtFunc("Implements"), targetType, actualType)
+	case typeAssertThunkKindClosure:
+		ok = b.InlineCall(p.rtFunc("MatchesClosure"), targetType, actualType)
+	default:
+		ok = b.InlineCall(p.rtFunc("MatchConcreteType"), targetType, actualType)
+	}
+	b.Return(ok)
+	return thunk
+}
+
+// InvokeThunk returns an invoke thunk function for an interface method call.
+// The returned thunk has signature: func(interface, ...methodArgs) ...results.
+func (b Builder) InvokeThunk(intf Expr, method *types.Func) Expr {
+	rawIntf := intf.raw.Type.Underlying().(*types.Interface)
+	sig := invokeMethodSig(rawIntf, method)
+	return b.Pkg.invokeThunk(rawIntf, method, sig).Expr
+}
+
+// TypeAssertThunk returns a type-assert thunk function.
+// The returned thunk has signature: func(actualType *abi.Type) bool.
+func (b Builder) TypeAssertThunk(assertedTyp Type) Expr {
+	return b.Pkg.typeAssertThunk(assertedTyp).Expr
+}
+
+// Imethod returns closure of an interface method.
+func (b Builder) Imethod(intf Expr, method *types.Func) Expr {
+	prog := b.Prog
+	rawIntf := intf.raw.Type.Underlying().(*types.Interface)
+	sig := invokeMethodSig(rawIntf, method)
 	tclosure := prog.Type(sig, InGo)
 	i := iMethodOf(rawIntf, method.Name())
 	data := b.InlineCall(b.Pkg.rtFunc("IfacePtrData"), intf)
@@ -251,21 +364,19 @@ func (b Builder) TypeAssert(x Expr, assertedTyp Type, commaOk bool) Expr {
 		log.Printf("TypeAssert %v, %v, %v\n", x.impl, assertedTyp.raw.Type, commaOk)
 	}
 	tx := b.faceAbiType(x)
-	tabi := b.abiType(assertedTyp.raw.Type)
 	var eq Expr
 	var val func() Expr
 	if x.RawType() == assertedTyp.RawType() {
 		eq = b.Const(constant.MakeBool(!b.faceData(x.impl).IsNull()), b.Prog.Bool())
 		val = func() Expr { return x }
 	} else {
+		eqThunk := b.TypeAssertThunk(assertedTyp)
+		eq = b.Call(eqThunk, tx)
 		if rawIntf, ok := assertedTyp.raw.Type.Underlying().(*types.Interface); ok {
-			eq = b.InlineCall(b.Pkg.rtFunc("Implements"), tabi, tx)
 			val = func() Expr { return Expr{b.unsafeInterface(rawIntf, tx, b.faceData(x.impl)), assertedTyp} }
 		} else if assertedTyp.kind == vkClosure {
-			eq = b.InlineCall(b.Pkg.rtFunc("MatchesClosure"), tabi, tx)
 			val = func() Expr { return b.valFromData(assertedTyp, b.faceData(x.impl)) }
 		} else {
-			eq = b.InlineCall(b.Pkg.rtFunc("MatchConcreteType"), tabi, tx)
 			val = func() Expr { return b.valFromData(assertedTyp, b.faceData(x.impl)) }
 		}
 	}

@@ -49,7 +49,7 @@ _llgo_0:
   store %"github.com/goplus/llgo/runtime/internal/runtime.String" { ptr @0, i64 5 }, ptr %0, align 8
   %1 = insertvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" { ptr @"_llgo_github.com/goplus/llgo/cl/_testrt/typed.T", ptr undef }, ptr %0, 1
   %2 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %1, 0
-  %3 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @"_llgo_github.com/goplus/llgo/cl/_testrt/typed.T", ptr %2)
+  %3 = call i1 @"__llgo_typeassert.concrete._llgo_github.com/goplus/llgo/cl/_testrt/typed.T"(ptr %2)
   br i1 %3, label %_llgo_1, label %_llgo_2
 
 _llgo_1:                                          ; preds = %_llgo_0
@@ -58,7 +58,7 @@ _llgo_1:                                          ; preds = %_llgo_0
   call void @"github.com/goplus/llgo/runtime/internal/runtime.PrintString"(%"github.com/goplus/llgo/runtime/internal/runtime.String" %5)
   call void @"github.com/goplus/llgo/runtime/internal/runtime.PrintByte"(i8 10)
   %6 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %1, 0
-  %7 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_string, ptr %6)
+  %7 = call i1 @__llgo_typeassert.concrete._llgo_string(ptr %6)
   br i1 %7, label %_llgo_3, label %_llgo_4
 
 _llgo_2:                                          ; preds = %_llgo_0
@@ -99,7 +99,7 @@ _llgo_5:                                          ; preds = %_llgo_4, %_llgo_3
   %23 = alloca [2 x i64], align 8
   call void @llvm.memset(ptr %23, i8 0, i64 16, i1 false)
   %24 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %22, 0
-  %25 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @"_llgo_github.com/goplus/llgo/cl/_testrt/typed.A", ptr %24)
+  %25 = call i1 @"__llgo_typeassert.concrete._llgo_github.com/goplus/llgo/cl/_testrt/typed.A"(ptr %24)
   br i1 %25, label %_llgo_6, label %_llgo_7
 
 _llgo_6:                                          ; preds = %_llgo_5
@@ -148,6 +148,12 @@ _llgo_0:
 
 declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.AllocU"(i64)
 
+define weak_odr i1 @"__llgo_typeassert.concrete._llgo_github.com/goplus/llgo/cl/_testrt/typed.T"(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @"_llgo_github.com/goplus/llgo/cl/_testrt/typed.T", ptr %0)
+  ret i1 %1
+}
+
 declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr, ptr)
 
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.Panic"(%"github.com/goplus/llgo/runtime/internal/runtime.eface")
@@ -155,6 +161,12 @@ declare void @"github.com/goplus/llgo/runtime/internal/runtime.Panic"(%"github.c
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.PrintString"(%"github.com/goplus/llgo/runtime/internal/runtime.String")
 
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.PrintByte"(i8)
+
+define weak_odr i1 @__llgo_typeassert.concrete._llgo_string(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_string, ptr %0)
+  ret i1 %1
+}
 
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.PrintBool"(i1)
 
@@ -169,6 +181,12 @@ define linkonce i1 @"__llgo_stub.github.com/goplus/llgo/runtime/internal/runtime
 _llgo_0:
   %3 = tail call i1 @"github.com/goplus/llgo/runtime/internal/runtime.memequal64"(ptr %1, ptr %2)
   ret i1 %3
+}
+
+define weak_odr i1 @"__llgo_typeassert.concrete._llgo_github.com/goplus/llgo/cl/_testrt/typed.A"(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @"_llgo_github.com/goplus/llgo/cl/_testrt/typed.A", ptr %0)
+  ret i1 %1
 }
 
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.PrintInt"(i64)

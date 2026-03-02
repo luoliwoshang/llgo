@@ -67,7 +67,7 @@ _llgo_2:                                          ; preds = %_llgo_1
   %10 = getelementptr inbounds %"github.com/goplus/llgo/runtime/internal/runtime.eface", ptr %5, i64 %3
   %11 = load %"github.com/goplus/llgo/runtime/internal/runtime.eface", ptr %10, align 8
   %12 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %11, 0
-  %13 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_int, ptr %12)
+  %13 = call i1 @__llgo_typeassert.concrete._llgo_int(ptr %12)
   br i1 %13, label %_llgo_4, label %_llgo_5
 
 _llgo_3:                                          ; preds = %_llgo_1
@@ -106,6 +106,12 @@ _llgo_0:
 }
 
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.AssertIndexRange"(i1)
+
+define weak_odr i1 @__llgo_typeassert.concrete._llgo_int(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_int, ptr %0)
+  ret i1 %1
+}
 
 declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr, ptr)
 

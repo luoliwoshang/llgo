@@ -24,7 +24,7 @@ source_filename = "github.com/goplus/llgo/cl/_testrt/any"
 define ptr @"github.com/goplus/llgo/cl/_testrt/any.hi"(%"github.com/goplus/llgo/runtime/internal/runtime.eface" %0) {
 _llgo_0:
   %1 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %0, 0
-  %2 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @"*_llgo_int8", ptr %1)
+  %2 = call i1 @"__llgo_typeassert.concrete.*_llgo_int8"(ptr %1)
   br i1 %2, label %_llgo_1, label %_llgo_2
 
 _llgo_1:                                          ; preds = %_llgo_0
@@ -42,7 +42,7 @@ _llgo_2:                                          ; preds = %_llgo_0
 define i64 @"github.com/goplus/llgo/cl/_testrt/any.incVal"(%"github.com/goplus/llgo/runtime/internal/runtime.eface" %0) {
 _llgo_0:
   %1 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.eface" %0, 0
-  %2 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_int, ptr %1)
+  %2 = call i1 @__llgo_typeassert.concrete._llgo_int(ptr %1)
   br i1 %2, label %_llgo_1, label %_llgo_2
 
 _llgo_1:                                          ; preds = %_llgo_0
@@ -80,6 +80,12 @@ _llgo_0:
   ret void
 }
 
+define weak_odr i1 @"__llgo_typeassert.concrete.*_llgo_int8"(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @"*_llgo_int8", ptr %0)
+  ret i1 %1
+}
+
 declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.memequalptr"(ptr, ptr)
 
 define linkonce i1 @"__llgo_stub.github.com/goplus/llgo/runtime/internal/runtime.memequalptr"(ptr %0, ptr %1, ptr %2) {
@@ -109,6 +115,12 @@ _llgo_0:
 declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.AllocU"(i64)
 
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.Panic"(%"github.com/goplus/llgo/runtime/internal/runtime.eface")
+
+define weak_odr i1 @__llgo_typeassert.concrete._llgo_int(ptr %0) {
+_llgo_0:
+  %1 = call i1 @"github.com/goplus/llgo/runtime/internal/runtime.MatchConcreteType"(ptr @_llgo_int, ptr %0)
+  ret i1 %1
+}
 
 declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.memequal64"(ptr, ptr)
 
