@@ -24,10 +24,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/goplus/llgo/internal/env"
 	"github.com/goplus/llgo/internal/packages"
+	llssa "github.com/goplus/llgo/ssa"
 	gopackages "golang.org/x/tools/go/packages"
 )
 
@@ -88,12 +90,20 @@ func (c *context) collectEnvInputs(m *manifestBuilder) {
 		llgoWasiThreads,
 		llgoStdioNobuf,
 		llgoFullRpath,
+		llgoMethodLateBinding,
+		llgoGlobalBC,
+		llgoGlobalBCPasses,
 	}
 	for _, envVar := range envVars {
 		if v := os.Getenv(envVar); v != "" {
 			m.env.Vars = m.env.Vars.Add(envVar, v)
 		}
 	}
+
+	// Effective late-binding mode also depends on build context (e.g. reflect/test
+	// auto-disable), so include the resolved value to keep cache entries isolated.
+	m.env.Vars = m.env.Vars.Add("__LLGO_EFFECTIVE_METHOD_LATE_BINDING", strconv.FormatBool(llssa.MethodLateBindingEnabled()))
+	m.env.Vars = m.env.Vars.Add("__LLGO_EFFECTIVE_GLOBAL_BC_MODE", strconv.FormatBool(c.globalBCMode))
 }
 
 // collectCommonInputs collects common build configuration inputs.
@@ -313,6 +323,9 @@ func (c *context) ensureCacheManager() *cacheManager {
 // tryLoadFromCache attempts to load a package from cache.
 // Returns true if cache hit, false otherwise.
 func (c *context) tryLoadFromCache(pkg *aPackage) bool {
+	if c.globalBCMode {
+		return false
+	}
 	if !cacheEnabled() {
 		return false
 	}
