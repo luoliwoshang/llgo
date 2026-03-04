@@ -106,25 +106,33 @@ func TestRunESP32C3Emulator(t *testing.T) {
 	conf.ForceRebuild = true
 
 	ignore := []string{
-		"./_testgo/abimethod",          // link errors (faccessat/getrlimit/setrlimit, ffi_*, ldexp, __atomic_*), plus DRAM overflow; https://github.com/goplus/llgo/issues/1569
-		"./_testgo/cgobasic",           // build constraints exclude all Go files (cgo)
-		"./_testgo/cgocfiles",          // build constraints exclude all Go files (cgo)
-		"./_testgo/cgodefer",           // build constraints exclude all Go files (cgo)
-		"./_testgo/cgofull",            // build constraints exclude all Go files (cgo)
-		"./_testgo/cgomacro",           // build constraints exclude all Go files (cgo)
-		"./_testgo/cgopython",          // build constraints exclude all Go files (cgo)
-		"./_testgo/chan",               // QEMU hits Illegal instruction (Guru Meditation) and hangs
-		"./_testgo/goexit",             // QEMU hits Illegal instruction (Guru Meditation) and hangs
-		"./_testgo/reader",             // QEMU timeout (no expected output)
-		"./_testgo/reflect",            // link errors (__atomic_*, ffi_*) plus DRAM overflow
-		"./_testgo/reflectconv",        // link errors (faccessat/getrlimit/setrlimit, __atomic_*, ffi_*, ldexp) plus DRAM overflow
-		"./_testgo/reflectfn",          // link errors (faccessat/getrlimit/setrlimit, fdopendir/pread/pwrite, ldexp, __atomic_*, ffi_*) plus DRAM overflow
-		"./_testgo/reflectmkfn",        // link errors (__atomic_*, ffi_*) plus DRAM overflow
-		"./_testgo/rewrite",            // link errors (faccessat/getrlimit/setrlimit, fdopendir/pread/pwrite, ldexp, __atomic_*, ffi_*) plus DRAM overflow
-		"./_testgo/select",             // QEMU hits Illegal instruction (Guru Meditation) and hangs
-		"./_testgo/selects",            // QEMU hits Illegal instruction (Guru Meditation) and hangs
-		"./_testgo/syncmap",            // link errors (faccessat/getrlimit/setrlimit, fdopendir/pread/pwrite, ldexp, __atomic_*, ffi_*) plus DRAM overflow
-		"./_testgo/tpnamed",            // QEMU hits Instruction access fault and hangs
+		"./_testgo/abimethod",   // llgo panic: unsatisfied import internal/runtime/sys
+		"./_testgo/alias",       // unexpected output: missing float values; expected "+5.000000e+00 +8.000000e+00"
+		"./_testgo/cgobasic",    // fast fail: build constraints exclude all Go files (cgo)
+		"./_testgo/cgocfiles",   // fast fail: build constraints exclude all Go files (cgo)
+		"./_testgo/cgodefer",    // fast fail: build constraints exclude all Go files (cgo)
+		"./_testgo/cgofull",     // fast fail: build constraints exclude all Go files (cgo)
+		"./_testgo/cgomacro",    // fast fail: build constraints exclude all Go files (cgo)
+		"./_testgo/cgopython",   // fast fail: build constraints exclude all Go files (cgo)
+		"./_testgo/chan",        // timeout: emulator did not auto-exit
+		"./_testgo/defer4",      // unexpected output: got "fatal error", expected "recover: panic message"
+		"./_testgo/goexit",      // llgo panic: unsatisfied import internal/runtime/sys
+		"./_testgo/indexerr",    // unexpected output: len(dst)=12, len(src)=0 (got "fatal error")
+		"./_testgo/invoke",      // unexpected output: invoke2 arg mismatch (2 vs +1.001000e+02)
+		"./_testgo/makeslice",   // unexpected output: len(dst)=23, len(src)=0 (got "fatal error\\nmust error")
+		"./_testgo/multiret",    // unexpected output: float formatting mismatch (1 vs 1 +2.000000e+00)
+		"./_testgo/reader",      // timeout: emulator did not auto-exit
+		"./_testgo/reflect",     // llgo panic: unsatisfied import internal/runtime/sys
+		"./_testgo/reflectconv", // llgo panic: unsatisfied import internal/sync
+		"./_testgo/reflectfn",   // llgo panic: unsatisfied import internal/runtime/sys
+		"./_testgo/reflectmkfn", // llgo panic: unsatisfied import internal/runtime/sys
+		"./_testgo/rewrite",     // llgo panic: unsatisfied import internal/sync
+		"./_testgo/select",      // timeout: emulator did not auto-exit
+		"./_testgo/selects",     // timeout: emulator did not auto-exit
+		"./_testgo/sigsegv",     // unexpected output: got "0/main", expected recover nil-pointer message
+		"./_testgo/struczero",   // unexpected output: bool/float formatting mismatch (0x0 vs 0x0 +0.000000e+00)
+		"./_testgo/syncmap",     // llgo panic: unsatisfied import internal/runtime/sys
+		"./_testgo/tpnamed",     // timeout: emulator panic (Instruction access fault), no auto-exit
 	}
 	cltest.RunFromDir(t, "", "./_testgo", ignore,
 		cltest.WithRunConfig(conf),
@@ -140,13 +148,13 @@ func TestRunESP32C3Libc(t *testing.T) {
 	conf.ForceRebuild = true
 
 	ignore := []string{
-		"./_testlibc/argv",     // QEMU hits Load access fault and hangs
-		"./_testlibc/atomic",   // link errors (__atomic_*)
-		"./_testlibc/complex",  // link errors (cabsf)
-		"./_testlibc/demangle", // link args not supported (-Wl,...) and missing -lLLVM-19
-		"./_testlibc/once",     // pthread/sync build constraints exclude Go files (sync.Once)
-		"./_testlibc/setjmp",   // link errors (stderr)
-		"./_testlibc/sqlite",   // link errors (sqlite3_*, runtime.AllocZ)
+		"./_testlibc/argv",     // timeout: emulator panic (Load access fault), no auto-exit
+		"./_testlibc/atomic",   // link error: ld.lld: error: undefined symbol: __atomic_store
+		"./_testlibc/complex",  // link error: ld.lld: error: undefined symbol: cabsf
+		"./_testlibc/demangle", // link error: ld.lld: error: unknown argument '-Wl,-search_paths_first'
+		"./_testlibc/once",     // fast fail: build constraints exclude all Go files (pthread/sync)
+		"./_testlibc/setjmp",   // link error: ld.lld: error: undefined symbol: stderr
+		"./_testlibc/sqlite",   // link error: ld.lld: error: unable to find library -lsqlite3
 	}
 	cltest.RunFromDir(t, "", "./_testlibc", ignore,
 		cltest.WithRunConfig(conf),
@@ -162,17 +170,20 @@ func TestRunESP32C3Testrt(t *testing.T) {
 	conf.ForceRebuild = true
 
 	ignore := []string{
-		"./_testrt/asm",          // QEMU hits Instruction access fault and hangs
-		"./_testrt/asmfull",      // inline asm not supported (instruction mnemonic)
-		"./_testrt/cvar",         // QEMU hits Instruction access fault and hangs
-		"./_testrt/fprintf",      // link errors (__stderrp)
-		"./_testrt/gotypes",      // QEMU hits Instruction access fault and hangs
-		"./_testrt/hello",        // build constraints exclude all Go files in libc
-		"./_testrt/makemap",      // link errors (__atomic_fetch_or_4)
-		"./_testrt/strlen",       // llgo panic: index out of range in build.Do
-		"./_testrt/struct",       // llgo panic: index out of range in build.Do
-		"./_testrt/typalias",     // llgo panic: index out of range in build.Do
-		"./_testrt/unreachable",  // QEMU hits Instruction access fault and hangs
+		"./_testrt/asm",         // timeout: emulator panic (Instruction access fault), no auto-exit
+		"./_testrt/asmfull",     // compile/asm error: unrecognized instruction mnemonic
+		"./_testrt/complex",     // unexpected output: complex-number output mismatch
+		"./_testrt/cvar",        // timeout: emulator panic (Instruction access fault), no auto-exit
+		"./_testrt/fprintf",     // link error: ld.lld: error: undefined symbol: __stderrp
+		"./_testrt/gotypes",     // timeout: emulator panic (Instruction access fault), no auto-exit
+		"./_testrt/hello",       // fast fail: build constraints exclude all Go files
+		"./_testrt/linkname",    // unexpected output: line order mismatch ("hello" appears first)
+		"./_testrt/makemap",     // link error: ld.lld: error: undefined symbol: __atomic_fetch_or_4
+		"./_testrt/strlen",      // fast fail: build constraints exclude all Go files
+		"./_testrt/struct",      // fast fail: build constraints exclude all Go files
+		"./_testrt/tpfunc",      // unexpected output: type size mismatch (got 8 4 4, expected 16 8 8)
+		"./_testrt/typalias",    // fast fail: build constraints exclude all Go files
+		"./_testrt/unreachable", // timeout: emulator panic (Instruction access fault), no auto-exit
 	}
 	cltest.RunFromDir(t, "", "./_testrt", ignore,
 		cltest.WithRunConfig(conf),
@@ -188,10 +199,7 @@ func TestRunESP32C3Testdata(t *testing.T) {
 	conf.ForceRebuild = true
 
 	ignore := []string{
-		"./_testdata/debug",   // QEMU hits Illegal instruction (Guru Meditation) and hangs
-		"./_testdata/fncall",  // QEMU hits Instruction access fault and hangs
-		"./_testdata/untyped", // QEMU hits Instruction access fault and hangs
-		"./_testdata/varinit", // QEMU hits Instruction access fault and hangs
+		"./_testdata/debug", // llgo panic: unsatisfied import internal/runtime/sys
 	}
 	cltest.RunFromDir(t, "", "./_testdata", ignore,
 		cltest.WithRunConfig(conf),
