@@ -44,6 +44,7 @@ ignore_esp32c3_basic=(
   "./_demo/c/asmcall"
   "./_demo/c/asmfullcall"
   "./_demo/c/cargs"
+  "./_demo/c/cabi" # timeout: emulator panic (Store/AMO access fault), no auto-exit
   "./_demo/c/catomic"
   "./_demo/c/cexec"
   "./_demo/c/cgofull"
