@@ -25,7 +25,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goplus/llgo/cl"
 	"github.com/goplus/llgo/cl/cltest"
 	"github.com/goplus/llgo/internal/build"
 	"github.com/goplus/llgo/internal/llgen"
@@ -163,7 +162,6 @@ func runEmbedTargetSuite(t *testing.T, target, relDir string, ignore []string) {
 	conf := build.NewDefaultConf(build.ModeRun)
 	conf.Target = target
 	conf.Emulator = true
-	conf.ForceRebuild = true
 	cltest.RunFromDir(t, "", relDir, ignore,
 		cltest.WithRunConfig(conf),
 		cltest.WithOutputFilter(cltest.FilterEmulatorOutput),
@@ -240,6 +238,22 @@ func TestRunEmbedEmulator(t *testing.T) {
 	}
 }
 
+func TestRunFromTestgoSelectAllowsKnownInterleavings(t *testing.T) {
+	output, err := cltest.RunAndCapture("./_testgo/select", "")
+	if err != nil {
+		t.Fatalf("run failed: %v\noutput: %s", err, string(output))
+	}
+	got := string(output)
+	allowed := map[string]struct{}{
+		"100\nch1\nch2\n":   {},
+		"100\nexit\nch1\n":  {},
+		"200\nexit\nexit\n": {},
+	}
+	if _, ok := allowed[got]; !ok {
+		t.Fatalf("unexpected select output:\n%s", got)
+	}
+}
+
 func TestFromTestpy(t *testing.T) {
 	cltest.FromDir(t, "", "./_testpy")
 }
@@ -271,9 +285,7 @@ func TestRunFromTestlibc(t *testing.T) {
 }
 
 func TestFromTestrt(t *testing.T) {
-	cl.SetDebug(cl.DbgFlagAll)
 	cltest.FromDir(t, "", "./_testrt")
-	cl.SetDebug(0)
 }
 
 func TestRunFromTestrt(t *testing.T) {
