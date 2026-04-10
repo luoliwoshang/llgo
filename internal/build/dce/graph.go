@@ -37,6 +37,7 @@ import "C"
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unsafe"
 
 	llvm "github.com/goplus/llvm"
@@ -45,6 +46,7 @@ import (
 const (
 	llgoUseIfaceMetadata       = "llgo.useiface"
 	llgoUseIfaceMethodMetadata = "llgo.useifacemethod"
+	llgoInterfaceInfoMetadata  = "llgo.interfaceinfo"
 	llgoMethodOffMetadata      = "llgo.methodoff"
 	llgoUseNamedMethodMetadata = "llgo.usenamedmethod"
 	llgoReflectMethodMetadata  = "llgo.reflectmethod"
@@ -52,27 +54,61 @@ const (
 	runtimeABIPrefix = "github.com/goplus/llgo/runtime/abi."
 )
 
+type BuildInputStats struct {
+	Modules       int
+	OrdinaryEdges time.Duration
+	TypeChildren  time.Duration
+	MethodRefs    time.Duration
+	Metadata      time.Duration
+	Total         time.Duration
+}
+
 // BuildInput constructs the phase-1 analyzer input from LLVM modules.
 // This stage centralizes LLVM scanning so the core analysis can run on
 // plain Go data structures.
 func BuildInput(mods []llvm.Module) (Input, error) {
+	input, _, err := BuildInputWithStats(mods)
+	return input, err
+}
+
+// BuildInputWithStats constructs analyzer input and records per-phase scan
+// timings so higher layers can report where DCE preprocessing time goes.
+func BuildInputWithStats(mods []llvm.Module) (Input, BuildInputStats, error) {
+	start := time.Now()
 	input := Input{
 		OrdinaryEdges: make(map[string]map[string]struct{}),
 		TypeChildren:  make(map[string]map[string]struct{}),
 		MethodRefs:    make(map[string]map[int]map[string]struct{}),
 	}
+	var stats BuildInputStats
 	for _, mod := range mods {
 		if mod.IsNil() {
 			continue
 		}
+		stats.Modules++
+
+		phaseStart := time.Now()
 		scanModuleOrdinaryEdges(input.OrdinaryEdges, mod)
+		stats.OrdinaryEdges += time.Since(phaseStart)
+
+		phaseStart = time.Now()
 		scanModuleTypeChildren(input.TypeChildren, mod)
+		stats.TypeChildren += time.Since(phaseStart)
+
+		phaseStart = time.Now()
 		scanModuleMethodRefs(input.MethodRefs, mod)
+		stats.MethodRefs += time.Since(phaseStart)
+
+		phaseStart = time.Now()
 		if err := scanModuleMetadata(&input, mod); err != nil {
-			return Input{}, err
+			stats.Metadata += time.Since(phaseStart)
+			stats.Total = time.Since(start)
+			return Input{}, stats, err
 		}
+		stats.Metadata += time.Since(phaseStart)
 	}
-	return input, nil
+	stats.Total = time.Since(start)
+	return input, stats, nil
 }
 
 func scanModuleOrdinaryEdges(edges map[string]map[string]struct{}, mod llvm.Module) {
@@ -302,6 +338,9 @@ func scanModuleMetadata(input *Input, mod llvm.Module) error {
 	if err := scanUseIfaceMethod(input, mod); err != nil {
 		return err
 	}
+	if err := scanInterfaceInfo(input, mod); err != nil {
+		return err
+	}
 	if err := scanMethodOff(input, mod); err != nil {
 		return err
 	}
@@ -345,6 +384,24 @@ func scanUseIfaceMethod(input *Input, mod llvm.Module) error {
 			Target: mdString(row[1]),
 			Name:   mdString(row[2]),
 			MTyp:   mdString(row[3]),
+		})
+	}
+	return nil
+}
+
+func scanInterfaceInfo(input *Input, mod llvm.Module) error {
+	rows, err := namedMetadataRows(mod, llgoInterfaceInfoMetadata)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if len(row) != 3 {
+			return fmt.Errorf("%s row has %d fields, want 3", llgoInterfaceInfoMetadata, len(row))
+		}
+		input.InterfaceInfo = append(input.InterfaceInfo, InterfaceInfoRow{
+			Target: mdString(row[0]),
+			Name:   mdString(row[1]),
+			MTyp:   mdString(row[2]),
 		})
 	}
 	return nil

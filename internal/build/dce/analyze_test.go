@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	llvm "github.com/goplus/llvm"
 )
@@ -33,6 +34,17 @@ func TestBuildInputEmpty(t *testing.T) {
 	}
 	if input.MethodRefs == nil {
 		t.Fatal("BuildInput(empty) returned nil MethodRefs")
+	}
+
+	input, stats, err := BuildInputWithStats([]llvm.Module{})
+	if err != nil {
+		t.Fatalf("BuildInputWithStats(empty) error = %v", err)
+	}
+	if stats.Modules != 0 {
+		t.Fatalf("BuildInputWithStats(empty).Modules = %d, want 0", stats.Modules)
+	}
+	if input.OrdinaryEdges == nil || input.TypeChildren == nil || input.MethodRefs == nil {
+		t.Fatal("BuildInputWithStats(empty) returned nil maps")
 	}
 }
 
@@ -66,6 +78,11 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 	}))
 	mod.AddNamedMetadataOperand(llgoUseIfaceMethodMetadata, ctx.MDNode([]llvm.Metadata{
 		ctx.MDString("owner.ifacemethod"),
+		ctx.MDString("_llgo_iface.I"),
+		ctx.MDString("M"),
+		ctx.MDString("_llgo_func$abc"),
+	}))
+	mod.AddNamedMetadataOperand(llgoInterfaceInfoMetadata, ctx.MDNode([]llvm.Metadata{
 		ctx.MDString("_llgo_iface.I"),
 		ctx.MDString("M"),
 		ctx.MDString("_llgo_func$abc"),
@@ -109,6 +126,13 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 		MTyp:   "_llgo_func$abc",
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("UseIfaceMethod = %#v, want %#v", got, want)
+	}
+	if got, want := input.InterfaceInfo, []InterfaceInfoRow{{
+		Target: "_llgo_iface.I",
+		Name:   "M",
+		MTyp:   "_llgo_func$abc",
+	}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("InterfaceInfo = %#v, want %#v", got, want)
 	}
 	if got, want := input.MethodOff, []MethodOffRow{{
 		TypeName: "_llgo_type.T",
@@ -281,14 +305,20 @@ func TestAnalyzeInputFollowsMethodRefs(t *testing.T) {
 				1: {"method.two": {}},
 			},
 		},
+		InterfaceInfo: []InterfaceInfoRow{{
+			Target: "_llgo_iface.I",
+			Name:   "IfaceM",
+			MTyp:   "_llgo_func$iface",
+		}},
 		UseIface: []UseIfaceRow{{
 			Owner:  "owner.useiface",
 			Target: "_llgo_type.T",
 		}},
 		UseIfaceMethod: []UseIfaceMethodRow{{
-			Owner: "owner.useiface",
-			Name:  "IfaceM",
-			MTyp:  "_llgo_func$iface",
+			Owner:  "owner.useiface",
+			Target: "_llgo_iface.I",
+			Name:   "IfaceM",
+			MTyp:   "_llgo_func$iface",
 		}},
 		MethodOff: []MethodOffRow{
 			{TypeName: "_llgo_type.T", Index: 0, Name: "IfaceM", MTyp: "_llgo_func$iface"},
@@ -323,14 +353,20 @@ func TestAnalyzeInputPropagatesUsedInIfaceToChildTypes(t *testing.T) {
 		MethodRefs: map[string]map[int]map[string]struct{}{
 			"_llgo_type.Child": {0: {"child.method": {}}},
 		},
+		InterfaceInfo: []InterfaceInfoRow{{
+			Target: "_llgo_iface.Parent",
+			Name:   "M",
+			MTyp:   "_llgo_func$child",
+		}},
 		UseIface: []UseIfaceRow{{
 			Owner:  "owner.useiface",
 			Target: "_llgo_type.Parent",
 		}},
 		UseIfaceMethod: []UseIfaceMethodRow{{
-			Owner: "owner.useiface",
-			Name:  "M",
-			MTyp:  "_llgo_func$child",
+			Owner:  "owner.useiface",
+			Target: "_llgo_iface.Parent",
+			Name:   "M",
+			MTyp:   "_llgo_func$child",
 		}},
 		MethodOff: []MethodOffRow{{
 			TypeName: "_llgo_type.Child",
@@ -375,6 +411,58 @@ func TestAnalyzeInputReflectKeepsExportedMethods(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("AnalyzeInput(reflect) = %#v, want %#v", got, want)
+	}
+}
+
+func TestAnalyzeInputIfaceMethodRequiresFullInterfaceImplementation(t *testing.T) {
+	input := Input{
+		OrdinaryEdges: map[string]map[string]struct{}{
+			"root": {"owner.useiface": {}, "owner.ifacecall": {}},
+		},
+		TypeChildren: make(map[string]map[string]struct{}),
+		MethodRefs: map[string]map[int]map[string]struct{}{
+			"_llgo_type.A": {
+				0: {"A.Foo": {}},
+				1: {"A.Bar": {}},
+			},
+			"_llgo_type.B": {
+				0: {"B.Foo": {}},
+				1: {"B.Bar": {}},
+				2: {"B.Car": {}},
+			},
+		},
+		InterfaceInfo: []InterfaceInfoRow{
+			{Target: "_llgo_iface.BI", Name: "Foo", MTyp: "_llgo_func$foo"},
+			{Target: "_llgo_iface.BI", Name: "Bar", MTyp: "_llgo_func$bar"},
+			{Target: "_llgo_iface.BI", Name: "Car", MTyp: "_llgo_func$car"},
+		},
+		UseIface: []UseIfaceRow{
+			{Owner: "owner.useiface", Target: "_llgo_type.A"},
+			{Owner: "owner.useiface", Target: "_llgo_type.B"},
+		},
+		UseIfaceMethod: []UseIfaceMethodRow{
+			{Owner: "owner.ifacecall", Target: "_llgo_iface.BI", Name: "Foo", MTyp: "_llgo_func$foo"},
+			{Owner: "owner.ifacecall", Target: "_llgo_iface.BI", Name: "Bar", MTyp: "_llgo_func$bar"},
+		},
+		MethodOff: []MethodOffRow{
+			{TypeName: "_llgo_type.A", Index: 0, Name: "Foo", MTyp: "_llgo_func$foo"},
+			{TypeName: "_llgo_type.A", Index: 1, Name: "Bar", MTyp: "_llgo_func$bar"},
+			{TypeName: "_llgo_type.B", Index: 0, Name: "Foo", MTyp: "_llgo_func$foo"},
+			{TypeName: "_llgo_type.B", Index: 1, Name: "Bar", MTyp: "_llgo_func$bar"},
+			{TypeName: "_llgo_type.B", Index: 2, Name: "Car", MTyp: "_llgo_func$car"},
+		},
+	}
+
+	got := AnalyzeInput(input, []string{"root"})
+	want := Result{
+		"_llgo_type.A": {},
+		"_llgo_type.B": {
+			0: {},
+			1: {},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("AnalyzeInput(partial interface impl) = %#v, want %#v", got, want)
 	}
 }
 
@@ -472,6 +560,46 @@ func TestFormatResult(t *testing.T) {
 	want := "_llgo_type.A: [1]\n_llgo_type.B: [0 2]\n"
 	if got != want {
 		t.Fatalf("FormatResult() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatAnalyzeStats(t *testing.T) {
+	stats := AnalyzeStats{
+		BuildInput: BuildInputStats{
+			Modules:       3,
+			OrdinaryEdges: time.Millisecond,
+			TypeChildren:  2 * time.Millisecond,
+			MethodRefs:    3 * time.Millisecond,
+			Metadata:      4 * time.Millisecond,
+			Total:         10 * time.Millisecond,
+		},
+		AnalyzeInput: AnalyzeInputStats{
+			Iterations:       5,
+			ReachableSymbols: 7,
+			UsedInIfaceTypes: 11,
+			LiveTypes:        13,
+			LiveMethods:      17,
+			Total:            6 * time.Millisecond,
+		},
+		Total: 16 * time.Millisecond,
+	}
+	got := FormatAnalyzeStats(stats)
+	want := "" +
+		"build_input.total: 10ms\n" +
+		"build_input.modules: 3\n" +
+		"build_input.ordinary_edges: 1ms\n" +
+		"build_input.type_children: 2ms\n" +
+		"build_input.method_refs: 3ms\n" +
+		"build_input.metadata: 4ms\n" +
+		"analyze_input.total: 6ms\n" +
+		"analyze_input.iterations: 5\n" +
+		"analyze_input.reachable_symbols: 7\n" +
+		"analyze_input.used_in_iface_types: 11\n" +
+		"analyze_input.live_types: 13\n" +
+		"analyze_input.live_methods: 17\n" +
+		"total: 16ms\n"
+	if got != want {
+		t.Fatalf("FormatAnalyzeStats() = %q, want %q", got, want)
 	}
 }
 
