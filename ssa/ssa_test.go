@@ -478,8 +478,10 @@ _llgo_0:
 declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.IfacePtrData"(%"github.com/goplus/llgo/runtime/internal/runtime.iface")
 
 !llgo.useifacemethod = !{!0}
+!llgo.interfaceinfo = !{!1}
 
 !0 = !{!"caller", !"_llgo_foo/bar.IFmt", !"Printf", !"_llgo_func$_RYiBYcSxJjuvzYmA4xYm18hT18pH0_ng6z76aK77Bk"}
+!1 = !{!"_llgo_foo/bar.IFmt", !"Printf", !"_llgo_func$_RYiBYcSxJjuvzYmA4xYm18hT18pH0_ng6z76aK77Bk"}
 `)
 
 	useIfaceMethodRows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoUseIfaceMethodMetadata)
@@ -489,6 +491,13 @@ declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.IfacePtrData"(%"gi
 	requireMDString(t, llgoUseIfaceMethodMetadata, useIfaceMethodFields, 1, "_llgo_foo/bar.IFmt")
 	requireMDString(t, llgoUseIfaceMethodMetadata, useIfaceMethodFields, 2, "Printf")
 	requireMDString(t, llgoUseIfaceMethodMetadata, useIfaceMethodFields, 3, "_llgo_func$_RYiBYcSxJjuvzYmA4xYm18hT18pH0_ng6z76aK77Bk")
+
+	interfaceInfoRows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoInterfaceInfoMetadata)
+	requireMetadataRows(t, llgoInterfaceInfoMetadata, interfaceInfoRows, 1)
+	interfaceInfoFields := requireMetadataFields(t, llgoInterfaceInfoMetadata, interfaceInfoRows[0], 3)
+	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 0, "_llgo_foo/bar.IFmt")
+	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 1, "Printf")
+	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 2, "_llgo_func$_RYiBYcSxJjuvzYmA4xYm18hT18pH0_ng6z76aK77Bk")
 }
 
 func TestNamedMetadataReadback(t *testing.T) {
@@ -568,6 +577,13 @@ func TestNamedMetadataReadback(t *testing.T) {
 	requireMDString(t, llgoUseIfaceMethodMetadata, useIfaceMethodFields, 1, ifaceTypeName)
 	requireMDString(t, llgoUseIfaceMethodMetadata, useIfaceMethodFields, 2, "Add")
 	requireMDString(t, llgoUseIfaceMethodMetadata, useIfaceMethodFields, 3, mtypName)
+
+	interfaceInfoRows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoInterfaceInfoMetadata)
+	requireMetadataRows(t, llgoInterfaceInfoMetadata, interfaceInfoRows, 1)
+	interfaceInfoFields := requireMetadataFields(t, llgoInterfaceInfoMetadata, interfaceInfoRows[0], 3)
+	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 0, ifaceTypeName)
+	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 1, "Add")
+	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 2, mtypName)
 }
 
 func requireMetadataRows(t *testing.T, table string, rows []llvm.Value, want int) {

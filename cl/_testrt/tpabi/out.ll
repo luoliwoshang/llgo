@@ -216,6 +216,7 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !llgo.useiface = !{!0, !1, !2}
 !llgo.methodoff = !{!3, !4, !5}
 !llgo.useifacemethod = !{!6}
+!llgo.interfaceinfo = !{!7}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testrt/tpabi.main", !"_llgo_github.com/goplus/llgo/cl/_testrt/tpabi.T[string,int]"}
 !1 = !{!"github.com/goplus/llgo/cl/_testrt/tpabi.main", !"_llgo_string"}
@@ -224,3 +225,4 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !4 = !{!"*_llgo_github.com/goplus/llgo/cl/_testrt/tpabi.T[string,int]", i32 1, !"Info", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac"}
 !5 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpabi.T[string,int]", i32 0, !"Info", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac"}
 !6 = !{!"github.com/goplus/llgo/cl/_testrt/tpabi.main", !"_llgo_github.com/goplus/llgo/cl/_testrt/tpabi.I", !"Demo", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac"}
+!7 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpabi.I", !"Demo", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac"}

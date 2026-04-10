@@ -1077,6 +1077,7 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !llgo.useiface = !{!0, !1, !2, !3, !4, !5}
 !llgo.methodoff = !{!6, !7, !8, !9, !10, !11, !12, !13, !14, !15, !16, !17, !18, !19, !20, !21, !22, !23, !24, !25, !26}
 !llgo.useifacemethod = !{!27, !28, !29, !30, !31, !32, !33, !34}
+!llgo.interfaceinfo = !{!35, !36, !37, !38}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testgo/reader.NopCloser", !"_llgo_github.com/goplus/llgo/cl/_testgo/reader.nopCloserWriterTo"}
 !1 = !{!"github.com/goplus/llgo/cl/_testgo/reader.NopCloser", !"_llgo_github.com/goplus/llgo/cl/_testgo/reader.nopCloser"}
@@ -1113,3 +1114,7 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !32 = !{!"github.com/goplus/llgo/cl/_testgo/reader.nopCloserWriterTo.Read", !"_llgo_github.com/goplus/llgo/cl/_testgo/reader.Reader", !"Read", !"_llgo_func$G2hch9Iy9DrhKKsg70PbL54bK-XSl-1IUUORN17J2Dk"}
 !33 = !{!"github.com/goplus/llgo/cl/_testgo/reader.nopCloserWriterTo.WriteTo", !"_llgo_github.com/goplus/llgo/cl/_testgo/reader.WriterTo", !"WriteTo", !"_llgo_func$V_kP-r1nn8Ij-G2jGIm9ROLn4CjtLBch-g3Ha7pGJo4"}
 !34 = !{!"github.com/goplus/llgo/cl/_testgo/reader.(*nopCloserWriterTo).Read", !"_llgo_github.com/goplus/llgo/cl/_testgo/reader.Reader", !"Read", !"_llgo_func$G2hch9Iy9DrhKKsg70PbL54bK-XSl-1IUUORN17J2Dk"}
+!35 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/reader.Reader", !"Read", !"_llgo_func$G2hch9Iy9DrhKKsg70PbL54bK-XSl-1IUUORN17J2Dk"}
+!36 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/reader.StringWriter", !"WriteString", !"_llgo_func$thH5FBpdXzJNnCpSfiLU5ItTntFU6LWp0RJhDm2XJjw"}
+!37 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/reader.Writer", !"Write", !"_llgo_func$G2hch9Iy9DrhKKsg70PbL54bK-XSl-1IUUORN17J2Dk"}
+!38 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/reader.WriterTo", !"WriteTo", !"_llgo_func$V_kP-r1nn8Ij-G2jGIm9ROLn4CjtLBch-g3Ha7pGJo4"}

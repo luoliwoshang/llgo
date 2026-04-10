@@ -262,6 +262,7 @@ declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.Implements"(ptr, pt
 !llgo.useiface = !{!0, !1, !2}
 !llgo.methodoff = !{!3, !4, !5, !6}
 !llgo.useifacemethod = !{!7, !8, !9}
+!llgo.interfaceinfo = !{!10, !11, !12}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testgo/tpinst.demo", !"*_llgo_github.com/goplus/llgo/cl/_testgo/tpinst.M[int]"}
 !1 = !{!"github.com/goplus/llgo/cl/_testgo/tpinst.demo", !"_llgo_string"}
@@ -273,3 +274,6 @@ declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.Implements"(ptr, pt
 !7 = !{!"github.com/goplus/llgo/cl/_testgo/tpinst.demo", !"_llgo_github.com/goplus/llgo/cl/_testgo/tpinst.I[int]", !"Value", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA"}
 !8 = !{!"github.com/goplus/llgo/cl/_testgo/tpinst.demo", !"_llgo_github.com/goplus/llgo/cl/_testgo/tpinst.I[float64]", !"Value", !"_llgo_func$UYiLlmcWxoOKZPPzvR4LByitNeKoVGoTrB_5ubdOWW8"}
 !9 = !{!"github.com/goplus/llgo/cl/_testgo/tpinst.demo", !"github.com/goplus/llgo/cl/_testgo/tpinst.iface$2sV9fFeqOv1SzesvwIdhTqCFzDT8ZX5buKUSAoHNSww", !"github.com/goplus/llgo/cl/_testgo/tpinst.value", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA"}
+!10 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/tpinst.I[int]", !"Value", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA"}
+!11 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/tpinst.I[float64]", !"Value", !"_llgo_func$UYiLlmcWxoOKZPPzvR4LByitNeKoVGoTrB_5ubdOWW8"}
+!12 = !{!"github.com/goplus/llgo/cl/_testgo/tpinst.iface$2sV9fFeqOv1SzesvwIdhTqCFzDT8ZX5buKUSAoHNSww", !"github.com/goplus/llgo/cl/_testgo/tpinst.value", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA"}

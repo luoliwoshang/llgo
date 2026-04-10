@@ -21,6 +21,11 @@ const (
 	// referenced interface method demand should participate in later method
 	// matching.
 	llgoUseIfaceMethodMetadata = "llgo.useifacemethod"
+	// llgoInterfaceInfoMetadata is a module-level named metadata table whose rows
+	// are {interface type name, normalized method name, mtyp name}. Rows are
+	// flattened so later whole-program analysis can regroup all methods required
+	// by one interface type without relying on producer-side list ordering.
+	llgoInterfaceInfoMetadata = "llgo.interfaceinfo"
 	// llgoMethodOffMetadata is a module-level named metadata table whose rows are
 	// {concrete type name, method index, normalized method name, mtyp name}. Each
 	// row describes one concrete method candidate in the canonical abi.Method
@@ -87,6 +92,18 @@ func (p Package) emitUseIfaceMethod(owner, target, name, mtyp string) {
 		llgoUseIfaceMethodMetadata,
 		metadataKey(owner, target, name, mtyp),
 		metadataString(ctx, owner),
+		metadataString(ctx, target),
+		metadataString(ctx, name),
+		metadataString(ctx, mtyp),
+	)
+}
+
+func (p Package) emitInterfaceInfo(target, name, mtyp string) {
+	ctx := p.mod.Context()
+	p.semMetaEmitter.add(
+		p.mod,
+		llgoInterfaceInfoMetadata,
+		metadataKey(target, name, mtyp),
 		metadataString(ctx, target),
 		metadataString(ctx, name),
 		metadataString(ctx, mtyp),
