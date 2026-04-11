@@ -155,6 +155,42 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 	}
 }
 
+func TestBuildInputReadsConstExprEdgesFromInstruction(t *testing.T) {
+	ctx := llvm.NewContext()
+	defer ctx.Dispose()
+
+	mod := ctx.NewModule("const-expr")
+	defer mod.Dispose()
+
+	i8ptr := llvm.PointerType(ctx.Int8Type(), 0)
+	calleeType := llvm.FunctionType(ctx.VoidType(), []llvm.Type{i8ptr}, false)
+	callerType := llvm.FunctionType(ctx.VoidType(), nil, false)
+
+	caller := llvm.AddFunction(mod, "caller", callerType)
+	callee := llvm.AddFunction(mod, "callee", calleeType)
+	target := llvm.AddGlobal(mod, ctx.Int32Type(), "target")
+	target.SetInitializer(llvm.ConstInt(ctx.Int32Type(), 1, false))
+
+	builder := ctx.NewBuilder()
+	defer builder.Dispose()
+	entry := ctx.AddBasicBlock(caller, "entry")
+	builder.SetInsertPointAtEnd(entry)
+	arg := llvm.ConstBitCast(target, i8ptr)
+	builder.CreateCall(calleeType, callee, []llvm.Value{arg}, "")
+	builder.CreateRetVoid()
+
+	input, err := BuildInput([]llvm.Module{mod})
+	if err != nil {
+		t.Fatalf("BuildInput(const expr) error = %v", err)
+	}
+	if _, ok := input.OrdinaryEdges["caller"]["callee"]; !ok {
+		t.Fatalf("OrdinaryEdges[caller] missing callee: %#v", input.OrdinaryEdges["caller"])
+	}
+	if _, ok := input.OrdinaryEdges["caller"]["target"]; !ok {
+		t.Fatalf("OrdinaryEdges[caller] missing target from const expr: %#v", input.OrdinaryEdges["caller"])
+	}
+}
+
 func TestBuildInputReadsTypeChildren(t *testing.T) {
 	ctx := llvm.NewContext()
 	defer ctx.Dispose()

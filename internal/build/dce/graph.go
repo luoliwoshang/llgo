@@ -119,7 +119,7 @@ func scanModuleOrdinaryEdges(edges map[string]map[string]struct{}, mod llvm.Modu
 		}
 		for bb := fn.FirstBasicBlock(); !bb.IsNil(); bb = llvm.NextBasicBlock(bb) {
 			for inst := bb.FirstInstruction(); !inst.IsNil(); inst = llvm.NextInstruction(inst) {
-				collectValueEdges(edges, src, inst)
+				collectInstructionEdges(edges, src, inst)
 			}
 		}
 	}
@@ -136,7 +136,7 @@ func scanModuleOrdinaryEdges(edges map[string]map[string]struct{}, mod llvm.Modu
 			collectTypeGlobalOrdinaryEdges(edges, src, g)
 			continue
 		}
-		collectValueEdges(edges, src, init)
+		collectTransitiveValueEdges(edges, src, init)
 	}
 }
 
@@ -146,14 +146,56 @@ func collectTypeGlobalOrdinaryEdges(edges map[string]map[string]struct{}, src st
 		return
 	}
 	if !hasUncommonTypeLayout(g.GlobalValueType()) || init.OperandsCount() != 3 {
-		collectValueEdges(edges, src, init)
+		collectTransitiveValueEdges(edges, src, init)
 		return
 	}
-	collectValueEdges(edges, src, init.Operand(0))
-	collectValueEdges(edges, src, init.Operand(1))
+	collectTransitiveValueEdges(edges, src, init.Operand(0))
+	collectTransitiveValueEdges(edges, src, init.Operand(1))
 }
 
-func collectValueEdges(edges map[string]map[string]struct{}, src string, root llvm.Value) {
+func collectInstructionEdges(edges map[string]map[string]struct{}, src string, inst llvm.Value) {
+	seen := make(map[unsafe.Pointer]struct{})
+	for i := 0; i < inst.OperandsCount(); i++ {
+		collectConstOperandEdges(edges, src, inst.Operand(i), seen)
+	}
+}
+
+func collectConstOperandEdges(edges map[string]map[string]struct{}, src string, root llvm.Value, seen map[unsafe.Pointer]struct{}) {
+	if root.IsNil() {
+		return
+	}
+	if dst := symbolNameOf(root); dst != "" {
+		addEdge(edges, src, dst)
+		return
+	}
+	if root.IsAConstant().IsNil() {
+		return
+	}
+	var visit func(v llvm.Value)
+	visit = func(v llvm.Value) {
+		if v.IsNil() {
+			return
+		}
+		ptr := unsafe.Pointer(v.C)
+		if _, ok := seen[ptr]; ok {
+			return
+		}
+		seen[ptr] = struct{}{}
+		if dst := symbolNameOf(v); dst != "" {
+			addEdge(edges, src, dst)
+			return
+		}
+		if v.IsAConstant().IsNil() {
+			return
+		}
+		for i := 0; i < v.OperandsCount(); i++ {
+			visit(v.Operand(i))
+		}
+	}
+	visit(root)
+}
+
+func collectTransitiveValueEdges(edges map[string]map[string]struct{}, src string, root llvm.Value) {
 	seen := make(map[unsafe.Pointer]struct{})
 	var visit func(v llvm.Value)
 	visit = func(v llvm.Value) {
