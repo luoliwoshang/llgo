@@ -351,7 +351,7 @@ func scanUseIface(input *Input, mod llvm.Module) error {
 		if len(row) != 2 {
 			return fmt.Errorf("%s row has %d fields, want 2", llgoUseIfaceMetadata, len(row))
 		}
-		input.UseIface = append(input.UseIface, UseIfaceRow{
+		input.UseIface = append(input.UseIface, IfaceUse{
 			Owner:  mdString(row[0]),
 			Target: mdString(row[1]),
 		})
@@ -368,7 +368,7 @@ func scanUseIfaceMethod(input *Input, mod llvm.Module) error {
 		if len(row) != 4 {
 			return fmt.Errorf("%s row has %d fields, want 4", llgoUseIfaceMethodMetadata, len(row))
 		}
-		input.UseIfaceMethod = append(input.UseIfaceMethod, UseIfaceMethodRow{
+		input.UseIfaceMethod = append(input.UseIfaceMethod, IfaceMethodUse{
 			Owner:  mdString(row[0]),
 			Target: mdString(row[1]),
 			Sig: MethodSig{
@@ -386,16 +386,19 @@ func scanInterfaceInfo(input *Input, mod llvm.Module) error {
 		return err
 	}
 	for _, row := range rows {
-		if len(row) != 3 {
-			return fmt.Errorf("%s row has %d fields, want 3", llgoInterfaceInfoMetadata, len(row))
+		if len(row) < 3 || len(row)%2 == 0 {
+			return fmt.Errorf("%s row has %d fields, want 1+2*n", llgoInterfaceInfoMetadata, len(row))
 		}
-		input.InterfaceInfo = append(input.InterfaceInfo, InterfaceInfoRow{
-			Target: mdString(row[0]),
-			Sig: MethodSig{
-				Name:  mdString(row[1]),
-				MType: mdString(row[2]),
-			},
-		})
+		target := mdString(row[0])
+		for i := 1; i < len(row); i += 2 {
+			input.InterfaceInfo = append(input.InterfaceInfo, InterfaceMethod{
+				Target: target,
+				Sig: MethodSig{
+					Name:  mdString(row[i]),
+					MType: mdString(row[i+1]),
+				},
+			})
+		}
 	}
 	return nil
 }
@@ -406,17 +409,14 @@ func scanMethodInfo(input *Input, mod llvm.Module) error {
 		return err
 	}
 	for _, row := range rows {
-		if len(row) < 2 {
-			return fmt.Errorf("%s row has %d fields, want at least 2", llgoMethodInfoMetadata, len(row))
+		if len(row) < 1 || (len(row)-1)%5 != 0 {
+			return fmt.Errorf("%s row has %d fields, want 1+5*n", llgoMethodInfoMetadata, len(row))
 		}
 		typeName := mdString(row[0])
-		count := int(row[1].ZExtValue())
-		if len(row) != 2+count*5 {
-			return fmt.Errorf("%s row for %q has %d fields, want %d", llgoMethodInfoMetadata, typeName, len(row), 2+count*5)
-		}
+		count := (len(row) - 1) / 5
 		slots := make([]MethodSlot, 0, count)
 		for i := 0; i < count; i++ {
-			base := 2 + i*5
+			base := 1 + i*5
 			slots = append(slots, MethodSlot{
 				Index: int(row[base+0].ZExtValue()),
 				Sig: MethodSig{
@@ -441,7 +441,7 @@ func scanUseNamedMethod(input *Input, mod llvm.Module) error {
 		if len(row) != 2 {
 			return fmt.Errorf("%s row has %d fields, want 2", llgoUseNamedMethodMetadata, len(row))
 		}
-		input.UseNamedMethod = append(input.UseNamedMethod, UseNamedMethodRow{
+		input.UseNamedMethod = append(input.UseNamedMethod, NamedMethodUse{
 			Owner: mdString(row[0]),
 			Name:  mdString(row[1]),
 		})
@@ -458,7 +458,7 @@ func scanReflectMethod(input *Input, mod llvm.Module) error {
 		if len(row) != 1 {
 			return fmt.Errorf("%s row has %d fields, want 1", llgoReflectMethodMetadata, len(row))
 		}
-		input.ReflectMethod = append(input.ReflectMethod, ReflectMethodRow{
+		input.ReflectMethod = append(input.ReflectMethod, ReflectMethodUse{
 			Owner: mdString(row[0]),
 		})
 	}

@@ -397,5 +397,5 @@ declare i1 @"github.com/goplus/llgo/runtime/internal/runtime.structequal"(ptr, p
 !18 = !{!"github.com/goplus/llgo/cl/_testrt/eface.main", !"_llgo_string"}
 !19 = !{!"github.com/goplus/llgo/cl/_testrt/eface.main", !"github.com/goplus/llgo/cl/_testrt/eface.struct$RKbUG45GE4henGMAdmt0Rju0JptyR8NsX7IZLsOI0OM"}
 !20 = !{!"github.com/goplus/llgo/cl/_testrt/eface.main", !"_llgo_github.com/goplus/llgo/cl/_testrt/eface.T"}
-!21 = !{!"*_llgo_github.com/goplus/llgo/cl/_testrt/eface.T", i32 1, i32 0, !"Invoke", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac", !"github.com/goplus/llgo/cl/_testrt/eface.(*T).Invoke", !"github.com/goplus/llgo/cl/_testrt/eface.(*T).Invoke"}
-!22 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/eface.T", i32 0}
+!21 = !{!"*_llgo_github.com/goplus/llgo/cl/_testrt/eface.T", i32 0, !"Invoke", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac", !"github.com/goplus/llgo/cl/_testrt/eface.(*T).Invoke", !"github.com/goplus/llgo/cl/_testrt/eface.(*T).Invoke"}
+!22 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/eface.T"}

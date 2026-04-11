@@ -202,7 +202,7 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !llgo.methodinfo = !{!0, !1, !2}
 !llgo.useiface = !{!3}
 
-!0 = !{!"*_llgo_github.com/goplus/llgo/cl/_testdata/foo.Foo", i32 1, i32 0, !"Pb", !"_llgo_func$bbS9EKnYgxbrRntc_6WJN6WLF9IKQADblvN_cLtKCqY", !"github.com/goplus/llgo/cl/_testdata/foo.(*Foo).Pb", !"github.com/goplus/llgo/cl/_testdata/foo.(*Foo).Pb"}
-!1 = !{!"_llgo_github.com/goplus/llgo/cl/_testdata/foo.Foo", i32 1, i32 0, !"Pb", !"_llgo_func$bbS9EKnYgxbrRntc_6WJN6WLF9IKQADblvN_cLtKCqY", !"github.com/goplus/llgo/cl/_testdata/foo.(*Foo).Pb", !"github.com/goplus/llgo/cl/_testdata/foo.Foo.Pb"}
-!2 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/struczero.bar", i32 0}
+!0 = !{!"*_llgo_github.com/goplus/llgo/cl/_testdata/foo.Foo", i32 0, !"Pb", !"_llgo_func$bbS9EKnYgxbrRntc_6WJN6WLF9IKQADblvN_cLtKCqY", !"github.com/goplus/llgo/cl/_testdata/foo.(*Foo).Pb", !"github.com/goplus/llgo/cl/_testdata/foo.(*Foo).Pb"}
+!1 = !{!"_llgo_github.com/goplus/llgo/cl/_testdata/foo.Foo", i32 0, !"Pb", !"_llgo_func$bbS9EKnYgxbrRntc_6WJN6WLF9IKQADblvN_cLtKCqY", !"github.com/goplus/llgo/cl/_testdata/foo.(*Foo).Pb", !"github.com/goplus/llgo/cl/_testdata/foo.Foo.Pb"}
+!2 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/struczero.bar"}
 !3 = !{!"github.com/goplus/llgo/cl/_testgo/struczero.main", !"_llgo_github.com/goplus/llgo/cl/_testdata/foo.Foo"}

@@ -21,14 +21,13 @@ const (
 	// matching.
 	llgoUseIfaceMethodMetadata = "llgo.useifacemethod"
 	// llgoInterfaceInfoMetadata is a module-level named metadata table whose rows
-	// are {interface type name, normalized method name, mtyp name}. Rows are
-	// flattened so later whole-program analysis can regroup all methods required
-	// by one interface type without relying on producer-side list ordering.
+	// are {interface type name, [normalized method name, mtyp name]...}. Each
+	// row describes one interface type's full method set in declaration order.
 	llgoInterfaceInfoMetadata = "llgo.interfaceinfo"
 	// llgoMethodInfoMetadata is a module-level named metadata table whose rows
-	// are {concrete type name, method count, [index, normalized method name,
-	// mtyp name, ifn name, tfn name]...}. Each row describes one concrete
-	// type's full method table in canonical abi.Method order.
+	// are {concrete type name, [index, normalized method name, mtyp name, ifn
+	// name, tfn name]...}. Each row describes one concrete type's full method
+	// table in canonical abi.Method order.
 	llgoMethodInfoMetadata = "llgo.methodinfo"
 	// llgoUseNamedMethodMetadata is a module-level named metadata table whose
 	// rows are {owner name, normalized method name}. Each row means that if the
@@ -97,15 +96,30 @@ func (p Package) emitUseIfaceMethod(owner, target, name, mtyp string) {
 	)
 }
 
-func (p Package) emitInterfaceInfo(target, name, mtyp string) {
+type interfaceInfoMethod struct {
+	Name  string
+	MType string
+}
+
+func (p Package) emitInterfaceInfo(target string, methods []interfaceInfoMethod) {
+	if target == "" || len(methods) == 0 {
+		return
+	}
 	ctx := p.mod.Context()
+	fields := make([]llvm.Metadata, 0, 1+len(methods)*2)
+	fields = append(fields, metadataString(ctx, target))
+	for _, method := range methods {
+		fields = append(
+			fields,
+			metadataString(ctx, method.Name),
+			metadataString(ctx, method.MType),
+		)
+	}
 	p.semMetaEmitter.add(
 		p.mod,
 		llgoInterfaceInfoMetadata,
-		metadataKey(target, name, mtyp),
-		metadataString(ctx, target),
-		metadataString(ctx, name),
-		metadataString(ctx, mtyp),
+		target,
+		fields...,
 	)
 }
 
@@ -122,8 +136,8 @@ func (p Package) emitMethodInfo(typeSym string, slots []methodInfoSlot) {
 		return
 	}
 	ctx := p.mod.Context()
-	fields := make([]llvm.Metadata, 0, 2+len(slots)*5)
-	fields = append(fields, metadataString(ctx, typeSym), metadataInt32(ctx, len(slots)))
+	fields := make([]llvm.Metadata, 0, 1+len(slots)*5)
+	fields = append(fields, metadataString(ctx, typeSym))
 	for _, slot := range slots {
 		fields = append(
 			fields,

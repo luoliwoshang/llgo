@@ -111,4 +111,4 @@ declare void @"github.com/goplus/llgo/runtime/internal/runtime.Panic"(%"github.c
 
 !0 = !{!"github.com/goplus/llgo/cl/_testrt/namedslice.main", !"_llgo_github.com/goplus/llgo/cl/_testrt/namedslice.MyBytes"}
 !1 = !{!"github.com/goplus/llgo/cl/_testrt/namedslice.main", !"_llgo_string"}
-!2 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/namedslice.MyBytes", i32 0}
+!2 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/namedslice.MyBytes"}

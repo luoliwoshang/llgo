@@ -33,14 +33,30 @@ type AnalyzeStats struct {
 type Symbol = string
 
 type MethodSig struct {
+	// Name is the normalized method name used by the analyzer:
+	// - exported method: "Read"
+	// - unexported method: "<pkgpath>.<name>", e.g.
+	//   "github.com/goplus/llgo/cl/_testgo/embedunexport-1598.setName"
 	Name  string
+	// MType is the symbol of this method's runtime method-type descriptor.
 	MType Symbol
 }
 
+// MethodSlot describes one method entry on a concrete type's method table.
+// For one concrete type:
+// - every method corresponds to one MethodSlot
+// - len([]MethodSlot) is that type's method count
+// - Index is the slot position in that type's method table
+// - Sig is the method identity (Name + MType)
+// - IFn/TFn are the two callable method entry symbols kept when live
 type MethodSlot struct {
+	// Index is the slot position in this type's method table.
 	Index int
+	// Sig identifies the method by (name, method-type symbol).
 	Sig   MethodSig
+	// IFn is the interface-call entry symbol for this method.
 	IFn   Symbol
+	// TFn is the direct-call entry symbol for this method.
 	TFn   Symbol
 }
 
@@ -48,39 +64,77 @@ type MethodSlot struct {
 // The goal is to isolate LLVM scanning in BuildInput so the core analysis
 // can operate on plain Go data structures.
 type Input struct {
+	// OrdinaryEdges is the plain symbol reachability graph used by flood().
 	OrdinaryEdges map[Symbol]map[Symbol]struct{}
+	// TypeChildren records direct UsedInIface propagation edges between types.
+	// If a type may participate in interface dispatch, reflection can expose
+	// child types reachable from its runtime type data, and those child types
+	// must also be treated as UsedInIface. Analyzer recursively propagates that
+	// state through these child-type edges.
 	TypeChildren  map[Symbol]map[Symbol]struct{}
 
-	InterfaceInfo  []InterfaceInfoRow
-	UseIface       []UseIfaceRow
-	UseIfaceMethod []UseIfaceMethodRow
+	// InterfaceInfo lists the method signatures required by each interface.
+	// Analyzer uses it to answer "does concrete type T fully implement
+	// interface I?" before allowing an interface-method demand on I to keep
+	// a method slot on T alive.
+	InterfaceInfo  []InterfaceMethod
+	// UseIface marks a type as UsedInIface once Owner is reachable.
+	// UsedInIface means the type may participate in interface dispatch, so its
+	// method table must be considered by method liveness. This is the analog of
+	// Go linker's "type is converted to interface" marker.
+	UseIface       []IfaceUse
+	// UseIfaceMethod marks an interface method demand once Owner is reachable.
+	// The demand is attached to the target interface, not to any concrete type.
+	// A concrete type method slot is kept only if that concrete type is
+	// UsedInIface and fully implements the target interface.
+	UseIfaceMethod []IfaceMethodUse
+	// MethodInfo is the set of markable methods for each concrete type.
+	// It plays the same role as Go linker's method references discovered from
+	// R_METHODOFF: once a type becomes UsedInIface, these slots become method-
+	// liveness candidates for that type.
+	//
+	// Unlike Go's linker, this analyzer does not need relocations in the final
+	// binary just to discover or keep method entry symbols alive. Instead of
+	// decoding mtyp/ifn/tfn from binary type data, MethodInfo carries each slot's
+	// table index and the corresponding MType/IFn/TFn symbols directly as input.
+	//
+	// Analyzer decides slot liveness from demand (useiface/useifacemethod/
+	// usenamedmethod/reflectmethod), records live slot indexes in Result, and
+	// marks each live slot's MType/IFn/TFn symbols as reachable.
 	MethodInfo     map[Symbol][]MethodSlot
-	UseNamedMethod []UseNamedMethodRow
-	ReflectMethod  []ReflectMethodRow
+	// UseNamedMethod marks a method name demand once Owner is reachable.
+	// Any UsedInIface concrete type slot with the same normalized method name
+	// is kept.
+	UseNamedMethod []NamedMethodUse
+	// ReflectMethod enables conservative reflect mode once Owner is reachable.
+	// In this mode, all exported methods of UsedInIface concrete types are kept,
+	// because the analysis can no longer determine the exact target method
+	// statically.
+	ReflectMethod  []ReflectMethodUse
 }
 
-type InterfaceInfoRow struct {
+type InterfaceMethod struct {
 	Target Symbol
 	Sig    MethodSig
 }
 
-type UseIfaceRow struct {
+type IfaceUse struct {
 	Owner  Symbol
 	Target Symbol
 }
 
-type UseIfaceMethodRow struct {
+type IfaceMethodUse struct {
 	Owner  Symbol
 	Target Symbol
 	Sig    MethodSig
 }
 
-type UseNamedMethodRow struct {
+type NamedMethodUse struct {
 	Owner Symbol
 	Name  string
 }
 
-type ReflectMethodRow struct {
+type ReflectMethodUse struct {
 	Owner Symbol
 }
 
@@ -144,10 +198,10 @@ func AnalyzeInputWithStats(input Input, roots []string) (Result, AnalyzeInputSta
 		ifaceDemand: make(map[Symbol]map[MethodSig]struct{}),
 		namedDemand: make(map[string]struct{}),
 		result:      make(Result),
-		interfaceInfo: buildSigSets(input.InterfaceInfo, func(row InterfaceInfoRow) string {
-			return string(row.Target)
-		}, func(row InterfaceInfoRow) methodSig {
-			return methodSig(row.Sig)
+		interfaceInfo: buildSigSets(input.InterfaceInfo, func(method InterfaceMethod) string {
+			return string(method.Target)
+		}, func(method InterfaceMethod) methodSig {
+			return methodSig(method.Sig)
 		}),
 		typeMethods: buildMethodInfoSets(input.MethodInfo),
 	}

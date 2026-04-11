@@ -537,5 +537,5 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !5 = !{!"github.com/goplus/llgo/cl/_testgo/equal.init#5", !"_llgo_github.com/goplus/llgo/cl/_testgo/equal.T"}
 !6 = !{!"github.com/goplus/llgo/cl/_testgo/equal.init#5", !"_llgo_string"}
 !7 = !{!"github.com/goplus/llgo/cl/_testgo/equal.init#5", !"_llgo_github.com/goplus/llgo/cl/_testgo/equal.N"}
-!8 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/equal.T", i32 0}
-!9 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/equal.N", i32 0}
+!8 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/equal.T"}
+!9 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/equal.N"}

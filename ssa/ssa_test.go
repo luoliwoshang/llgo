@@ -566,12 +566,11 @@ func TestNamedMetadataReadback(t *testing.T) {
 	if len(methodInfoRows) == 0 {
 		t.Fatalf("%s rows len = 0, want at least 1", llgoMethodInfoMetadata)
 	}
-	methodInfoFields := requireMetadataFields(t, llgoMethodInfoMetadata, findMetadataRowByFirstString(t, llgoMethodInfoMetadata, methodInfoRows, structTypeName), 7)
+	methodInfoFields := requireMetadataFields(t, llgoMethodInfoMetadata, findMetadataRowByFirstString(t, llgoMethodInfoMetadata, methodInfoRows, structTypeName), 6)
 	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 0, structTypeName)
-	requireMDUint(t, llgoMethodInfoMetadata, methodInfoFields, 1, 1)
-	requireMDUint(t, llgoMethodInfoMetadata, methodInfoFields, 2, 0)
-	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 3, "Add")
-	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 4, mtypName)
+	requireMDUint(t, llgoMethodInfoMetadata, methodInfoFields, 1, 0)
+	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 2, "Add")
+	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 3, mtypName)
 
 	useIfaceMethodRows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoUseIfaceMethodMetadata)
 	requireMetadataRows(t, llgoUseIfaceMethodMetadata, useIfaceMethodRows, 1)
@@ -587,6 +586,25 @@ func TestNamedMetadataReadback(t *testing.T) {
 	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 0, ifaceTypeName)
 	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 1, "Add")
 	requireMDString(t, llgoInterfaceInfoMetadata, interfaceInfoFields, 2, mtypName)
+}
+
+func TestInterfaceInfoMetadataSingleRow(t *testing.T) {
+	prog := NewProgram(nil)
+	pkg := prog.NewPackage("bar", "foo/bar")
+
+	pkg.emitInterfaceInfo("_llgo_foo/bar.IFmt", []interfaceInfoMethod{
+		{Name: "Read", MType: "_llgo_func$read"},
+		{Name: "Write", MType: "_llgo_func$write"},
+	})
+
+	rows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoInterfaceInfoMetadata)
+	requireMetadataRows(t, llgoInterfaceInfoMetadata, rows, 1)
+	fields := requireMetadataFields(t, llgoInterfaceInfoMetadata, rows[0], 5)
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 0, "_llgo_foo/bar.IFmt")
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 1, "Read")
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 2, "_llgo_func$read")
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 3, "Write")
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 4, "_llgo_func$write")
 }
 
 func requireMetadataRows(t *testing.T, table string, rows []llvm.Value, want int) {

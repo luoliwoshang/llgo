@@ -86,10 +86,11 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 		ctx.MDString("_llgo_iface.I"),
 		ctx.MDString("M"),
 		ctx.MDString("_llgo_func$abc"),
+		ctx.MDString("N"),
+		ctx.MDString("_llgo_func$def"),
 	}))
 	mod.AddNamedMetadataOperand(llgoMethodInfoMetadata, ctx.MDNode([]llvm.Metadata{
 		ctx.MDString("_llgo_type.T"),
-		llvm.ConstInt(ctx.Int32Type(), 1, false).ConstantAsMetadata(),
 		llvm.ConstInt(ctx.Int32Type(), 3, false).ConstantAsMetadata(),
 		ctx.MDString("M"),
 		ctx.MDString("_llgo_func$abc"),
@@ -116,13 +117,13 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 		t.Fatalf("OrdinaryEdges[holder] missing target: %#v", input.OrdinaryEdges["holder"])
 	}
 
-	if got, want := input.UseIface, []UseIfaceRow{{
+	if got, want := input.UseIface, []IfaceUse{{
 		Owner:  "owner.useiface",
 		Target: "_llgo_type.T",
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("UseIface = %#v, want %#v", got, want)
 	}
-	if got, want := input.UseIfaceMethod, []UseIfaceMethodRow{{
+	if got, want := input.UseIfaceMethod, []IfaceMethodUse{{
 		Owner:  "owner.ifacemethod",
 		Target: "_llgo_iface.I",
 		Sig: MethodSig{
@@ -132,13 +133,22 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("UseIfaceMethod = %#v, want %#v", got, want)
 	}
-	if got, want := input.InterfaceInfo, []InterfaceInfoRow{{
-		Target: "_llgo_iface.I",
-		Sig: MethodSig{
-			Name:  "M",
-			MType: "_llgo_func$abc",
+	if got, want := input.InterfaceInfo, []InterfaceMethod{
+		{
+			Target: "_llgo_iface.I",
+			Sig: MethodSig{
+				Name:  "M",
+				MType: "_llgo_func$abc",
+			},
 		},
-	}}; !reflect.DeepEqual(got, want) {
+		{
+			Target: "_llgo_iface.I",
+			Sig: MethodSig{
+				Name:  "N",
+				MType: "_llgo_func$def",
+			},
+		},
+	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("InterfaceInfo = %#v, want %#v", got, want)
 	}
 	if got, want := input.MethodInfo, map[Symbol][]MethodSlot{
@@ -154,13 +164,13 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("MethodInfo = %#v, want %#v", got, want)
 	}
-	if got, want := input.UseNamedMethod, []UseNamedMethodRow{{
+	if got, want := input.UseNamedMethod, []NamedMethodUse{{
 		Owner: "owner.named",
 		Name:  "M",
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("UseNamedMethod = %#v, want %#v", got, want)
 	}
-	if got, want := input.ReflectMethod, []ReflectMethodRow{{
+	if got, want := input.ReflectMethod, []ReflectMethodUse{{
 		Owner: "owner.reflect",
 	}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("ReflectMethod = %#v, want %#v", got, want)
@@ -339,18 +349,18 @@ func TestAnalyzeInputFollowsMethodInfo(t *testing.T) {
 			"method.one": {"owner.named": {}},
 		},
 		TypeChildren: make(map[string]map[string]struct{}),
-		InterfaceInfo: []InterfaceInfoRow{{
+		InterfaceInfo: []InterfaceMethod{{
 			Target: "_llgo_iface.I",
 			Sig: MethodSig{
 				Name:  "IfaceM",
 				MType: "_llgo_func$iface",
 			},
 		}},
-		UseIface: []UseIfaceRow{{
+		UseIface: []IfaceUse{{
 			Owner:  "owner.useiface",
 			Target: "_llgo_type.T",
 		}},
-		UseIfaceMethod: []UseIfaceMethodRow{{
+		UseIfaceMethod: []IfaceMethodUse{{
 			Owner:  "owner.useiface",
 			Target: "_llgo_iface.I",
 			Sig: MethodSig{
@@ -378,7 +388,7 @@ func TestAnalyzeInputFollowsMethodInfo(t *testing.T) {
 				},
 			},
 		},
-		UseNamedMethod: []UseNamedMethodRow{{
+		UseNamedMethod: []NamedMethodUse{{
 			Owner: "owner.named",
 			Name:  "NamedM",
 		}},
@@ -404,18 +414,18 @@ func TestAnalyzeInputPropagatesUsedInIfaceToChildTypes(t *testing.T) {
 		TypeChildren: map[string]map[string]struct{}{
 			"_llgo_type.Parent": {"_llgo_type.Child": {}},
 		},
-		InterfaceInfo: []InterfaceInfoRow{{
+		InterfaceInfo: []InterfaceMethod{{
 			Target: "_llgo_iface.Parent",
 			Sig: MethodSig{
 				Name:  "M",
 				MType: "_llgo_func$child",
 			},
 		}},
-		UseIface: []UseIfaceRow{{
+		UseIface: []IfaceUse{{
 			Owner:  "owner.useiface",
 			Target: "_llgo_type.Parent",
 		}},
-		UseIfaceMethod: []UseIfaceMethodRow{{
+		UseIfaceMethod: []IfaceMethodUse{{
 			Owner:  "owner.useiface",
 			Target: "_llgo_iface.Parent",
 			Sig: MethodSig{
@@ -450,11 +460,11 @@ func TestAnalyzeInputReflectKeepsExportedMethods(t *testing.T) {
 			"root": {"owner.reflect": {}},
 		},
 		TypeChildren: make(map[string]map[string]struct{}),
-		UseIface: []UseIfaceRow{{
+		UseIface: []IfaceUse{{
 			Owner:  "owner.reflect",
 			Target: "_llgo_type.T",
 		}},
-		ReflectMethod: []ReflectMethodRow{{
+		ReflectMethod: []ReflectMethodUse{{
 			Owner: "owner.reflect",
 		}},
 		MethodInfo: map[Symbol][]MethodSlot{
@@ -480,16 +490,16 @@ func TestAnalyzeInputIfaceMethodRequiresFullInterfaceImplementation(t *testing.T
 			"root": {"owner.useiface": {}, "owner.ifacecall": {}},
 		},
 		TypeChildren: make(map[string]map[string]struct{}),
-		InterfaceInfo: []InterfaceInfoRow{
+		InterfaceInfo: []InterfaceMethod{
 			{Target: "_llgo_iface.BI", Sig: MethodSig{Name: "Foo", MType: "_llgo_func$foo"}},
 			{Target: "_llgo_iface.BI", Sig: MethodSig{Name: "Bar", MType: "_llgo_func$bar"}},
 			{Target: "_llgo_iface.BI", Sig: MethodSig{Name: "Car", MType: "_llgo_func$car"}},
 		},
-		UseIface: []UseIfaceRow{
+		UseIface: []IfaceUse{
 			{Owner: "owner.useiface", Target: "_llgo_type.A"},
 			{Owner: "owner.useiface", Target: "_llgo_type.B"},
 		},
-		UseIfaceMethod: []UseIfaceMethodRow{
+		UseIfaceMethod: []IfaceMethodUse{
 			{Owner: "owner.ifacecall", Target: "_llgo_iface.BI", Sig: MethodSig{Name: "Foo", MType: "_llgo_func$foo"}},
 			{Owner: "owner.ifacecall", Target: "_llgo_iface.BI", Sig: MethodSig{Name: "Bar", MType: "_llgo_func$bar"}},
 		},
@@ -521,7 +531,7 @@ func TestAnalyzeInputIfaceMethodRequiresFullInterfaceImplementation(t *testing.T
 
 func TestAnalyzeInputKeepsEmptyMethodSetsForPrunableTypes(t *testing.T) {
 	input := Input{
-		UseIface: []UseIfaceRow{{
+		UseIface: []IfaceUse{{
 			Owner:  "main",
 			Target: "_llgo_type.T",
 		}},
