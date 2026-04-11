@@ -181,7 +181,7 @@ declare %reflect.Value @reflect.Value.Method(%reflect.Value, i64)
 declare %reflect.Value @reflect.Value.MethodByName(%reflect.Value, %"github.com/goplus/llgo/runtime/internal/runtime.String")
 
 !llgo.useiface = !{!0, !1, !2, !3}
-!llgo.methodoff = !{!4, !5}
+!llgo.methodinfo = !{!4, !5}
 !llgo.reflectmethod = !{!6, !7, !8, !9}
 !llgo.useifacemethod = !{!10, !11, !12}
 !llgo.interfaceinfo = !{!13, !14, !15, !16, !17, !18, !19, !20, !21, !22, !23, !24, !25, !26, !27, !28, !29, !30, !31, !32, !33, !34, !35, !36, !37, !38, !39, !40, !41, !42, !43, !44, !45, !46, !47, !48, !49}
@@ -191,8 +191,8 @@ declare %reflect.Value @reflect.Value.MethodByName(%reflect.Value, %"github.com/
 !1 = !{!"github.com/goplus/llgo/cl/_testgo/reflectmethod.typeByIndex", !"_llgo_github.com/goplus/llgo/cl/_testgo/reflectmethod.T"}
 !2 = !{!"github.com/goplus/llgo/cl/_testgo/reflectmethod.typeByNameConst", !"_llgo_github.com/goplus/llgo/cl/_testgo/reflectmethod.T"}
 !3 = !{!"github.com/goplus/llgo/cl/_testgo/reflectmethod.typeByNameDynamic", !"_llgo_github.com/goplus/llgo/cl/_testgo/reflectmethod.T"}
-!4 = !{!"*_llgo_github.com/goplus/llgo/cl/_testgo/reflectmethod.T", i32 0, !"M", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac"}
-!5 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/reflectmethod.T", i32 0, !"M", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac"}
+!4 = !{!"*_llgo_github.com/goplus/llgo/cl/_testgo/reflectmethod.T", i32 1, i32 0, !"M", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac", !"github.com/goplus/llgo/cl/_testgo/reflectmethod.(*T).M", !"github.com/goplus/llgo/cl/_testgo/reflectmethod.(*T).M"}
+!5 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/reflectmethod.T", i32 1, i32 0, !"M", !"_llgo_func$2_iS07vIlF2_rZqWB5eU0IvP_9HviM4MYZNkXZDvbac", !"github.com/goplus/llgo/cl/_testgo/reflectmethod.(*T).M", !"github.com/goplus/llgo/cl/_testgo/reflectmethod.T.M"}
 !6 = !{!"github.com/goplus/llgo/cl/_testgo/reflectmethod.typeByIndex"}
 !7 = !{!"github.com/goplus/llgo/cl/_testgo/reflectmethod.typeByNameDynamic"}
 !8 = !{!"github.com/goplus/llgo/cl/_testgo/reflectmethod.valueByIndex"}

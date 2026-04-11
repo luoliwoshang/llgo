@@ -107,6 +107,8 @@ _llgo_0:
 declare void @"github.com/goplus/llgo/runtime/internal/runtime.Panic"(%"github.com/goplus/llgo/runtime/internal/runtime.eface")
 
 !llgo.useiface = !{!0, !1}
+!llgo.methodinfo = !{!2}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testrt/namedslice.main", !"_llgo_github.com/goplus/llgo/cl/_testrt/namedslice.MyBytes"}
 !1 = !{!"github.com/goplus/llgo/cl/_testrt/namedslice.main", !"_llgo_string"}
+!2 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/namedslice.MyBytes", i32 0}

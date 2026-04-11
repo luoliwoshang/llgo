@@ -562,13 +562,16 @@ func TestNamedMetadataReadback(t *testing.T) {
 	requireMDString(t, llgoUseIfaceMetadata, useIfaceFields, 0, "caller")
 	requireMDString(t, llgoUseIfaceMetadata, useIfaceFields, 1, structTypeName)
 
-	methodOffRows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoMethodOffMetadata)
-	requireMetadataRows(t, llgoMethodOffMetadata, methodOffRows, 1)
-	methodOffFields := requireMetadataFields(t, llgoMethodOffMetadata, methodOffRows[0], 4)
-	requireMDString(t, llgoMethodOffMetadata, methodOffFields, 0, structTypeName)
-	requireMDUint(t, llgoMethodOffMetadata, methodOffFields, 1, 0)
-	requireMDString(t, llgoMethodOffMetadata, methodOffFields, 2, "Add")
-	requireMDString(t, llgoMethodOffMetadata, methodOffFields, 3, mtypName)
+	methodInfoRows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoMethodInfoMetadata)
+	if len(methodInfoRows) == 0 {
+		t.Fatalf("%s rows len = 0, want at least 1", llgoMethodInfoMetadata)
+	}
+	methodInfoFields := requireMetadataFields(t, llgoMethodInfoMetadata, findMetadataRowByFirstString(t, llgoMethodInfoMetadata, methodInfoRows, structTypeName), 7)
+	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 0, structTypeName)
+	requireMDUint(t, llgoMethodInfoMetadata, methodInfoFields, 1, 1)
+	requireMDUint(t, llgoMethodInfoMetadata, methodInfoFields, 2, 0)
+	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 3, "Add")
+	requireMDString(t, llgoMethodInfoMetadata, methodInfoFields, 4, mtypName)
 
 	useIfaceMethodRows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoUseIfaceMethodMetadata)
 	requireMetadataRows(t, llgoUseIfaceMethodMetadata, useIfaceMethodRows, 1)
@@ -600,6 +603,21 @@ func requireMetadataFields(t *testing.T, table string, row llvm.Value, want int)
 		t.Fatalf("%s field len = %d, want %d", table, got, want)
 	}
 	return fields
+}
+
+func findMetadataRowByFirstString(t *testing.T, table string, rows []llvm.Value, want string) llvm.Value {
+	t.Helper()
+	for _, row := range rows {
+		fields := mdtest.GetMDNodeOperands(row)
+		if len(fields) == 0 || !mdtest.IsAMDString(fields[0]) {
+			continue
+		}
+		if mdtest.GetMDString(fields[0]) == want {
+			return row
+		}
+	}
+	t.Fatalf("%s missing row for %q", table, want)
+	return llvm.Value{}
 }
 
 func requireMDString(t *testing.T, table string, fields []llvm.Value, index int, want string) {

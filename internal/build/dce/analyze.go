@@ -30,74 +30,73 @@ type AnalyzeStats struct {
 	Total        time.Duration
 }
 
+type Symbol = string
+
+type MethodSig struct {
+	Name  string
+	MType Symbol
+}
+
+type MethodSlot struct {
+	Index int
+	Sig   MethodSig
+	IFn   Symbol
+	TFn   Symbol
+}
+
 // Input is the preprocessed analyzer input built from LLVM modules.
 // The goal is to isolate LLVM scanning in BuildInput so the core analysis
 // can operate on plain Go data structures.
 type Input struct {
-	OrdinaryEdges map[string]map[string]struct{}
-	TypeChildren  map[string]map[string]struct{}
-	MethodRefs    map[string]map[int]map[string]struct{}
+	OrdinaryEdges map[Symbol]map[Symbol]struct{}
+	TypeChildren  map[Symbol]map[Symbol]struct{}
 
 	InterfaceInfo  []InterfaceInfoRow
 	UseIface       []UseIfaceRow
 	UseIfaceMethod []UseIfaceMethodRow
-	MethodOff      []MethodOffRow
+	MethodInfo     map[Symbol][]MethodSlot
 	UseNamedMethod []UseNamedMethodRow
 	ReflectMethod  []ReflectMethodRow
 }
 
 type InterfaceInfoRow struct {
-	Target string
-	Name   string
-	MTyp   string
+	Target Symbol
+	Sig    MethodSig
 }
 
 type UseIfaceRow struct {
-	Owner  string
-	Target string
+	Owner  Symbol
+	Target Symbol
 }
 
 type UseIfaceMethodRow struct {
-	Owner  string
-	Target string
-	Name   string
-	MTyp   string
-}
-
-type MethodOffRow struct {
-	TypeName string
-	Index    int
-	Name     string
-	MTyp     string
+	Owner  Symbol
+	Target Symbol
+	Sig    MethodSig
 }
 
 type UseNamedMethodRow struct {
-	Owner string
+	Owner Symbol
 	Name  string
 }
 
 type ReflectMethodRow struct {
-	Owner string
-}
-
-type methodSig struct {
-	Name string
-	MTyp string
+	Owner Symbol
 }
 
 type analyzer struct {
 	input Input
 
-	reachable   map[string]struct{}
-	worklist    []string
-	usedInIface map[string]struct{}
-	ifaceDemand map[string]map[methodSig]struct{}
+	reachable   map[Symbol]struct{}
+	worklist    []Symbol
+	usedInIface map[Symbol]struct{}
+	ifaceDemand map[Symbol]map[MethodSig]struct{}
 	namedDemand map[string]struct{}
 	reflectSeen bool
 	result      Result
 
-	interfaceInfo map[string]map[methodSig]struct{}
-	typeMethods   map[string]map[methodSig]struct{}
+	interfaceInfo map[Symbol]map[MethodSig]struct{}
+	typeMethods   map[Symbol]map[MethodSig]struct{}
 }
 
 // Analyze is the package-level entry point used by the build pipeline.
@@ -140,21 +139,17 @@ func AnalyzeInputWithStats(input Input, roots []string) (Result, AnalyzeInputSta
 	start := time.Now()
 	a := analyzer{
 		input:       input,
-		reachable:   make(map[string]struct{}),
-		usedInIface: make(map[string]struct{}),
-		ifaceDemand: make(map[string]map[methodSig]struct{}),
+		reachable:   make(map[Symbol]struct{}),
+		usedInIface: make(map[Symbol]struct{}),
+		ifaceDemand: make(map[Symbol]map[MethodSig]struct{}),
 		namedDemand: make(map[string]struct{}),
 		result:      make(Result),
 		interfaceInfo: buildSigSets(input.InterfaceInfo, func(row InterfaceInfoRow) string {
-			return row.Target
+			return string(row.Target)
 		}, func(row InterfaceInfoRow) methodSig {
-			return methodSig{Name: row.Name, MTyp: row.MTyp}
+			return methodSig(row.Sig)
 		}),
-		typeMethods: buildSigSets(input.MethodOff, func(row MethodOffRow) string {
-			return row.TypeName
-		}, func(row MethodOffRow) methodSig {
-			return methodSig{Name: row.Name, MTyp: row.MTyp}
-		}),
+		typeMethods: buildMethodInfoSets(input.MethodInfo),
 	}
 	for _, root := range roots {
 		a.markReachable(root)
@@ -200,7 +195,7 @@ func (a *analyzer) activateMetadata() bool {
 	}
 	for _, row := range a.input.UseIfaceMethod {
 		if a.isReachable(row.Owner) {
-			changed = a.addIfaceDemand(row.Target, methodSig{Name: row.Name, MTyp: row.MTyp}) || changed
+			changed = a.addIfaceDemand(row.Target, row.Sig) || changed
 		}
 	}
 	for _, row := range a.input.UseNamedMethod {
@@ -219,34 +214,39 @@ func (a *analyzer) activateMetadata() bool {
 
 func (a *analyzer) markMethods() bool {
 	changed := false
-	for _, row := range a.input.MethodOff {
-		if !a.isUsedInIface(row.TypeName) || !a.shouldKeepMethod(row) {
+	for typeName, slots := range a.input.MethodInfo {
+		if !a.isUsedInIface(typeName) {
 			continue
 		}
-		if !a.addLiveMethod(row.TypeName, row.Index) {
-			continue
-		}
-		changed = true
-		for sym := range a.input.MethodRefs[row.TypeName][row.Index] {
-			if a.markReachable(sym) {
-				changed = true
+		for _, slot := range slots {
+			if !a.shouldKeepMethod(typeName, slot) {
+				continue
+			}
+			if !a.addLiveMethod(typeName, slot.Index) {
+				continue
+			}
+			changed = true
+			for _, sym := range []Symbol{slot.Sig.MType, slot.IFn, slot.TFn} {
+				if a.markReachable(sym) {
+					changed = true
+				}
 			}
 		}
 	}
 	return changed
 }
 
-func (a *analyzer) shouldKeepMethod(row MethodOffRow) bool {
-	if a.hasSatisfiedIfaceDemand(row.TypeName, methodSig{Name: row.Name, MTyp: row.MTyp}) {
+func (a *analyzer) shouldKeepMethod(typeName Symbol, slot MethodSlot) bool {
+	if a.hasSatisfiedIfaceDemand(typeName, slot.Sig) {
 		return true
 	}
-	if _, ok := a.namedDemand[row.Name]; ok {
+	if _, ok := a.namedDemand[slot.Sig.Name]; ok {
 		return true
 	}
-	return a.reflectSeen && isExportedMethod(row.Name)
+	return a.reflectSeen && isExportedMethod(slot.Sig.Name)
 }
 
-func (a *analyzer) markReachable(sym string) bool {
+func (a *analyzer) markReachable(sym Symbol) bool {
 	if sym == "" {
 		return false
 	}
@@ -280,8 +280,8 @@ func (a *analyzer) markUsedInIface(typeName string) bool {
 	return changed
 }
 
-func (a *analyzer) addIfaceDemand(target string, sig methodSig) bool {
-	if target == "" || sig.Name == "" || sig.MTyp == "" {
+func (a *analyzer) addIfaceDemand(target string, sig MethodSig) bool {
+	if target == "" || sig.Name == "" || sig.MType == "" {
 		return false
 	}
 	byTarget := a.ifaceDemand[target]
@@ -325,7 +325,7 @@ func (a *analyzer) isReachable(sym string) bool {
 	return ok
 }
 
-func (a *analyzer) hasSatisfiedIfaceDemand(typeName string, sig methodSig) bool {
+func (a *analyzer) hasSatisfiedIfaceDemand(typeName string, sig MethodSig) bool {
 	for target, demanded := range a.ifaceDemand {
 		if _, ok := demanded[sig]; !ok {
 			continue
@@ -360,14 +360,14 @@ func (a *analyzer) isUsedInIface(typeName string) bool {
 }
 
 func (a *analyzer) ensurePrunableTypes() {
-	for _, row := range a.input.MethodOff {
-		if !a.isUsedInIface(row.TypeName) {
+	for typeName := range a.input.MethodInfo {
+		if !a.isUsedInIface(typeName) {
 			continue
 		}
-		if _, ok := a.result[row.TypeName]; ok {
+		if _, ok := a.result[typeName]; ok {
 			continue
 		}
-		a.result[row.TypeName] = make(map[int]struct{})
+		a.result[typeName] = make(map[int]struct{})
 	}
 }
 
@@ -378,12 +378,14 @@ func isExportedMethod(name string) bool {
 	return false
 }
 
+type methodSig = MethodSig
+
 func buildSigSets[T any](rows []T, group func(T) string, sig func(T) methodSig) map[string]map[methodSig]struct{} {
 	out := make(map[string]map[methodSig]struct{})
 	for _, row := range rows {
 		key := group(row)
 		ms := sig(row)
-		if key == "" || ms.Name == "" || ms.MTyp == "" {
+		if key == "" || ms.Name == "" || ms.MType == "" {
 			continue
 		}
 		set := out[key]
@@ -392,6 +394,21 @@ func buildSigSets[T any](rows []T, group func(T) string, sig func(T) methodSig) 
 			out[key] = set
 		}
 		set[ms] = struct{}{}
+	}
+	return out
+}
+
+func buildMethodInfoSets(methodInfo map[Symbol][]MethodSlot) map[string]map[MethodSig]struct{} {
+	out := make(map[string]map[MethodSig]struct{}, len(methodInfo))
+	for typeName, slots := range methodInfo {
+		set := make(map[MethodSig]struct{}, len(slots))
+		for _, slot := range slots {
+			if slot.Sig.Name == "" || slot.Sig.MType == "" {
+				continue
+			}
+			set[slot.Sig] = struct{}{}
+		}
+		out[typeName] = set
 	}
 	return out
 }
@@ -446,7 +463,6 @@ func FormatAnalyzeStats(stats AnalyzeStats) string {
 	fmt.Fprintf(&b, "build_input.modules: %d\n", stats.BuildInput.Modules)
 	fmt.Fprintf(&b, "build_input.ordinary_edges: %s\n", stats.BuildInput.OrdinaryEdges)
 	fmt.Fprintf(&b, "build_input.type_children: %s\n", stats.BuildInput.TypeChildren)
-	fmt.Fprintf(&b, "build_input.method_refs: %s\n", stats.BuildInput.MethodRefs)
 	fmt.Fprintf(&b, "build_input.metadata: %s\n", stats.BuildInput.Metadata)
 	fmt.Fprintf(&b, "analyze_input.total: %s\n", stats.AnalyzeInput.Total)
 	fmt.Fprintf(&b, "analyze_input.iterations: %d\n", stats.AnalyzeInput.Iterations)

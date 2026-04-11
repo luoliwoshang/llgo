@@ -527,6 +527,7 @@ declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.MakeMap"(ptr, i64)
 attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 
 !llgo.useiface = !{!0, !1, !2, !3, !4, !5, !6, !7}
+!llgo.methodinfo = !{!8, !9}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testgo/equal.assert", !"_llgo_string"}
 !1 = !{!"github.com/goplus/llgo/cl/_testgo/equal.init#3", !"_llgo_int"}
@@ -536,3 +537,5 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !5 = !{!"github.com/goplus/llgo/cl/_testgo/equal.init#5", !"_llgo_github.com/goplus/llgo/cl/_testgo/equal.T"}
 !6 = !{!"github.com/goplus/llgo/cl/_testgo/equal.init#5", !"_llgo_string"}
 !7 = !{!"github.com/goplus/llgo/cl/_testgo/equal.init#5", !"_llgo_github.com/goplus/llgo/cl/_testgo/equal.N"}
+!8 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/equal.T", i32 0}
+!9 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/equal.N", i32 0}

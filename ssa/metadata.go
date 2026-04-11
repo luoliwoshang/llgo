@@ -2,7 +2,6 @@ package ssa
 
 import (
 	"go/token"
-	"strconv"
 	"strings"
 
 	"github.com/goplus/llvm"
@@ -26,11 +25,11 @@ const (
 	// flattened so later whole-program analysis can regroup all methods required
 	// by one interface type without relying on producer-side list ordering.
 	llgoInterfaceInfoMetadata = "llgo.interfaceinfo"
-	// llgoMethodOffMetadata is a module-level named metadata table whose rows are
-	// {concrete type name, method index, normalized method name, mtyp name}. Each
-	// row describes one concrete method candidate in the canonical abi.Method
-	// order.
-	llgoMethodOffMetadata = "llgo.methodoff"
+	// llgoMethodInfoMetadata is a module-level named metadata table whose rows
+	// are {concrete type name, method count, [index, normalized method name,
+	// mtyp name, ifn name, tfn name]...}. Each row describes one concrete
+	// type's full method table in canonical abi.Method order.
+	llgoMethodInfoMetadata = "llgo.methodinfo"
 	// llgoUseNamedMethodMetadata is a module-level named metadata table whose
 	// rows are {owner name, normalized method name}. Each row means that if the
 	// named owner function is reachable, deadcode analysis should treat the named
@@ -110,19 +109,36 @@ func (p Package) emitInterfaceInfo(target, name, mtyp string) {
 	)
 }
 
-func (p Package) emitMethodOff(owner string, index int, name, mtyp string) {
-	if owner == "" || name == "" || mtyp == "" {
+type methodInfoSlot struct {
+	Index int
+	Name  string
+	MType string
+	IFn   string
+	TFn   string
+}
+
+func (p Package) emitMethodInfo(typeSym string, slots []methodInfoSlot) {
+	if typeSym == "" {
 		return
 	}
 	ctx := p.mod.Context()
+	fields := make([]llvm.Metadata, 0, 2+len(slots)*5)
+	fields = append(fields, metadataString(ctx, typeSym), metadataInt32(ctx, len(slots)))
+	for _, slot := range slots {
+		fields = append(
+			fields,
+			metadataInt32(ctx, slot.Index),
+			metadataString(ctx, slot.Name),
+			metadataString(ctx, slot.MType),
+			metadataString(ctx, slot.IFn),
+			metadataString(ctx, slot.TFn),
+		)
+	}
 	p.semMetaEmitter.add(
 		p.mod,
-		llgoMethodOffMetadata,
-		metadataKey(owner, strconv.Itoa(index), name, mtyp),
-		metadataString(ctx, owner),
-		metadataInt32(ctx, index),
-		metadataString(ctx, name),
-		metadataString(ctx, mtyp),
+		llgoMethodInfoMetadata,
+		typeSym,
+		fields...,
 	)
 }
 

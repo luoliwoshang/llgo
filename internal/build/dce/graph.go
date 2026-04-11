@@ -47,7 +47,7 @@ const (
 	llgoUseIfaceMetadata       = "llgo.useiface"
 	llgoUseIfaceMethodMetadata = "llgo.useifacemethod"
 	llgoInterfaceInfoMetadata  = "llgo.interfaceinfo"
-	llgoMethodOffMetadata      = "llgo.methodoff"
+	llgoMethodInfoMetadata     = "llgo.methodinfo"
 	llgoUseNamedMethodMetadata = "llgo.usenamedmethod"
 	llgoReflectMethodMetadata  = "llgo.reflectmethod"
 
@@ -58,7 +58,6 @@ type BuildInputStats struct {
 	Modules       int
 	OrdinaryEdges time.Duration
 	TypeChildren  time.Duration
-	MethodRefs    time.Duration
 	Metadata      time.Duration
 	Total         time.Duration
 }
@@ -78,7 +77,7 @@ func BuildInputWithStats(mods []llvm.Module) (Input, BuildInputStats, error) {
 	input := Input{
 		OrdinaryEdges: make(map[string]map[string]struct{}),
 		TypeChildren:  make(map[string]map[string]struct{}),
-		MethodRefs:    make(map[string]map[int]map[string]struct{}),
+		MethodInfo:    make(map[string][]MethodSlot),
 	}
 	var stats BuildInputStats
 	for _, mod := range mods {
@@ -94,10 +93,6 @@ func BuildInputWithStats(mods []llvm.Module) (Input, BuildInputStats, error) {
 		phaseStart = time.Now()
 		scanModuleTypeChildren(input.TypeChildren, mod)
 		stats.TypeChildren += time.Since(phaseStart)
-
-		phaseStart = time.Now()
-		scanModuleMethodRefs(input.MethodRefs, mod)
-		stats.MethodRefs += time.Since(phaseStart)
 
 		phaseStart = time.Now()
 		if err := scanModuleMetadata(&input, mod); err != nil {
@@ -295,54 +290,6 @@ func scanTypeChildren(typeChildren map[string]map[string]struct{}, g llvm.Value)
 	visit(init)
 }
 
-func scanModuleMethodRefs(methodRefs map[string]map[int]map[string]struct{}, mod llvm.Module) {
-	for g := mod.FirstGlobal(); !g.IsNil(); g = llvm.NextGlobal(g) {
-		if !isTypeGlobal(g) {
-			continue
-		}
-		scanMethodRefs(methodRefs, g)
-	}
-}
-
-func scanMethodRefs(methodRefs map[string]map[int]map[string]struct{}, g llvm.Value) {
-	if !hasUncommonTypeLayout(g.GlobalValueType()) {
-		return
-	}
-	init := g.Initializer()
-	if init.IsNil() || init.OperandsCount() != 3 {
-		return
-	}
-	methods := init.Operand(2)
-	for i := 0; i < methods.OperandsCount(); i++ {
-		method := methods.Operand(i)
-		if method.IsNil() || method.OperandsCount() != 4 {
-			continue
-		}
-		for j := 1; j < 4; j++ {
-			if ref := symbolNameOf(method.Operand(j)); ref != "" {
-				addMethodRef(methodRefs, g.Name(), i, ref)
-			}
-		}
-	}
-}
-
-func addMethodRef(methodRefs map[string]map[int]map[string]struct{}, typeName string, index int, sym string) {
-	if typeName == "" || sym == "" {
-		return
-	}
-	byIndex := methodRefs[typeName]
-	if byIndex == nil {
-		byIndex = make(map[int]map[string]struct{})
-		methodRefs[typeName] = byIndex
-	}
-	refs := byIndex[index]
-	if refs == nil {
-		refs = make(map[string]struct{})
-		byIndex[index] = refs
-	}
-	refs[sym] = struct{}{}
-}
-
 func isTypeGlobal(v llvm.Value) bool {
 	if v.IsNil() || v.IsAGlobalVariable().IsNil() {
 		return false
@@ -383,7 +330,7 @@ func scanModuleMetadata(input *Input, mod llvm.Module) error {
 	if err := scanInterfaceInfo(input, mod); err != nil {
 		return err
 	}
-	if err := scanMethodOff(input, mod); err != nil {
+	if err := scanMethodInfo(input, mod); err != nil {
 		return err
 	}
 	if err := scanUseNamedMethod(input, mod); err != nil {
@@ -424,8 +371,10 @@ func scanUseIfaceMethod(input *Input, mod llvm.Module) error {
 		input.UseIfaceMethod = append(input.UseIfaceMethod, UseIfaceMethodRow{
 			Owner:  mdString(row[0]),
 			Target: mdString(row[1]),
-			Name:   mdString(row[2]),
-			MTyp:   mdString(row[3]),
+			Sig: MethodSig{
+				Name:  mdString(row[2]),
+				MType: mdString(row[3]),
+			},
 		})
 	}
 	return nil
@@ -442,28 +391,43 @@ func scanInterfaceInfo(input *Input, mod llvm.Module) error {
 		}
 		input.InterfaceInfo = append(input.InterfaceInfo, InterfaceInfoRow{
 			Target: mdString(row[0]),
-			Name:   mdString(row[1]),
-			MTyp:   mdString(row[2]),
+			Sig: MethodSig{
+				Name:  mdString(row[1]),
+				MType: mdString(row[2]),
+			},
 		})
 	}
 	return nil
 }
 
-func scanMethodOff(input *Input, mod llvm.Module) error {
-	rows, err := namedMetadataRows(mod, llgoMethodOffMetadata)
+func scanMethodInfo(input *Input, mod llvm.Module) error {
+	rows, err := namedMetadataRows(mod, llgoMethodInfoMetadata)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
-		if len(row) != 4 {
-			return fmt.Errorf("%s row has %d fields, want 4", llgoMethodOffMetadata, len(row))
+		if len(row) < 2 {
+			return fmt.Errorf("%s row has %d fields, want at least 2", llgoMethodInfoMetadata, len(row))
 		}
-		input.MethodOff = append(input.MethodOff, MethodOffRow{
-			TypeName: mdString(row[0]),
-			Index:    int(row[1].ZExtValue()),
-			Name:     mdString(row[2]),
-			MTyp:     mdString(row[3]),
-		})
+		typeName := mdString(row[0])
+		count := int(row[1].ZExtValue())
+		if len(row) != 2+count*5 {
+			return fmt.Errorf("%s row for %q has %d fields, want %d", llgoMethodInfoMetadata, typeName, len(row), 2+count*5)
+		}
+		slots := make([]MethodSlot, 0, count)
+		for i := 0; i < count; i++ {
+			base := 2 + i*5
+			slots = append(slots, MethodSlot{
+				Index: int(row[base+0].ZExtValue()),
+				Sig: MethodSig{
+					Name:  mdString(row[base+1]),
+					MType: mdString(row[base+2]),
+				},
+				IFn: mdString(row[base+3]),
+				TFn: mdString(row[base+4]),
+			})
+		}
+		input.MethodInfo[typeName] = append(input.MethodInfo[typeName], slots...)
 	}
 	return nil
 }

@@ -1136,8 +1136,8 @@ declare %reflect.Value @reflect.MakeMap(%"github.com/goplus/llgo/runtime/interna
 !llgo.useiface = !{!0, !1, !2, !3, !4, !5, !6, !7, !8, !9, !10, !11, !12, !13, !14, !15, !16, !17, !18, !19, !20}
 !llgo.useifacemethod = !{!21, !22, !23, !24, !25, !26, !27, !28}
 !llgo.interfaceinfo = !{!29, !30, !31, !32, !33, !34, !35, !36, !37, !38, !39, !40, !41, !42, !43, !44, !45, !46, !47, !48, !49, !50, !51, !52, !53, !54, !55, !56, !57, !58, !59, !60, !61, !62, !63, !64, !65}
-!llgo.methodoff = !{!66}
-!llgo.reflectmethod = !{!67, !68}
+!llgo.methodinfo = !{!66, !67}
+!llgo.reflectmethod = !{!68, !69}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testgo/reflect.callClosure", !"_llgo_closure$QIHBTaw1IFobr8yvWpq-2AJFm3xBNhdW_aNBicqUBGk"}
 !1 = !{!"github.com/goplus/llgo/cl/_testgo/reflect.callClosure", !"_llgo_int"}
@@ -1205,6 +1205,7 @@ declare %reflect.Value @reflect.MakeMap(%"github.com/goplus/llgo/runtime/interna
 !63 = !{!"_llgo_reflect.Type", !"String", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to"}
 !64 = !{!"_llgo_reflect.Type", !"reflect.common", !"_llgo_func$w6XuV-1SmW103DbauPseXBpW50HpxXAEsUsGFibl0Uw"}
 !65 = !{!"_llgo_reflect.Type", !"reflect.uncommon", !"_llgo_func$iG49bujiXjI2lVflYdE0hPXlCAABL-XKRANSNJEKOio"}
-!66 = !{!"*_llgo_github.com/goplus/llgo/cl/_testgo/reflect.T", i32 0, !"Add", !"_llgo_func$ekGNsrYBSzltfAjxbl6T8H6Yq8j16wzqS3nDj2xxGMU"}
-!67 = !{!"github.com/goplus/llgo/cl/_testgo/reflect.callIMethod"}
-!68 = !{!"github.com/goplus/llgo/cl/_testgo/reflect.callMethod"}
+!66 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/reflect.T", i32 0}
+!67 = !{!"*_llgo_github.com/goplus/llgo/cl/_testgo/reflect.T", i32 1, i32 0, !"Add", !"_llgo_func$ekGNsrYBSzltfAjxbl6T8H6Yq8j16wzqS3nDj2xxGMU", !"github.com/goplus/llgo/cl/_testgo/reflect.(*T).Add", !"github.com/goplus/llgo/cl/_testgo/reflect.(*T).Add"}
+!68 = !{!"github.com/goplus/llgo/cl/_testgo/reflect.callIMethod"}
+!69 = !{!"github.com/goplus/llgo/cl/_testgo/reflect.callMethod"}
