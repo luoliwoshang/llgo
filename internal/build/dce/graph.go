@@ -386,19 +386,16 @@ func scanInterfaceInfo(input *Input, mod llvm.Module) error {
 		return err
 	}
 	for _, row := range rows {
-		if len(row) < 3 || len(row)%2 == 0 {
-			return fmt.Errorf("%s row has %d fields, want 1+2*n", llgoInterfaceInfoMetadata, len(row))
+		if len(row) != 3 {
+			return fmt.Errorf("%s row has %d fields, want 3", llgoInterfaceInfoMetadata, len(row))
 		}
-		target := mdString(row[0])
-		for i := 1; i < len(row); i += 2 {
-			input.InterfaceInfo = append(input.InterfaceInfo, InterfaceMethod{
-				Target: target,
-				Sig: MethodSig{
-					Name:  mdString(row[i]),
-					MType: mdString(row[i+1]),
-				},
-			})
-		}
+		input.InterfaceInfo = append(input.InterfaceInfo, InterfaceMethod{
+			Target: mdString(row[0]),
+			Sig: MethodSig{
+				Name:  mdString(row[1]),
+				MType: mdString(row[2]),
+			},
+		})
 	}
 	return nil
 }
@@ -409,25 +406,19 @@ func scanMethodInfo(input *Input, mod llvm.Module) error {
 		return err
 	}
 	for _, row := range rows {
-		if len(row) < 1 || (len(row)-1)%5 != 0 {
-			return fmt.Errorf("%s row has %d fields, want 1+5*n", llgoMethodInfoMetadata, len(row))
+		if len(row) != 6 {
+			return fmt.Errorf("%s row has %d fields, want 6", llgoMethodInfoMetadata, len(row))
 		}
 		typeName := mdString(row[0])
-		count := (len(row) - 1) / 5
-		slots := make([]MethodSlot, 0, count)
-		for i := 0; i < count; i++ {
-			base := 1 + i*5
-			slots = append(slots, MethodSlot{
-				Index: int(row[base+0].ZExtValue()),
-				Sig: MethodSig{
-					Name:  mdString(row[base+1]),
-					MType: mdString(row[base+2]),
-				},
-				IFn: mdString(row[base+3]),
-				TFn: mdString(row[base+4]),
-			})
-		}
-		input.MethodInfo[typeName] = append(input.MethodInfo[typeName], slots...)
+		input.MethodInfo[typeName] = append(input.MethodInfo[typeName], MethodSlot{
+			Index: int(row[1].ZExtValue()),
+			Sig: MethodSig{
+				Name:  mdString(row[2]),
+				MType: mdString(row[3]),
+			},
+			IFn: mdString(row[4]),
+			TFn: mdString(row[5]),
+		})
 	}
 	return nil
 }

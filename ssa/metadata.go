@@ -1,6 +1,7 @@
 package ssa
 
 import (
+	"fmt"
 	"go/token"
 	"strings"
 
@@ -21,13 +22,13 @@ const (
 	// matching.
 	llgoUseIfaceMethodMetadata = "llgo.useifacemethod"
 	// llgoInterfaceInfoMetadata is a module-level named metadata table whose rows
-	// are {interface type name, [normalized method name, mtyp name]...}. Each
-	// row describes one interface type's full method set in declaration order.
+	// are {interface type name, normalized method name, mtyp name}. Each row
+	// describes one method of one interface type.
 	llgoInterfaceInfoMetadata = "llgo.interfaceinfo"
 	// llgoMethodInfoMetadata is a module-level named metadata table whose rows
-	// are {concrete type name, [index, normalized method name, mtyp name, ifn
-	// name, tfn name]...}. Each row describes one concrete type's full method
-	// table in canonical abi.Method order.
+	// are {concrete type name, index, normalized method name, mtyp name, ifn
+	// name, tfn name}. Each row describes one concrete type method slot in
+	// canonical abi.Method order. Types without methods emit no rows.
 	llgoMethodInfoMetadata = "llgo.methodinfo"
 	// llgoUseNamedMethodMetadata is a module-level named metadata table whose
 	// rows are {owner name, normalized method name}. Each row means that if the
@@ -106,21 +107,16 @@ func (p Package) emitInterfaceInfo(target string, methods []interfaceInfoMethod)
 		return
 	}
 	ctx := p.mod.Context()
-	fields := make([]llvm.Metadata, 0, 1+len(methods)*2)
-	fields = append(fields, metadataString(ctx, target))
 	for _, method := range methods {
-		fields = append(
-			fields,
+		p.semMetaEmitter.add(
+			p.mod,
+			llgoInterfaceInfoMetadata,
+			metadataKey(target, method.Name, method.MType),
+			metadataString(ctx, target),
 			metadataString(ctx, method.Name),
 			metadataString(ctx, method.MType),
 		)
 	}
-	p.semMetaEmitter.add(
-		p.mod,
-		llgoInterfaceInfoMetadata,
-		target,
-		fields...,
-	)
 }
 
 type methodInfoSlot struct {
@@ -132,15 +128,16 @@ type methodInfoSlot struct {
 }
 
 func (p Package) emitMethodInfo(typeSym string, slots []methodInfoSlot) {
-	if typeSym == "" {
+	if typeSym == "" || len(slots) == 0 {
 		return
 	}
 	ctx := p.mod.Context()
-	fields := make([]llvm.Metadata, 0, 1+len(slots)*5)
-	fields = append(fields, metadataString(ctx, typeSym))
 	for _, slot := range slots {
-		fields = append(
-			fields,
+		p.semMetaEmitter.add(
+			p.mod,
+			llgoMethodInfoMetadata,
+			metadataKey(typeSym, fmt.Sprint(slot.Index), slot.Name, slot.MType, slot.IFn, slot.TFn),
+			metadataString(ctx, typeSym),
 			metadataInt32(ctx, slot.Index),
 			metadataString(ctx, slot.Name),
 			metadataString(ctx, slot.MType),
@@ -148,12 +145,6 @@ func (p Package) emitMethodInfo(typeSym string, slots []methodInfoSlot) {
 			metadataString(ctx, slot.TFn),
 		)
 	}
-	p.semMetaEmitter.add(
-		p.mod,
-		llgoMethodInfoMetadata,
-		typeSym,
-		fields...,
-	)
 }
 
 func (p Package) emitUseNamedMethod(owner, name string) {

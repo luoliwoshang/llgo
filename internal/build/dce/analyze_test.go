@@ -86,6 +86,9 @@ func TestBuildInputReadsMetadataAndOrdinaryEdges(t *testing.T) {
 		ctx.MDString("_llgo_iface.I"),
 		ctx.MDString("M"),
 		ctx.MDString("_llgo_func$abc"),
+	}))
+	mod.AddNamedMetadataOperand(llgoInterfaceInfoMetadata, ctx.MDNode([]llvm.Metadata{
+		ctx.MDString("_llgo_iface.I"),
 		ctx.MDString("N"),
 		ctx.MDString("_llgo_func$def"),
 	}))
@@ -518,7 +521,6 @@ func TestAnalyzeInputIfaceMethodRequiresFullInterfaceImplementation(t *testing.T
 
 	got := AnalyzeInput(input, []string{"root"})
 	want := Result{
-		"_llgo_type.A": {},
 		"_llgo_type.B": {
 			0: {},
 			1: {},
@@ -529,7 +531,7 @@ func TestAnalyzeInputIfaceMethodRequiresFullInterfaceImplementation(t *testing.T
 	}
 }
 
-func TestAnalyzeInputKeepsEmptyMethodSetsForPrunableTypes(t *testing.T) {
+func TestAnalyzeInputOmitsEmptyMethodSets(t *testing.T) {
 	input := Input{
 		UseIface: []IfaceUse{{
 			Owner:  "main",
@@ -541,11 +543,9 @@ func TestAnalyzeInputKeepsEmptyMethodSetsForPrunableTypes(t *testing.T) {
 	}
 
 	got := AnalyzeInput(input, []string{"main"})
-	want := Result{
-		"_llgo_type.T": {},
-	}
+	want := Result{}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("AnalyzeInput(empty method set) = %#v, want %#v", got, want)
+		t.Fatalf("AnalyzeInput(omit empty method set) = %#v, want %#v", got, want)
 	}
 }
 
@@ -558,7 +558,6 @@ func TestAnalyzeClosureallModule(t *testing.T) {
 		t.Fatalf("Analyze(closureall) error = %v", err)
 	}
 	want := Result{
-		"_llgo_github.com/goplus/llgo/cl/_testgo/closureall.S":  {},
 		"*_llgo_github.com/goplus/llgo/cl/_testgo/closureall.S": {0: {}},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -602,7 +601,6 @@ func TestAnalyzeInvokeModule(t *testing.T) {
 		"_llgo_github.com/goplus/llgo/cl/_testgo/invoke.T":   {0: {}},
 		"_llgo_github.com/goplus/llgo/cl/_testgo/invoke.T1":  {0: {}},
 		"_llgo_github.com/goplus/llgo/cl/_testgo/invoke.T2":  {0: {}},
-		"_llgo_github.com/goplus/llgo/cl/_testgo/invoke.T3":  {},
 		"_llgo_github.com/goplus/llgo/cl/_testgo/invoke.T4":  {0: {}},
 		"_llgo_github.com/goplus/llgo/cl/_testgo/invoke.T5":  {0: {}},
 		"_llgo_github.com/goplus/llgo/cl/_testgo/invoke.T6":  {0: {}},

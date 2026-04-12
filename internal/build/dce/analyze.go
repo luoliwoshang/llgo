@@ -100,7 +100,8 @@ type Input struct {
 	//
 	// Analyzer decides slot liveness from demand (useiface/useifacemethod/
 	// usenamedmethod/reflectmethod), records live slot indexes in Result, and
-	// marks each live slot's MType/IFn/TFn symbols as reachable.
+	// marks each live slot's MType/IFn/TFn symbols as reachable. Types without
+	// methods may be absent from MethodInfo entirely.
 	MethodInfo     map[Symbol][]MethodSlot
 	// UseNamedMethod marks a method name demand once Owner is reachable.
 	// Any UsedInIface concrete type slot with the same normalized method name
@@ -218,7 +219,6 @@ func AnalyzeInputWithStats(input Input, roots []string) (Result, AnalyzeInputSta
 			break
 		}
 	}
-	a.ensurePrunableTypes()
 	return a.result, AnalyzeInputStats{
 		Iterations:       iterations,
 		ReachableSymbols: len(a.reachable),
@@ -411,18 +411,6 @@ func (a *analyzer) typeImplementsInterface(typeName, target string) bool {
 func (a *analyzer) isUsedInIface(typeName string) bool {
 	_, ok := a.usedInIface[typeName]
 	return ok
-}
-
-func (a *analyzer) ensurePrunableTypes() {
-	for typeName := range a.input.MethodInfo {
-		if !a.isUsedInIface(typeName) {
-			continue
-		}
-		if _, ok := a.result[typeName]; ok {
-			continue
-		}
-		a.result[typeName] = make(map[int]struct{})
-	}
 }
 
 func isExportedMethod(name string) bool {
