@@ -37,7 +37,7 @@ type MethodSig struct {
 	// - exported method: "Read"
 	// - unexported method: "<pkgpath>.<name>", e.g.
 	//   "github.com/goplus/llgo/cl/_testgo/embedunexport-1598.setName"
-	Name  string
+	Name string
 	// MType is the symbol of this method's runtime method-type descriptor.
 	MType Symbol
 }
@@ -53,11 +53,11 @@ type MethodSlot struct {
 	// Index is the slot position in this type's method table.
 	Index int
 	// Sig identifies the method by (name, method-type symbol).
-	Sig   MethodSig
+	Sig MethodSig
 	// IFn is the interface-call entry symbol for this method.
-	IFn   Symbol
+	IFn Symbol
 	// TFn is the direct-call entry symbol for this method.
-	TFn   Symbol
+	TFn Symbol
 }
 
 // Input is the preprocessed analyzer input built from LLVM modules.
@@ -71,18 +71,18 @@ type Input struct {
 	// child types reachable from its runtime type data, and those child types
 	// must also be treated as UsedInIface. Analyzer recursively propagates that
 	// state through these child-type edges.
-	TypeChildren  map[Symbol]map[Symbol]struct{}
+	TypeChildren map[Symbol]map[Symbol]struct{}
 
 	// InterfaceInfo lists the method signatures required by each interface.
 	// Analyzer uses it to answer "does concrete type T fully implement
 	// interface I?" before allowing an interface-method demand on I to keep
 	// a method slot on T alive.
-	InterfaceInfo  []InterfaceMethod
+	InterfaceInfo []InterfaceMethod
 	// UseIface marks a type as UsedInIface once Owner is reachable.
 	// UsedInIface means the type may participate in interface dispatch, so its
 	// method table must be considered by method liveness. This is the analog of
 	// Go linker's "type is converted to interface" marker.
-	UseIface       []IfaceUse
+	UseIface []IfaceUse
 	// UseIfaceMethod marks an interface method demand once Owner is reachable.
 	// The demand is attached to the target interface, not to any concrete type.
 	// A concrete type method slot is kept only if that concrete type is
@@ -102,7 +102,7 @@ type Input struct {
 	// usenamedmethod/reflectmethod), records live slot indexes in Result, and
 	// marks each live slot's MType/IFn/TFn symbols as reachable. Types without
 	// methods may be absent from MethodInfo entirely.
-	MethodInfo     map[Symbol][]MethodSlot
+	MethodInfo map[Symbol][]MethodSlot
 	// UseNamedMethod marks a method name demand once Owner is reachable.
 	// Any UsedInIface concrete type slot with the same normalized method name
 	// is kept.
@@ -111,7 +111,7 @@ type Input struct {
 	// In this mode, all exported methods of UsedInIface concrete types are kept,
 	// because the analysis can no longer determine the exact target method
 	// statically.
-	ReflectMethod  []ReflectMethodUse
+	ReflectMethod []ReflectMethodUse
 }
 
 type InterfaceMethod struct {
