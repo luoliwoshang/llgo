@@ -222,11 +222,6 @@ declare void @"github.com/goplus/llgo/runtime/internal/runtime.PrintBool"(i1)
 
 attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 
-!llgo.methodinfo = !{!0, !1, !2, !3}
-!llgo.useiface = !{!4}
+!llgo.useiface = !{!0}
 
-!0 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpmap.T1"}
-!1 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpmap.T2"}
-!2 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpmap.T3[any]"}
-!3 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpmap.cacheKey"}
-!4 = !{!"github.com/goplus/llgo/cl/_testrt/tpmap.main", !"_llgo_int"}
+!0 = !{!"github.com/goplus/llgo/cl/_testrt/tpmap.main", !"_llgo_int"}

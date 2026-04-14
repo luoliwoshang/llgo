@@ -598,13 +598,15 @@ func TestInterfaceInfoMetadataSingleRow(t *testing.T) {
 	})
 
 	rows := mdtest.GetNamedMetadataOperands(pkg.Module(), llgoInterfaceInfoMetadata)
-	requireMetadataRows(t, llgoInterfaceInfoMetadata, rows, 1)
-	fields := requireMetadataFields(t, llgoInterfaceInfoMetadata, rows[0], 5)
+	requireMetadataRows(t, llgoInterfaceInfoMetadata, rows, 2)
+	fields := requireMetadataFields(t, llgoInterfaceInfoMetadata, rows[0], 3)
 	requireMDString(t, llgoInterfaceInfoMetadata, fields, 0, "_llgo_foo/bar.IFmt")
 	requireMDString(t, llgoInterfaceInfoMetadata, fields, 1, "Read")
 	requireMDString(t, llgoInterfaceInfoMetadata, fields, 2, "_llgo_func$read")
-	requireMDString(t, llgoInterfaceInfoMetadata, fields, 3, "Write")
-	requireMDString(t, llgoInterfaceInfoMetadata, fields, 4, "_llgo_func$write")
+	fields = requireMetadataFields(t, llgoInterfaceInfoMetadata, rows[1], 3)
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 0, "_llgo_foo/bar.IFmt")
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 1, "Write")
+	requireMDString(t, llgoInterfaceInfoMetadata, fields, 2, "_llgo_func$write")
 }
 
 func requireMetadataRows(t *testing.T, table string, rows []llvm.Value, want int) {

@@ -222,12 +222,11 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !llgo.useifacemethod = !{!0}
 !llgo.interfaceinfo = !{!1}
 !llgo.useiface = !{!2}
-!llgo.methodinfo = !{!3, !4, !5, !6}
+!llgo.methodinfo = !{!3, !4, !5}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testrt/tpmethod.main", !"_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.Future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]", !"Then", !"_llgo_func$YDtAFTesCi1EpIfGs4nqPSJzLIDwkg-8FAbVKMCx8cg"}
 !1 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.Future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]", !"Then", !"_llgo_func$YDtAFTesCi1EpIfGs4nqPSJzLIDwkg-8FAbVKMCx8cg"}
 !2 = !{!"github.com/goplus/llgo/cl/_testrt/tpmethod.Async[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]", !"*_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]"}
 !3 = !{!"*_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]", i32 0, !"Get", !"_llgo_func$8rsrSd_r3UHd_2DiYTyaOKR7BYkei4zw5ysG35KF38w", !"github.com/goplus/llgo/cl/_testrt/tpmethod.(*Tuple[error]).Get", !"github.com/goplus/llgo/cl/_testrt/tpmethod.(*Tuple[error]).Get"}
 !4 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]", i32 0, !"Get", !"_llgo_func$8rsrSd_r3UHd_2DiYTyaOKR7BYkei4zw5ysG35KF38w", !"github.com/goplus/llgo/cl/_testrt/tpmethod.(*Tuple[error]).Get", !"github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error].Get"}
-!5 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]"}
-!6 = !{!"*_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]", i32 0, !"Then", !"_llgo_func$YDtAFTesCi1EpIfGs4nqPSJzLIDwkg-8FAbVKMCx8cg", !"github.com/goplus/llgo/cl/_testrt/tpmethod.(*future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]).Then", !"github.com/goplus/llgo/cl/_testrt/tpmethod.(*future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]).Then"}
+!5 = !{!"*_llgo_github.com/goplus/llgo/cl/_testrt/tpmethod.future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]", i32 0, !"Then", !"_llgo_func$YDtAFTesCi1EpIfGs4nqPSJzLIDwkg-8FAbVKMCx8cg", !"github.com/goplus/llgo/cl/_testrt/tpmethod.(*future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]).Then", !"github.com/goplus/llgo/cl/_testrt/tpmethod.(*future[github.com/goplus/llgo/cl/_testrt/tpmethod.Tuple[error]]).Then"}

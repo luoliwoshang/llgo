@@ -482,9 +482,9 @@ declare void @"github.com/goplus/llgo/runtime/internal/runtime.PrintByte"(i8)
 attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 
 !llgo.useifacemethod = !{!0, !1, !2, !3, !4, !5, !6, !7}
-!llgo.interfaceinfo = !{!8}
-!llgo.useiface = !{!9, !10, !11}
-!llgo.methodinfo = !{!12, !13}
+!llgo.interfaceinfo = !{!8, !9}
+!llgo.useiface = !{!10, !11, !12}
+!llgo.methodinfo = !{!13, !14, !15, !16}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.S.one", !"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA"}
 !1 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.S.two", !"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to"}
@@ -494,9 +494,12 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !5 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.main", !"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to"}
 !6 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.I.one$bound", !"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA"}
 !7 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.I.two$bound", !"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to"}
-!8 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to"}
-!9 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.main", !"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl"}
-!10 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.main", !"_llgo_int"}
-!11 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.main", !"_llgo_string"}
-!12 = !{!"*_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl", i32 0, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).one", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).one", i32 1, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).two", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).two"}
-!13 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl", i32 0, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).one", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.impl.one", i32 1, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).two", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.impl.two"}
+!8 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA"}
+!9 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.I", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to"}
+!10 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.main", !"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl"}
+!11 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.main", !"_llgo_int"}
+!12 = !{!"github.com/goplus/llgo/cl/_testgo/ifaceprom.main", !"_llgo_string"}
+!13 = !{!"*_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl", i32 0, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).one", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).one"}
+!14 = !{!"*_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl", i32 1, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).two", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).two"}
+!15 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl", i32 0, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.one", !"_llgo_func$ETeB8WwW04JEq0ztcm-XPTJtuYvtpkjIsAc0-2NT9zA", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).one", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.impl.one"}
+!16 = !{!"_llgo_github.com/goplus/llgo/cl/_testgo/ifaceprom.impl", i32 1, !"github.com/goplus/llgo/cl/_testgo/ifaceprom.two", !"_llgo_func$zNDVRsWTIpUPKouNUS805RGX--IV9qVK8B31IZbg5to", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.(*impl).two", !"github.com/goplus/llgo/cl/_testgo/ifaceprom.impl.two"}

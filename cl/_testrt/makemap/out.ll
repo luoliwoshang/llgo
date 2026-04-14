@@ -952,7 +952,6 @@ declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.NewChan"(i64, i64)
 attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 
 !llgo.useiface = !{!0, !1, !2, !3, !4, !5, !6, !7}
-!llgo.methodinfo = !{!8, !9, !10, !11, !12, !13}
 
 !0 = !{!"github.com/goplus/llgo/cl/_testrt/makemap.make1", !"_llgo_string"}
 !1 = !{!"github.com/goplus/llgo/cl/_testrt/makemap.make2", !"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.N1"}
@@ -962,9 +961,3 @@ attributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }
 !5 = !{!"github.com/goplus/llgo/cl/_testrt/makemap.make4", !"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.K2"}
 !6 = !{!"github.com/goplus/llgo/cl/_testrt/makemap.make4", !"_llgo_string"}
 !7 = !{!"github.com/goplus/llgo/cl/_testrt/makemap.make5", !"chan _llgo_int"}
-!8 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.N1"}
-!9 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.N"}
-!10 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.K"}
-!11 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.K2"}
-!12 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.M"}
-!13 = !{!"_llgo_github.com/goplus/llgo/cl/_testrt/makemap.N.7.0"}
