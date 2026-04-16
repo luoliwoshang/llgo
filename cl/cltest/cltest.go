@@ -202,15 +202,30 @@ func testFrom(t *testing.T, pkgDir, sel string) {
 	if sel != "" && !strings.Contains(pkgDir, sel) {
 		return
 	}
+	if isMetaOnlyDir(pkgDir) {
+		metaExpected, hasMetaExpect, err := loadMetaExpect(pkgDir)
+		if err != nil {
+			t.Fatal("loadMetaExpect failed:", err)
+		}
+		if !hasMetaExpect {
+			t.Fatal("missing meta-expect.txt")
+		}
+		mod, err := llgen.GenModuleFrom(pkgDir)
+		if err != nil {
+			t.Fatal("GenModuleFrom failed:", err)
+		}
+		defer mod.Dispose()
+		info := semmeta.Read(mod)
+		if test.Diff(t, filepath.Join(pkgDir, "meta-expect.txt.new"), []byte(FormatSemMeta(info)), metaExpected) {
+			t.Fatal("semmeta.Read: unexpected result")
+		}
+		return
+	}
 	spec, err := littest.LoadSpec(pkgDir)
 	if err != nil {
 		t.Fatal("LoadSpec failed:", err)
 	}
-	metaExpected, hasMetaExpect, err := loadMetaExpect(pkgDir)
-	if err != nil {
-		t.Fatal("loadMetaExpect failed:", err)
-	}
-	if spec.Mode == littest.ModeSkip && !hasMetaExpect {
+	if spec.Mode == littest.ModeSkip {
 		return
 	}
 	mod, err := llgen.GenModuleFrom(pkgDir)
@@ -227,12 +242,6 @@ func testFrom(t *testing.T, pkgDir, sel string) {
 	} else if spec.Mode == littest.ModeLiteral && test.Diff(t, pkgDir+"/result.txt", []byte(v), []byte(spec.Text)) {
 		t.Fatal("llgen.GenFrom: unexpected result")
 	}
-	if hasMetaExpect {
-		info := semmeta.Read(mod)
-		if test.Diff(t, filepath.Join(pkgDir, "meta-expect.txt.new"), []byte(FormatSemMeta(info)), metaExpected) {
-			t.Fatal("semmeta.Read: unexpected result")
-		}
-	}
 }
 
 func loadMetaExpect(pkgDir string) ([]byte, bool, error) {
@@ -244,15 +253,11 @@ func loadMetaExpect(pkgDir string) ([]byte, bool, error) {
 		}
 		return nil, false, err
 	}
-	// An explicit empty meta-expect.txt means "this case is expected to produce
-	// no semantic metadata". We do not auto-generate empty fixtures because they
-	// are too numerous, but if one is checked in intentionally we still compare
-	// the actual metadata against that empty expectation to catch accidental
-	// additions.
-	if bytes.Equal(bytes.TrimSpace(data), []byte{';'}) {
-		return nil, false, nil
-	}
 	return data, true, nil
+}
+
+func isMetaOnlyDir(pkgDir string) bool {
+	return filepath.Base(filepath.Dir(pkgDir)) == "_testmeta"
 }
 
 func testRunAndTestFrom(t *testing.T, pkgDir, relPkg, sel string, opts runOptions) {

@@ -39,6 +39,7 @@ func main() {
 	llgenDir(dir + "/cl/_testgo")
 	llgenDir(dir + "/cl/_testpy")
 	llgenDir(dir + "/cl/_testdata")
+	llgenMetaDir(dir + "/cl/_testmeta")
 
 	genExpects(dir)
 }
@@ -66,6 +67,25 @@ func llgenDir(dir string) {
 			if !skipOut {
 				check(os.WriteFile(outFile, []byte(mod.String()), 0644))
 			}
+		}()
+	}
+}
+
+func llgenMetaDir(dir string) {
+	fis, err := os.ReadDir(dir)
+	check(err)
+	for _, fi := range fis {
+		name := fi.Name()
+		if !fi.IsDir() || strings.HasPrefix(name, "_") {
+			continue
+		}
+		testDir := dir + "/" + name
+		fmt.Fprintln(os.Stderr, "llgen meta", testDir)
+		check(os.Chdir(testDir))
+		mod, err := llgen.GenModuleFrom(testDir)
+		check(err)
+		func() {
+			defer mod.Dispose()
 			writeMetaExpect(testDir, mod)
 		}()
 	}
@@ -75,22 +95,6 @@ func writeMetaExpect(testDir string, mod llvm.Module) {
 	metaFile := filepath.Join(testDir, "meta-expect.txt")
 	info := semmeta.Read(mod)
 	text := cltest.FormatSemMeta(info)
-
-	existing, err := os.ReadFile(metaFile)
-	if err != nil && !os.IsNotExist(err) {
-		check(err)
-	}
-	if err == nil && strings.TrimSpace(string(existing)) == ";" {
-		return
-	}
-	// Do not auto-create empty meta-expect files. Empty metadata cases are
-	// common enough that mass-generating empty fixtures creates too much noise.
-	// If a test wants to assert "metadata must stay empty", it can keep an
-	// explicit empty meta-expect.txt checked in and cltest will compare against
-	// that empty expectation.
-	if text == "" {
-		return
-	}
 	check(os.WriteFile(metaFile, []byte(text), 0644))
 }
 
