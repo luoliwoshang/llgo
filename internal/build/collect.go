@@ -340,7 +340,7 @@ func (c *context) tryLoadFromCache(pkg *aPackage) bool {
 	if err != nil {
 		return false
 	}
-	pkgMeta, err := readMeta(paths.Meta)
+	pkgMeta, err := readMetaFromArchive(paths.Archive)
 	if err != nil {
 		return false
 	}
@@ -427,6 +427,16 @@ type cacheArchiveMetadata struct {
 	NeedPyInit bool
 }
 
+func (c *context) ensurePackageArchiveMeta(pkg *aPackage) error {
+	if pkg.ArchiveFile == "" {
+		return nil
+	}
+	if pkg.Meta == nil {
+		pkg.Meta, _ = meta.NewBuilder().Build()
+	}
+	return c.writeMetaMember(pkg.ArchiveFile, pkg.Meta)
+}
+
 // saveToCache saves a built package to cache.
 func (c *context) saveToCache(pkg *aPackage) error {
 	if !cacheEnabled() {
@@ -451,9 +461,14 @@ func (c *context) saveToCache(pkg *aPackage) error {
 	}
 
 	// If ArchiveFile is already set (from normalizeToArchive), copy it to cache
+	metaInArchive := false
 	if pkg.ArchiveFile != "" {
 		if err := copyFileAtomic(pkg.ArchiveFile, paths.Archive); err != nil {
 			return err
+		}
+		if pkgMeta, err := readMetaFromArchive(paths.Archive); err == nil {
+			_ = pkgMeta.Close()
+			metaInArchive = true
 		}
 	} else if len(pkg.ObjFiles) > 0 {
 		// Otherwise, create archive from object files
@@ -467,8 +482,10 @@ func (c *context) saveToCache(pkg *aPackage) error {
 	if pkg.Meta == nil {
 		pkg.Meta, _ = meta.NewBuilder().Build()
 	}
-	if err := writeMeta(paths.Meta, pkg.Meta); err != nil {
-		return err
+	if !metaInArchive {
+		if err := c.writeMetaMember(paths.Archive, pkg.Meta); err != nil {
+			return err
+		}
 	}
 
 	// Append metadata to existing manifest (pkg.Manifest was built in collectFingerprint).

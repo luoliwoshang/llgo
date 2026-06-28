@@ -12,8 +12,9 @@ import (
 // The underlying bytes may come from an mmap'd file or from Builder.Build().
 // All query methods read directly from the byte slice with no allocation.
 type PackageMeta struct {
-	raw  []byte
-	mmap bool // true → must Munmap on Close
+	raw     []byte
+	mmap    bool // true → must Munmap on Close
+	mmapRaw []byte
 
 	nsyms uint32
 
@@ -99,6 +100,25 @@ func ReadMeta(path string) (*PackageMeta, error) {
 		return nil, err
 	}
 	pm.mmap = true
+	pm.mmapRaw = raw
+	return pm, nil
+}
+
+// View returns a PackageMeta view over raw LLPS bytes.
+func View(raw []byte) (*PackageMeta, error) {
+	return newPackageMeta(raw)
+}
+
+// MmapView returns a PackageMeta view over raw LLPS bytes backed by mmapRaw.
+// Close releases mmapRaw instead of raw, which lets callers pass a slice into a
+// larger mmap'd container such as an archive.
+func MmapView(raw, mmapRaw []byte) (*PackageMeta, error) {
+	pm, err := newPackageMeta(raw)
+	if err != nil {
+		return nil, err
+	}
+	pm.mmap = true
+	pm.mmapRaw = mmapRaw
 	return pm, nil
 }
 
@@ -108,8 +128,13 @@ func (pm *PackageMeta) Bytes() []byte { return pm.raw }
 // Close releases the mmap mapping if one was used.
 func (pm *PackageMeta) Close() error {
 	if pm.mmap && pm.raw != nil {
-		err := syscall.Munmap(pm.raw)
+		raw := pm.mmapRaw
+		if raw == nil {
+			raw = pm.raw
+		}
+		err := syscall.Munmap(raw)
 		pm.raw = nil
+		pm.mmapRaw = nil
 		return err
 	}
 	return nil
@@ -122,7 +147,7 @@ func (pm *PackageMeta) symbolName(sym LocalSymbol) string {
 	if uint32(sym) >= pm.nsyms {
 		return ""
 	}
-	const recSize = 12
+	const recSize = 8
 	base := pm.symOff + 4 + uint32(sym)*recSize
 	nameOff := binary.LittleEndian.Uint32(pm.raw[base+0:])
 	nameLen := binary.LittleEndian.Uint32(pm.raw[base+4:])
@@ -237,13 +262,13 @@ func csrSlice[T any](pm *PackageMeta, sectionOff uint32, sym LocalSymbol, recSiz
 	if start == end {
 		return nil
 	}
-	dataBase := sectionOff + 4 + (pm.nsyms+1)*4
+	dataBase := sectionOff + (pm.nsyms+1)*4
 	p := (*T)(unsafe.Pointer(&pm.raw[dataBase+uint32(uintptr(start)*recSize)]))
 	return unsafe.Slice(p, end-start)
 }
 
 func (pm *PackageMeta) csrRange(sectionOff uint32, sym LocalSymbol) (start, end uint32) {
-	offsetsBase := sectionOff + 4 // skip nsyms u32
+	offsetsBase := sectionOff
 	start = binary.LittleEndian.Uint32(pm.raw[offsetsBase+uint32(sym)*4:])
 	end = binary.LittleEndian.Uint32(pm.raw[offsetsBase+(uint32(sym)+1)*4:])
 	return

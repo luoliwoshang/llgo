@@ -19,31 +19,31 @@ func (b *Builder) Build() (*PackageMeta, error) {
 	// starts 4-byte aligned, enabling zero-copy unsafe access (e.g. TypeChildren).
 	strSize := align4(uint32(len(b.strData)))
 
-	symSize := 4 + nsyms*12 // nsyms u32 + N×SymbolRecord(12)
+	symSize := 4 + nsyms*8 // nsyms u32 + N×SymbolRecord(8)
 
 	totalEdges := uint32(0)
 	for _, es := range b.edges {
 		totalEdges += uint32(len(es))
 	}
-	edgeSize := 4 + (nsyms+1)*4 + totalEdges*12 // nsyms + offsets[N+1] + N×Edge(12)
+	edgeSize := (nsyms+1)*4 + totalEdges*12 // offsets[N+1] + N×Edge(12)
 
 	totalChildren := uint32(0)
 	for _, cs := range b.typeChildren {
 		totalChildren += uint32(len(cs))
 	}
-	childSize := 4 + (nsyms+1)*4 + totalChildren*4
+	childSize := (nsyms+1)*4 + totalChildren*4
 
 	totalSlots := uint32(0)
 	for _, ms := range b.methodInfo {
 		totalSlots += uint32(len(ms))
 	}
-	methodSize := 4 + (nsyms+1)*4 + totalSlots*20 // N×MethodSlot(20: NameRef(8)+mtype+ifn+tfn)
+	methodSize := (nsyms+1)*4 + totalSlots*20 // N×MethodSlot(20: NameRef(8)+mtype+ifn+tfn)
 
 	totalSigs := uint32(0)
 	for _, ss := range b.ifaceInfo {
 		totalSigs += uint32(len(ss))
 	}
-	ifaceSize := 4 + (nsyms+1)*4 + totalSigs*12 // N×MethodSig(12: NameRef(8)+mtype)
+	ifaceSize := (nsyms+1)*4 + totalSigs*12 // N×MethodSig(12: NameRef(8)+mtype)
 
 	reflSize := 4 + (nsyms+7)/8 // nsyms u32 + bitmap bytes
 
@@ -108,37 +108,32 @@ func align4(n uint32) uint32 {
 // writeSymbols writes:
 //
 //	nsyms u32
-//	[nsyms] { nameOff u32, nameLen u32, _ [4]byte }  (12 bytes each)
+//	[nsyms] { nameOff u32, nameLen u32 }  (8 bytes each)
 func writeSymbols(dst []byte, b *Builder, nsyms uint32) {
 	binary.LittleEndian.PutUint32(dst, nsyms)
-	const rec = 12
+	const rec = 8
 	for i, e := range b.symNames {
 		base := 4 + i*rec
 		binary.LittleEndian.PutUint32(dst[base:], e.nameOff)
 		binary.LittleEndian.PutUint32(dst[base+4:], e.nameLen)
-		// dst[base+8 : base+12] reserved, already zero
 	}
 }
 
-// writeCSRHeader writes:
+// writeCSROffsets writes the CSR offset array and returns the data area.
 //
-//	nsyms u32
 //	offsets [nsyms+1] u32
 //
-// and returns the slice starting at the data area (after the offsets array).
-// cur accumulates the running data index as each symbol's entries are counted.
+// Returns the slice starting at the data area (after the offsets array).
 func writeCSROffsets(dst []byte, nsyms uint32, counts []int) []byte {
-	binary.LittleEndian.PutUint32(dst, nsyms)
-	offsetBase := dst[4:]
 	cur := uint32(0)
 	for i, c := range counts {
-		binary.LittleEndian.PutUint32(offsetBase[i*4:], cur)
+		binary.LittleEndian.PutUint32(dst[i*4:], cur)
 		cur += uint32(c)
 	}
 	// sentinel
-	binary.LittleEndian.PutUint32(offsetBase[len(counts)*4:], cur)
+	binary.LittleEndian.PutUint32(dst[len(counts)*4:], cur)
 	// return slice starting at data area
-	return dst[4+(nsyms+1)*4:]
+	return dst[(nsyms+1)*4:]
 }
 
 // writeEdges writes the Edges section.

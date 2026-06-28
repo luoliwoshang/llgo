@@ -720,6 +720,9 @@ func buildAllPkgs(ctx *context, pkgs []*aPackage, verbose bool) ([]*aPackage, er
 					if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
 						return err
 					}
+					if err := ctx.ensurePackageArchiveMeta(aPkg); err != nil {
+						return err
+					}
 					if kind == cl.PkgLinkExtern {
 						appendExternalLinkArgs(ctx, aPkg, param)
 					}
@@ -753,6 +756,9 @@ func buildAllPkgs(ctx *context, pkgs []*aPackage, verbose bool) ([]*aPackage, er
 			needPyInit = needPyInit || aPkg.NeedPyInit
 			if !aPkg.CacheHit {
 				if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
+					return err
+				}
+				if err := ctx.ensurePackageArchiveMeta(aPkg); err != nil {
 					return err
 				}
 				if err := ctx.saveToCache(aPkg); err != nil && verbose {

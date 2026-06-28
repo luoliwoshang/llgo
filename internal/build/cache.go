@@ -217,16 +217,18 @@ func readMeta(path string) (*meta.PackageMeta, error) {
 
 // cacheExists checks if a valid cache entry exists
 func (cm *cacheManager) cacheExists(paths cachePaths) bool {
-	// Archive, manifest, and valid package metadata must exist.
+	// Archive, manifest, and valid package metadata member must exist.
 	if _, err := os.Stat(paths.Archive); err != nil {
 		return false
 	}
 	if _, err := os.Stat(paths.Manifest); err != nil {
 		return false
 	}
-	if _, err := readMeta(paths.Meta); err != nil {
+	pm, err := readMetaFromArchive(paths.Archive)
+	if err != nil {
 		return false
 	}
+	_ = pm.Close()
 	return true
 }
 
