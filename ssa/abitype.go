@@ -415,10 +415,11 @@ func (b Builder) abiUncommonMethods(t types.Type, mset *types.MethodSet) llvm.Va
 		m := mset.At(i)
 		obj := m.Obj()
 		mName := obj.Name()
-		name := b.Str(mName).impl
+		abiName := mName
 		if !token.IsExported(mName) {
-			name = b.Str(abi.FullName(obj.Pkg(), mName)).impl
+			abiName = abi.FullName(obj.Pkg(), mName)
 		}
+		name := b.Str(abiName).impl
 		mSig := m.Type().(*types.Signature)
 		var tfn, ifn llvm.Value
 		tfn = b.abiMethodFunc(anonymous, pkg, mName, mSig)
