@@ -3,6 +3,7 @@ package dcepass
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	qtest "github.com/qiniu/x/test"
@@ -44,6 +45,30 @@ func TestEmitStrongTypeOverrides(t *testing.T) {
 			}
 			qtest.Diff(t, filepath.Join(dir, "expect.ll.new"), []byte(dst.String()), want)
 		})
+	}
+}
+
+func TestRewriteTypeMethodTablesPreservesLinkage(t *testing.T) {
+	ctx := llvm.NewContext()
+	defer ctx.Dispose()
+	mod := parseModule(t, &ctx, filepath.Join("testdata", "method_slots", "in.ll"))
+	defer mod.Dispose()
+
+	if got := RewriteTypeMethodTables(mod, map[string][]int{
+		taskTypeName:    {1},
+		ptrTaskTypeName: {1},
+	}, false); got != 2 {
+		t.Fatalf("RewriteTypeMethodTables rewrote %d globals, want 2", got)
+	}
+	out := mod.String()
+	if !strings.Contains(out, `@_llgo_main.Task = weak_odr constant`) {
+		t.Fatalf("rewrite changed the source type linkage:\n%s", out)
+	}
+	if strings.Contains(out, `@_llgo_main.Task = constant`) {
+		t.Fatalf("rewrite introduced a strong duplicate:\n%s", out)
+	}
+	if !strings.Contains(out, `ptr @"github.com/goplus/llgo/runtime/internal/runtime.unreachableMethod"`) {
+		t.Fatalf("rewrite did not replace the dead method slot:\n%s", out)
 	}
 }
 
