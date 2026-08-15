@@ -350,6 +350,18 @@ func (c *Config) thinLTODeadcodeEnabled() bool {
 	return c != nil && c.deadcodeDropEnabled() && c.ltoMode() == lto.Thin
 }
 
+const thinLTODeadcodeImportLimitFlag = "-Wl,-mllvm,-import-instr-limit=5"
+
+func thinLTODeadcodeLinkerArgs(c *Config) []string {
+	if !c.thinLTODeadcodeEnabled() {
+		return nil
+	}
+	// LLVM's default import budget is performance-biased. Imported bodies also
+	// duplicate LLGo funcinfo sites, so use the established size-oriented
+	// budget while retaining imports of very small cross-package callees.
+	return []string{thinLTODeadcodeImportLimitFlag}
+}
+
 func (c *Config) packageMetaEnabled() bool {
 	return c.CollectPackageMeta || c.deadcodeDropEnabled()
 }
@@ -1678,6 +1690,7 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 		return err
 	}
 	buildArgs = append(buildArgs, ltoPluginFlags...)
+	buildArgs = append(buildArgs, thinLTODeadcodeLinkerArgs(ctx.buildConf)...)
 
 	// Add build mode specific linker arguments
 	switch ctx.buildConf.BuildMode {
