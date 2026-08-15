@@ -2033,7 +2033,7 @@ func compilePackageModule(ctx *context, aPkg *aPackage, externs []string, verbos
 		if err := gllvm.VerifyModule(mod, gllvm.ReturnStatusAction); err != nil {
 			return fmt.Errorf("verify LLVM module for %v failed: %w", pkgPath, err)
 		}
-		if err := mod.RunPasses(llvmPassPipeline(ctx.buildConf.OptLevel, ctx.buildConf.ltoMode()), ctx.prog.TargetMachine(), pbo); err != nil {
+		if err := mod.RunPasses(llvmPassPipeline(ctx.buildConf.OptLevel, ctx.buildConf.ltoMode(), ctx.buildConf.Goos), ctx.prog.TargetMachine(), pbo); err != nil {
 			return fmt.Errorf("run LLVM passes failed for %v: %w", pkgPath, err)
 		}
 	}
@@ -2765,12 +2765,23 @@ func effectiveOptLevel(conf *Config) optlevel.Level {
 	return optlevel.O2
 }
 
-func llvmPassPipeline(level optlevel.Level, ltoMode lto.Mode) string {
+func llvmPassPipeline(level optlevel.Level, ltoMode lto.Mode, goos string) string {
 	switch ltoMode {
 	case lto.Full:
 		return "lto-pre-link<" + level.Name() + ">"
 	case lto.Thin:
-		return "thinlto-pre-link<" + level.Name() + ">"
+		pipeline := "thinlto-pre-link<" + level.Name() + ">"
+		// LLVM 19's Mach-O LLD does not enable PTO.SLPVectorization for its
+		// LTO backend, unlike ELF LLD. Run SLP before emitting the ThinLTO
+		// summary so large constant store sequences are not lowered one byte
+		// at a time. O1 and Oz intentionally omit SLP in LLVM's pipelines.
+		if goos == "darwin" {
+			switch level {
+			case optlevel.O2, optlevel.O3, optlevel.Os:
+				pipeline += ",function(slp-vectorizer)"
+			}
+		}
+		return pipeline
 	default:
 		return "default<" + level.Name() + ">"
 	}
