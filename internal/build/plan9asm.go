@@ -306,19 +306,22 @@ func cabiSkipFuncsForPlan9Asm(ctx *context, pkgPath string, mod gllvm.Module) []
 }
 
 func (ctx *context) plan9asmEnabled(pkgPath string) bool {
-	ctx.plan9asmOnce.Do(func() {
-		cfg := parsePlan9AsmPkgsEnv(Plan9ASMPkgs())
-		ctx.plan9asmMode = cfg.mode
-		switch cfg.mode {
-		case plan9asmEnvSelected:
-			ctx.plan9asmPkgs = make(map[string]bool, len(cfg.pkgs))
-			for p := range cfg.pkgs {
-				ctx.plan9asmPkgs[p] = true
+	if !ctx.plan9asmReady {
+		ctx.plan9asmOnce.Do(func() {
+			cfg := parsePlan9AsmPkgsEnv(Plan9ASMPkgs())
+			ctx.plan9asmMode = cfg.mode
+			switch cfg.mode {
+			case plan9asmEnvSelected:
+				ctx.plan9asmPkgs = make(map[string]bool, len(cfg.pkgs))
+				for p := range cfg.pkgs {
+					ctx.plan9asmPkgs[p] = true
+				}
+			default:
+				ctx.plan9asmPkgs = make(map[string]bool)
 			}
-		default:
-			ctx.plan9asmPkgs = make(map[string]bool)
-		}
-	})
+			ctx.plan9asmReady = true
+		})
+	}
 
 	switch ctx.plan9asmMode {
 	case plan9asmEnvAll:
@@ -379,26 +382,32 @@ func pkgSFiles(ctx *context, pkg *packages.Package) ([]string, error) {
 	if pkg == nil || pkg.PkgPath == "" {
 		return nil, nil
 	}
-	// Some unit tests construct synthetic packages that are not loadable via
-	// `go list` (PkgPath not in any module, and Dir/Standard/Goroot unset).
-	// In that case, treat the package as having no selected .s files.
-	if pkg.Dir == "" {
-		return nil, nil
-	}
-	// Fast path: if directory has no .s/.S at all, skip `go list`.
-	if pkg.Dir != "" {
-		if ss, _ := filepath.Glob(filepath.Join(pkg.Dir, "*.s")); len(ss) == 0 {
-			if ss, _ := filepath.Glob(filepath.Join(pkg.Dir, "*.S")); len(ss) == 0 {
-				return nil, nil
-			}
-		}
-	}
-
 	if ctx.sfilesCache == nil {
+		if ctx.sfilesFrozen {
+			return nil, fmt.Errorf("package %s assembly files were not prepared before backend execution", pkg.PkgPath)
+		}
 		ctx.sfilesCache = make(map[string][]string)
 	}
 	if v, ok := ctx.sfilesCache[pkg.ID]; ok {
 		return v, nil
+	}
+	// Some unit tests construct synthetic packages that are not loadable via
+	// `go list` (PkgPath not in any module, and Dir/Standard/Goroot unset).
+	// In that case, treat the package as having no selected .s files.
+	if pkg.Dir == "" {
+		ctx.sfilesCache[pkg.ID] = nil
+		return nil, nil
+	}
+	// Fast path: if directory has no .s/.S at all, skip `go list`.
+	if ss, _ := filepath.Glob(filepath.Join(pkg.Dir, "*.s")); len(ss) == 0 {
+		if ss, _ := filepath.Glob(filepath.Join(pkg.Dir, "*.S")); len(ss) == 0 {
+			ctx.sfilesCache[pkg.ID] = nil
+			return nil, nil
+		}
+	}
+
+	if ctx.sfilesFrozen {
+		return nil, fmt.Errorf("package %s assembly files were not prepared before backend execution", pkg.PkgPath)
 	}
 
 	args := []string{"list", "-json"}

@@ -59,6 +59,12 @@ func (v Expr) SetOrdering(ordering AtomicOrdering) Expr {
 	return v
 }
 
+// SetVolatile marks a load or store as volatile.
+func (v Expr) SetVolatile(volatile bool) Expr {
+	v.impl.SetVolatile(volatile)
+	return v
+}
+
 func (v Expr) SetName(alias string) Expr {
 	v.impl.SetName(alias)
 	return v
@@ -1082,12 +1088,21 @@ func castInt(b Builder, x llvm.Value, xtyp Type, typ Type) llvm.Value {
 
 func castFloatToInt(b Builder, x llvm.Value, typ Type) llvm.Value {
 	dstSize := b.Prog.td.TypeAllocSize(typ.ll)
+	target := b.Prog.Target()
+	saturatingUint32 := target.SaturatingFloatToUint32 && typ.kind == vkUnsigned && dstSize == 4
+	// The amd64 lowering only models legacy CVTT semantics. Saturating uint32
+	// conversions must use the guarded unsigned conversion below.
+	if target.effectiveGOARCH() == "amd64" && !saturatingUint32 {
+		return castFloatToIntAMD64(b, x, typ, dstSize)
+	}
 	if typ.kind == vkUnsigned {
 		if dstSize < 4 {
+			// Go's converthash transition only changes float-to-uint32.
+			// Preserve the existing signed conversion and truncation for uint8/uint16.
 			tmp := castFloatToSignedInt(b, x, b.Prog.Int32(), 32)
 			return llvm.CreateTrunc(b.impl, tmp, typ.ll)
 		}
-		if dstSize == 4 {
+		if dstSize == 4 && !saturatingUint32 {
 			tmp := castFloatToSignedInt(b, x, b.Prog.Int64(), 64)
 			return llvm.CreateTrunc(b.impl, tmp, typ.ll)
 		}
@@ -1103,6 +1118,58 @@ func castFloatToInt(b Builder, x llvm.Value, typ Type) llvm.Value {
 	return castFloatToSignedInt(b, x, typ, 64)
 }
 
+// castFloatToIntAMD64 reproduces gc's legacy SSE conversion semantics without
+// exposing LLVM fptosi/fptoui to out-of-range inputs (which would be poison).
+// Signed CVTT conversions return the minimum integer for NaN or overflow;
+// unsigned 8/16/32-bit conversions truncate a wider signed conversion, while
+// uint64 uses gc's split-at-2^63 sequence.
+func castFloatToIntAMD64(b Builder, x llvm.Value, typ Type, dstSize uint64) llvm.Value {
+	if typ.kind == vkUnsigned {
+		if dstSize < 4 {
+			tmp := castFloatToSignedIntAMD64(b, x, b.Prog.Int32(), 32)
+			return llvm.CreateTrunc(b.impl, tmp, typ.ll)
+		}
+		if dstSize == 4 {
+			tmp := castFloatToSignedIntAMD64(b, x, b.Prog.Int64(), 64)
+			return llvm.CreateTrunc(b.impl, tmp, typ.ll)
+		}
+
+		cutoff := llvm.ConstFloat(x.Type(), floatPow2(63))
+		high := llvm.CreateFCmp(b.impl, llvm.FloatOGE, x, cutoff)
+		adjusted := b.impl.CreateFSub(x, cutoff, "")
+		input := llvm.CreateSelect(b.impl, high, adjusted, x)
+		ret := castFloatToSignedIntAMD64(b, input, b.Prog.Int64(), 64)
+		highBit := llvm.ConstInt(typ.ll, uint64(1)<<63, false)
+		zero := llvm.ConstNull(typ.ll)
+		return b.impl.CreateOr(ret, llvm.CreateSelect(b.impl, high, highBit, zero), "")
+	}
+	if dstSize < 8 {
+		tmp := castFloatToSignedIntAMD64(b, x, b.Prog.Int32(), 32)
+		if dstSize < 4 {
+			return llvm.CreateTrunc(b.impl, tmp, typ.ll)
+		}
+		return tmp
+	}
+	return castFloatToSignedIntAMD64(b, x, typ, 64)
+}
+
+func castFloatToSignedIntAMD64(b Builder, x llvm.Value, typ Type, bits uint64) llvm.Value {
+	bound := floatPow2(bits - 1)
+	lower := llvm.ConstFloat(x.Type(), -bound)
+	upper := llvm.ConstFloat(x.Type(), bound)
+	tooLow := llvm.CreateFCmp(b.impl, llvm.FloatOLT, x, lower)
+	tooHigh := llvm.CreateFCmp(b.impl, llvm.FloatOGE, x, upper)
+	isNaN := llvm.CreateFCmp(b.impl, llvm.FloatUNO, x, x)
+	invalid := b.impl.CreateOr(tooLow, tooHigh, "")
+	invalid = b.impl.CreateOr(invalid, isNaN, "")
+	safe := llvm.CreateSelect(b.impl, invalid, llvm.ConstNull(x.Type()), x)
+	ret := llvm.CreateFPToSI(b.impl, safe, typ.ll)
+	minInt := llvm.ConstInt(typ.ll, uint64(1)<<(bits-1), false)
+	return llvm.CreateSelect(b.impl, invalid, minInt, ret)
+}
+
+// Unlike the amd64 CVTT path above, other targets use Go's implementation-
+// specific saturating behavior: clamp low/high values and map NaN to zero.
 func castFloatToSignedInt(b Builder, x llvm.Value, typ Type, bits uint64) llvm.Value {
 	bound := floatPow2(bits - 1)
 	lower := llvm.ConstFloat(x.Type(), -bound)
@@ -1691,7 +1758,7 @@ func (b Builder) BuiltinCall(fn string, args ...Expr) (ret Expr) {
 		if len(args) == 2 && args[0].kind == vkMap {
 			m := args[0]
 			t := b.abiType(m.raw.Type)
-			ptr := b.mapKeyPtr(args[1])
+			ptr := b.mapKeyPtr(m, args[1])
 			b.Call(b.Pkg.rtFunc("MapDelete"), t, m, ptr)
 			return
 		}

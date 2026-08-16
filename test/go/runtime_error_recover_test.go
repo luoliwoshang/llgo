@@ -20,6 +20,7 @@ func TestRecoverRuntimeErrorClassification(t *testing.T) {
 	arrayPtr := new([10]int)
 	var slice []int
 	var iface any = 1
+	var partialInterface any = runtimeErrorFirstMethodOnly{}
 
 	tests := []struct {
 		name string
@@ -89,6 +90,13 @@ func TestRecoverRuntimeErrorClassification(t *testing.T) {
 				runtimeErrorAnySink = iface.(runtimeErrorMissingMethod)
 			},
 		},
+		{
+			name: "type-interface-second-method",
+			want: "missing method runtimeErrorMethodB",
+			f: func() {
+				runtimeErrorAnySink = partialInterface.(runtimeErrorTwoMethods)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -119,3 +127,12 @@ func expectRecoverRuntimeError(t *testing.T, want string, f func()) {
 type runtimeErrorMissingMethod interface {
 	runtimeErrorMissingMethod()
 }
+
+type runtimeErrorTwoMethods interface {
+	runtimeErrorMethodA()
+	runtimeErrorMethodB()
+}
+
+type runtimeErrorFirstMethodOnly struct{}
+
+func (runtimeErrorFirstMethodOnly) runtimeErrorMethodA() {}

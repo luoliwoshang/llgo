@@ -65,7 +65,6 @@ var altPkgs = map[string]altPkgSpec{
 	"syscall/js":              {mode: altPkgReplace},
 	"syscall":                 {mode: altPkgReplace},
 	"unique":                  {mode: altPkgReplace},
-	"golang.org/x/sys/unix":   {mode: altPkgReplace},
 }
 
 func HasSourcePatchPkg(path string) bool {

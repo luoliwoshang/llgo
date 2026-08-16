@@ -242,6 +242,7 @@ type aFunction struct {
 	blks []BasicBlock
 
 	defer_           *aDefer
+	recoverToken     Expr
 	pendingLoopCases []loopDeferCase
 	nextDeferID      uintptr
 	recov            BasicBlock

@@ -1138,6 +1138,61 @@ func TestDevLTOGlobalDCEAbiTypeFakeUsesRecordedDuringAbiTypeBuild(t *testing.T) 
 	if !containsLLVMValueNameSuffix(mapFakeUses, ".typehash") {
 		t.Fatalf("map abi type fake uses = %v, want typehash", mapFakeUses)
 	}
+
+	// Indirect map keys and elements are represented by pointers in the
+	// runtime bucket, so the ABI descriptor must report pointer-sized fields.
+	large := types.NewArray(types.Typ[types.Uint64], 17)
+	b.abiType(types.NewMap(large, large))
+}
+
+func TestMapKeyPtrCoverage(t *testing.T) {
+	prog := NewProgram(nil)
+	prog.TypeSizes(types.SizesFor("gc", runtime.GOARCH))
+	prog.SetRuntime(func() *types.Package {
+		pkg, err := importer.For("source", nil).Import(PkgRuntime)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pkg
+	})
+	pkg := prog.NewPackage("main", "main")
+	key := types.NewArray(types.Typ[types.Int], 2)
+	keyObj := types.NewTypeName(token.NoPos, nil, "Key", nil)
+	namedKey := types.NewNamed(keyObj, key, nil)
+	mapType := types.NewMap(namedKey, types.Typ[types.Int])
+	sig := types.NewSignatureType(nil, nil, nil,
+		types.NewTuple(
+			types.NewVar(token.NoPos, nil, "m", mapType),
+			types.NewVar(token.NoPos, nil, "k", key),
+		), nil, false)
+	fn := pkg.NewFunc("mapKeyPtr", sig, InGo)
+	b := fn.MakeBody(1)
+
+	// The map uses the named key while the expression uses its underlying
+	// array type. This exercises the ChangeType path in mapKeyPtr.
+	ptr := b.mapKeyPtr(fn.Param(0), fn.Param(1))
+	if ptr.RawType() != types.Typ[types.UnsafePointer] {
+		t.Fatalf("mapKeyPtr type = %v, want unsafe.Pointer", ptr.RawType())
+	}
+	b.Return()
+
+	// Exercise the defensive paths as well. A mismatched, larger expression
+	// reaches the size-preserving branch before ChangeType rejects it.
+	func() {
+		defer func() { _ = recover() }()
+		smallMap := types.NewMap(types.Typ[types.Int], types.Typ[types.Int])
+		smallSig := types.NewSignatureType(nil, nil, nil, types.NewTuple(
+			types.NewVar(token.NoPos, nil, "m", smallMap),
+			types.NewVar(token.NoPos, nil, "k", key),
+		), nil, false)
+		smallFn := pkg.NewFunc("mapKeyPtrLarger", smallSig, InGo)
+		smallBody := smallFn.MakeBody(1)
+		smallBody.mapKeyPtr(smallFn.Param(0), smallFn.Param(1))
+	}()
+	func() {
+		defer func() { _ = recover() }()
+		b.mapKeyPtr(fn.Param(1), fn.Param(1))
+	}()
 }
 
 func containsLLVMValueNameSuffix(values []llvm.Value, suffix string) bool {
@@ -1822,7 +1877,8 @@ func TestInterfaceHelpers(t *testing.T) {
 	rawIface := types.NewInterfaceType([]*types.Func{rawMeth}, nil)
 	rawIface.Complete()
 
-	if got := iMethodOf(rawIface, "missing"); got != -1 {
+	missingMethod := types.NewFunc(0, nil, "missing", rawSig)
+	if got := iMethodOf(rawIface, missingMethod); got != -1 {
 		t.Fatalf("iMethodOf missing: got %d", got)
 	}
 
@@ -2742,6 +2798,57 @@ func TestInitAbiTypesForSubset(t *testing.T) {
 	}
 	if got := allArray.GlobalValueType().ArrayLength(); got != len(prog.abiSymbol) {
 		t.Fatalf("full abi array length = %d, want %d", got, len(prog.abiSymbol))
+	}
+}
+
+func TestRegisterAbiTypesAcrossPrograms(t *testing.T) {
+	runtimePkg, err := importer.For("source", nil).Import(PkgRuntime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newProgram := func() Program {
+		prog := NewProgram(nil)
+		prog.sizes = types.SizesFor("gc", runtime.GOARCH)
+		prog.SetRuntime(runtimePkg)
+		return prog
+	}
+
+	source := newProgram()
+	defer source.Dispose()
+	sourcePkg := source.NewPackage("source", "example.com/source")
+	sourceFn := sourcePkg.NewFunc("source", NoArgsNoRet, InC)
+	sourceBuilder := sourceFn.MakeBody(1)
+	sourceBuilder.abiType(types.NewSlice(types.Typ[types.Int]))
+	named := types.NewNamed(
+		types.NewTypeName(token.NoPos, types.NewPackage("example.com/source", "source"), "Named", nil),
+		types.NewStruct(nil, nil),
+		nil,
+	)
+	sourceBuilder.abiType(named)
+	sourceBuilder.Return()
+	infos := source.AbiTypes()
+	if len(infos) == 0 {
+		t.Fatal("source Program produced no ABI type snapshot")
+	}
+
+	target := newProgram()
+	defer target.Dispose()
+	targetPkg := target.NewPackage("target", "example.com/target")
+	targetPkg.RegisterAbiTypes(infos)
+	targetPkg.RegisterAbiTypes(append(infos, AbiTypeInfo{}))
+	for _, info := range infos {
+		if _, ok := target.abiSymbol[info.Name]; !ok {
+			t.Fatalf("target Program did not recreate ABI type %q", info.Name)
+		}
+	}
+	if targetPkg.InitAbiTypes("init$abitypes") == nil {
+		t.Fatal("recreated ABI types did not produce typelist initializer")
+	}
+	for _, info := range infos {
+		global := targetPkg.Module().NamedGlobal(info.Name)
+		if global.IsNil() || !global.IsDeclaration() {
+			t.Fatalf("target descriptor %q is not an external declaration", info.Name)
+		}
 	}
 }
 

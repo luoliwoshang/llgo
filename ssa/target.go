@@ -27,12 +27,27 @@ import (
 // -----------------------------------------------------------------------------
 
 type Target struct {
-	GOOS       string
-	GOARCH     string
-	GOARM      string // "5", "6", "7" (default)
-	Target     string // target name from -target flag (e.g., "esp32", "arm7tdmi", "wasi")
-	LLVMTarget string // physical LLVM target selected by a target configuration
-	OptLevel   optlevel.Level
+	GOOS                    string
+	GOARCH                  string
+	GOARM                   string // "5", "6", "7" (default)
+	Target                  string // target name from -target flag (e.g., "esp32", "arm7tdmi", "wasi")
+	LLVMTarget              string // physical LLVM target selected by a target configuration
+	OptLevel                optlevel.Level
+	SaturatingFloatToUint32 bool
+}
+
+func (p *Target) effectiveGOOS() string {
+	if p.GOOS == "" {
+		return runtime.GOOS
+	}
+	return p.GOOS
+}
+
+func (p *Target) effectiveGOARCH() string {
+	if p.GOARCH == "" {
+		return runtime.GOARCH
+	}
+	return p.GOARCH
 }
 
 func (p *Target) targetInfo() (llvm.TargetData, llvm.TargetMachine) {
@@ -100,14 +115,8 @@ func (p *Target) targetMachineOptions() llvm.TargetMachineOptions {
 }
 
 func (p *Target) useNativeObjectSections() bool {
-	goos := p.GOOS
-	if goos == "" {
-		goos = runtime.GOOS
-	}
-	goarch := p.GOARCH
-	if goarch == "" {
-		goarch = runtime.GOARCH
-	}
+	goos := p.effectiveGOOS()
+	goarch := p.effectiveGOARCH()
 	return p.Target == "" && goos == runtime.GOOS && goarch == runtime.GOARCH && goarch != "wasm"
 }
 
@@ -121,14 +130,8 @@ func (p *Target) Spec() (spec TargetSpec) {
 	// Configure based on GOOS/GOARCH environment variables (falling back to
 	// runtime.GOOS/runtime.GOARCH), and generate a LLVM target based on it.
 	var llvmarch string
-	var goarch = p.GOARCH
-	var goos = p.GOOS
-	if goarch == "" {
-		goarch = runtime.GOARCH
-	}
-	if goos == "" {
-		goos = runtime.GOOS
-	}
+	goarch := p.effectiveGOARCH()
+	goos := p.effectiveGOOS()
 	switch goarch {
 	case "386":
 		llvmarch = "i386"

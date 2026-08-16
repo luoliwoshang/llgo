@@ -207,6 +207,49 @@ func findStaticCall(t *testing.T, fn *gossa.Function, name string) *gossa.Call {
 	return nil
 }
 
+func TestRecoverCallClassificationHelpers(t *testing.T) {
+	ctx := &context{}
+	if ctx.functionUsesRecover(nil) {
+		t.Fatal("nil function should not report recover use")
+	}
+
+	ssaPkg, _, _ := buildGoSSAPkg(t, `
+package foo
+
+func usesRecover() {
+	recover()
+}
+
+func plain() {}
+`)
+	usesRecover := ssaPkg.Members["usesRecover"].(*gossa.Function)
+	plain := ssaPkg.Members["plain"].(*gossa.Function)
+	if !ctx.functionUsesRecover(usesRecover) {
+		t.Fatal("usesRecover should report direct recover use")
+	}
+	if ctx.functionUsesRecover(plain) {
+		t.Fatal("plain should not report recover use")
+	}
+	if !ctx.callMayRecover(usesRecover) {
+		t.Fatal("function using recover should be recover-capable")
+	}
+	if ctx.callMayRecover(plain) {
+		t.Fatal("plain static function should not be recover-capable")
+	}
+	if !ctx.callMayRecover(&gossa.MakeClosure{}) {
+		t.Fatal("unknown closure target should conservatively be recover-capable")
+	}
+	if !ctx.callMayRecover(&gossa.Call{}) {
+		t.Fatal("function value returned by a call should conservatively be recover-capable")
+	}
+	if !ctx.callMayRecover(nil) {
+		t.Fatal("unknown call value should conservatively be recover-capable")
+	}
+	if !ctx.callMayRecover(&gossa.Function{}) {
+		t.Fatal("bodyless function should conservatively be recover-capable")
+	}
+}
+
 func TestCgoCgocall_InitArgsFromParams(t *testing.T) {
 	ssaPkg, _, _ := buildGoSSAPkg(t, `
 package foo

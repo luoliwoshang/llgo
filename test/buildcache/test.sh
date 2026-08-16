@@ -282,7 +282,10 @@ echo "Snapshots directory: $SNAPSHOTS_DIR"
 echo "Build temp directory: $BUILD_TEMP_DIR"
 
 # Run native tests
-run_test_suite "native" "llgo build -o $BUILD_TEMP_DIR/buildcache.out -compiler-verbose ." ""
+run_test_suite "native" \
+    "llgo build -o $BUILD_TEMP_DIR/buildcache.out -compiler-verbose ." \
+    "" \
+    "$BUILD_TEMP_DIR/buildcache.out"
 
 # Run WASM tests - always use iwasm from llgo cache directory
 # Determine cache directory based on platform

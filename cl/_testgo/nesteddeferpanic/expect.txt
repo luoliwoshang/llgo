@@ -1,0 +1,5 @@
+replacement 5
+resume inner 2
+resume outer 1
+recover-then-panic old 2
+recover-then-panic outer 3

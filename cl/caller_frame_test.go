@@ -499,7 +499,6 @@ func TestRuntimeFrameNameNormalization(t *testing.T) {
 }
 
 func TestCompileRuntimeCallerFrameInstrumentation(t *testing.T) {
-	t.Setenv("LLGO_SHADOW_STACK", "1")
 	ssapkg, files := buildCallerFrameSSAPackage(t, "example.com/foo", `package foo
 import "runtime/debug"
 
@@ -508,7 +507,9 @@ func f() {
 }
 `)
 	prog := newLLSSAProg(t)
-	pkg, err := NewPackage(prog, ssapkg, files)
+	pkg, _, err := NewPackageExWithEmbedMetaOptions(
+		prog, nil, nil, nil, ssapkg, files, nil, false, Options{ShadowStack: true},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -742,7 +743,6 @@ func top() {
 }
 
 func TestCompileRuntimeCallerFrameUsesGoNameForLinkname(t *testing.T) {
-	t.Setenv("LLGO_SHADOW_STACK", "1")
 	ssapkg, files := buildCallerFrameSSAPackage(t, "command-line-arguments", `package main
 import "runtime"
 
@@ -753,7 +753,9 @@ func renamedPC() uintptr {
 `)
 	prog := newLLSSAProg(t)
 	prog.SetLinkname("command-line-arguments.renamedPC", "main.renamedPCSymbol")
-	pkg, err := NewPackage(prog, ssapkg, files)
+	pkg, _, err := NewPackageExWithEmbedMetaOptions(
+		prog, nil, nil, nil, ssapkg, files, nil, false, Options{ShadowStack: true},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -821,7 +823,6 @@ func f() { _ = runtime.FuncForPC(0) }
 }
 
 func TestCompileRuntimeCallerLocationOnlyForRuntimePaths(t *testing.T) {
-	t.Setenv("LLGO_SHADOW_STACK", "1")
 	ssapkg, files := buildCallerFrameSSAPackage(t, "example.com/foo", `package foo
 import "runtime"
 
@@ -833,7 +834,9 @@ func f() {
 }
 `)
 	prog := newLLSSAProg(t)
-	pkg, err := NewPackage(prog, ssapkg, files)
+	pkg, _, err := NewPackageExWithEmbedMetaOptions(
+		prog, nil, nil, nil, ssapkg, files, nil, false, Options{ShadowStack: true},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

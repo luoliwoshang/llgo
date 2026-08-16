@@ -4,11 +4,31 @@
 package ssa
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/goplus/llgo/internal/optlevel"
 	"github.com/xgo-dev/llvm"
 )
+
+func TestTargetEffectivePlatform(t *testing.T) {
+	target := &Target{}
+	if got := target.effectiveGOOS(); got != runtime.GOOS {
+		t.Fatalf("effectiveGOOS() = %q, want %q", got, runtime.GOOS)
+	}
+	if got := target.effectiveGOARCH(); got != runtime.GOARCH {
+		t.Fatalf("effectiveGOARCH() = %q, want %q", got, runtime.GOARCH)
+	}
+
+	target.GOOS = "plan9"
+	target.GOARCH = "386"
+	if got := target.effectiveGOOS(); got != "plan9" {
+		t.Fatalf("effectiveGOOS() = %q, want plan9", got)
+	}
+	if got := target.effectiveGOARCH(); got != "386" {
+		t.Fatalf("effectiveGOARCH() = %q, want 386", got)
+	}
+}
 
 func TestTargetCodeGenOptLevel(t *testing.T) {
 	tests := []struct {

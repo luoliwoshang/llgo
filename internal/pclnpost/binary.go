@@ -18,9 +18,9 @@
 // generation (doc/design/pclntab-linkphase.md). It parses a linked LLGo
 // binary's funcinfo site section, deduplicates LTO inline copies against the
 // symbol table, sorts the entries, builds the Go-layout findfunctab via
-// internal/pclntab, and prints what the P2 build integration would write
-// back. It performs no writes; its purpose is to prove the risky steps on
-// real binaries.
+// internal/pclntab, and transactionally replaces the linked image. Isolated
+// LTO carriers in embedded Mach-O executables are physically compacted; shared
+// carriers in other Mach-O build modes retain their file layout.
 package pclnpost
 
 import (

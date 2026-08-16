@@ -593,11 +593,9 @@ var (
 	acceptanceLLGoErr  string
 )
 
-// runLLGoInModule builds the llgo binary once per test process and runs it
-// with the module directory as the working directory (llgo resolves
-// packages relative to the cwd, and `go run` refuses directories outside
-// its own module).
-func runLLGoInModule(t *testing.T, dir string, args ...string) (string, error) {
+// acceptanceLLGoBinary builds one llgo binary shared by acceptance tests in
+// this process.
+func acceptanceLLGoBinary(t *testing.T) string {
 	t.Helper()
 	repoRoot := findRepoRoot(t)
 	t.Setenv("LLGO_ROOT", repoRoot)
@@ -619,7 +617,15 @@ func runLLGoInModule(t *testing.T, dir string, args ...string) (string, error) {
 	if acceptanceLLGoErr != "" {
 		t.Fatalf("building llgo failed: %s", acceptanceLLGoErr)
 	}
-	cmd := exec.Command(acceptanceLLGoBin, args...)
+	return acceptanceLLGoBin
+}
+
+// runLLGoInModule runs the shared llgo binary with the module directory as the
+// working directory (llgo resolves packages relative to the cwd).
+func runLLGoInModule(t *testing.T, dir string, args ...string) (string, error) {
+	t.Helper()
+	llgoBin := acceptanceLLGoBinary(t)
+	cmd := exec.Command(llgoBin, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return string(out), err

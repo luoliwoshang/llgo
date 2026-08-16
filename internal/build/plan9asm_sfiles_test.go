@@ -109,3 +109,28 @@ printf '{"Dir":"%s","SFiles":["asm_amd64.s"]}\n' "$PACKAGE_DIR"
 		t.Fatalf("pkgSFiles = %v, want [%s]", got, sfile)
 	}
 }
+
+func TestPlan9AsmEnabledInitializesSelectedPackages(t *testing.T) {
+	t.Setenv(llgoPlan9ASMPkgs, "example.com/first, example.com/second")
+	ctx := &context{buildConf: &Config{}}
+	if !ctx.plan9asmEnabled("example.com/first") {
+		t.Fatal("selected Plan 9 assembly package was disabled")
+	}
+	if ctx.plan9asmEnabled("example.com/other") {
+		t.Fatal("unselected Plan 9 assembly package was enabled")
+	}
+	if !ctx.plan9asmReady || ctx.plan9asmMode != plan9asmEnvSelected || !ctx.plan9asmPkgs["example.com/second"] {
+		t.Fatalf("prepared Plan 9 assembly policy = mode %v, packages %v", ctx.plan9asmMode, ctx.plan9asmPkgs)
+	}
+}
+
+func TestPkgSFilesRejectsNilFrozenCache(t *testing.T) {
+	ctx := &context{sfilesFrozen: true}
+	_, err := pkgSFiles(ctx, &packages.Package{
+		ID:      "example.com/unprepared",
+		PkgPath: "example.com/unprepared",
+	})
+	if err == nil {
+		t.Fatal("nil frozen SFiles cache accepted an unprepared package")
+	}
+}

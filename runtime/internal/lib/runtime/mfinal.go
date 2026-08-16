@@ -15,6 +15,8 @@ import (
 	"github.com/goplus/llgo/runtime/internal/clite/bdwgc"
 	psync "github.com/goplus/llgo/runtime/internal/clite/pthread/sync"
 	"github.com/goplus/llgo/runtime/internal/clite/sync/atomic"
+	"github.com/goplus/llgo/runtime/internal/ffi"
+	llruntime "github.com/goplus/llgo/runtime/internal/runtime"
 )
 
 type finalizerClosure struct {
@@ -23,13 +25,17 @@ type finalizerClosure struct {
 }
 
 type finalizerEntry struct {
-	fn     any
-	obj    unsafe.Pointer
-	key    uintptr
-	next   *finalizerEntry
-	prevFn bdwgc.FinalizerFunc
-	prevCb unsafe.Pointer
-	stop   int32
+	fn          any
+	sig         *ffi.Signature // retains the conservatively allocated return-type graph
+	argTypes    []*ffi.Type    // owns the backing storage referenced by sig.ArgTypes
+	retSize     uintptr
+	obj         unsafe.Pointer
+	key         uintptr
+	next        *finalizerEntry
+	prevFn      bdwgc.FinalizerFunc
+	prevCb      unsafe.Pointer
+	stop        int32
+	explicitEnv bool
 }
 
 var finalizerState struct {
@@ -80,7 +86,17 @@ func SetFinalizer(obj any, finalizer any) {
 	if len(ft.In) != 1 || ft.In[0] != objFace._type {
 		throw("runtime.SetFinalizer: cannot pass " + objFace._type.String() + " to finalizer " + finalizerFace._type.String())
 	}
-	entry := &finalizerEntry{fn: finalizer, key: key}
+	c := (*finalizerClosure)(finalizerFace.data)
+	explicitEnv := c.env != nil && ffi.ClosureEnvExplicit
+	sig, argTypes, retSize := newFinalizerFFISignature(ft, explicitEnv)
+	entry := &finalizerEntry{
+		fn:          finalizer,
+		sig:         sig,
+		argTypes:    argTypes,
+		explicitEnv: explicitEnv,
+		retSize:     retSize,
+		key:         key,
+	}
 	var oldFn bdwgc.FinalizerFunc
 	var oldCb unsafe.Pointer
 	bdwgc.RegisterFinalizer(objPtr, setFinalizerCallback, unsafe.Pointer(entry), &oldFn, &oldCb)
@@ -100,20 +116,32 @@ func ifacePointerData(e *eface) unsafe.Pointer {
 }
 
 func finalizerFuncType(t *abi.Type) *abi.FuncType {
-	if t.IsClosure() {
-		st := t.StructType()
-		if st == nil || len(st.Fields) == 0 {
-			return nil
-		}
-		return st.Fields[0].Typ.FuncType()
+	if !t.IsClosure() {
+		return nil
 	}
-	return t.FuncType()
+	st := t.StructType()
+	if st == nil || len(st.Fields) == 0 {
+		return nil
+	}
+	return st.Fields[0].Typ.FuncType()
 }
 
-func callFinalizer(fn any, ptr unsafe.Pointer) {
-	c := (*finalizerClosure)((*eface)(unsafe.Pointer(&fn)).data)
-	f := *(*func(unsafe.Pointer))(unsafe.Pointer(c))
-	f(ptr)
+func callFinalizer(entry *finalizerEntry) {
+	face := (*eface)(unsafe.Pointer(&entry.fn))
+	c := (*finalizerClosure)(face.data)
+	var ret unsafe.Pointer
+	if entry.retSize != 0 {
+		ret = llruntime.AllocU(entry.retSize)
+	}
+	ptr := entry.obj
+	if entry.explicitEnv {
+		ffi.CallWithEnv(entry.sig, c.fn, c.env, ret, unsafe.Pointer(&c.env), unsafe.Pointer(&ptr))
+	} else {
+		ffi.CallWithEnv(entry.sig, c.fn, c.env, ret, unsafe.Pointer(&ptr))
+	}
+	KeepAlive(entry.fn)
+	KeepAlive(entry.sig)
+	KeepAlive(entry.argTypes)
 }
 
 func setFinalizerCallback(ptr unsafe.Pointer, cb unsafe.Pointer) {
@@ -167,7 +195,7 @@ func runFinalizers() {
 		finalizerState.mu.Unlock()
 
 		if atomic.Load(&entry.stop) != 1 {
-			callFinalizer(entry.fn, entry.obj)
+			callFinalizer(entry)
 		}
 		entry.obj = nil
 	}

@@ -157,7 +157,7 @@ func TestNormalizeToArchiveFailsWithoutObjectFallback(t *testing.T) {
 			buffer: memoryBuf,
 		}},
 	}
-	_, err := finalizePackageBuild(ctx, &packageBuildTask{pkg: pkg}, false)
+	err := finalizePackageBuild(ctx, &packageBuildTask{pkg: pkg}, false)
 	if err == nil {
 		t.Fatal("finalizePackageBuild succeeded with a missing member")
 	}

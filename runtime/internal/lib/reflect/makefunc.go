@@ -29,6 +29,7 @@ import (
 	"github.com/goplus/llgo/runtime/abi"
 	c "github.com/goplus/llgo/runtime/internal/clite"
 	"github.com/goplus/llgo/runtime/internal/ffi"
+	"github.com/goplus/llgo/runtime/internal/runtime"
 )
 
 type funcData struct {
@@ -36,9 +37,16 @@ type funcData struct {
 	tout []*abi.Type
 	fn   func(args []Value) (results []Value)
 	nin  int
+
+	recoverFrom unsafe.Pointer
+	recoverTo   unsafe.Pointer
 }
 
 func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
+	return makeFunc(typ, fn, ValueOf(fn).UnsafePointer())
+}
+
+func makeFunc(typ Type, fn func(args []Value) (results []Value), recoverTo unsafe.Pointer) Value {
 	if typ.Kind() != Func {
 		panic("reflect: call of MakeFunc with non-Func type")
 	}
@@ -52,7 +60,14 @@ func MakeFunc(typ Type, fn func(args []Value) (results []Value)) Value {
 	}
 	outs := toRuntimeTypes(ftyp.Out)
 	closure := ffi.NewClosure()
-	userdata := &funcData{ftyp: ftyp, fn: fn, nin: len(ftyp.In), tout: outs}
+	userdata := &funcData{
+		ftyp:        ftyp,
+		fn:          fn,
+		nin:         len(ftyp.In),
+		tout:        outs,
+		recoverFrom: closure.Fn,
+		recoverTo:   recoverTo,
+	}
 
 	switch len(ftyp.Out) {
 	case 0:
@@ -89,7 +104,7 @@ func bind0(cif *ffi.Signature, ret unsafe.Pointer, args *unsafe.Pointer, userdat
 	for i := 0; i < fd.nin; i++ {
 		ins[i] = ffiToValue(ffi.Index(args, uintptr(i)), fd.ftyp.In[i])
 	}
-	fd.fn(ins)
+	fd.call(ins)
 }
 
 func bind1(cif *ffi.Signature, ret unsafe.Pointer, args *unsafe.Pointer, userdata unsafe.Pointer) {
@@ -98,7 +113,7 @@ func bind1(cif *ffi.Signature, ret unsafe.Pointer, args *unsafe.Pointer, userdat
 	for i := 0; i < fd.nin; i++ {
 		ins[i] = ffiToValue(ffi.Index(args, uintptr(i)), fd.ftyp.In[i])
 	}
-	out := validateMakeFuncResults(fd.fn(ins), fd.ftyp, fd.tout)
+	out := validateMakeFuncResults(fd.call(ins), fd.ftyp, fd.tout)
 	storeMakeFuncResult(ret, out[0], fd.tout[0])
 }
 
@@ -108,7 +123,7 @@ func bindn(cif *ffi.Signature, ret unsafe.Pointer, args *unsafe.Pointer, userdat
 	for i := 0; i < fd.nin; i++ {
 		ins[i] = ffiToValue(ffi.Index(args, uintptr(i)), fd.ftyp.In[i])
 	}
-	outs := validateMakeFuncResults(fd.fn(ins), fd.ftyp, fd.tout)
+	outs := validateMakeFuncResults(fd.call(ins), fd.ftyp, fd.tout)
 	var offset uintptr = 0
 	alignment := uintptr(cif.RType.Alignment)
 	for i, out := range outs {
@@ -116,6 +131,16 @@ func bindn(cif *ffi.Signature, ret unsafe.Pointer, args *unsafe.Pointer, userdat
 		storeMakeFuncResult(add(ret, offset, ""), out, typ)
 		offset += (typ.Size_ + alignment - 1) &^ (alignment - 1)
 	}
+}
+
+// call crosses the libffi entry stub as a transparent wrapper. This mirrors
+// the Go runtime's treatment of reflect.makeFuncStub and methodValueCall as
+// wrapper frames when deciding whether recover is called directly.
+func (fd *funcData) call(in []Value) []Value {
+	prev := runtime.StartRecoverFrameAlias(fd.recoverFrom, fd.recoverTo)
+	out := fd.fn(in)
+	runtime.EndRecoverFrameAlias(prev)
+	return out
 }
 
 func validateMakeFuncResults(out []Value, ftyp *abi.FuncType, touts []*abi.Type) []Value {
@@ -269,15 +294,15 @@ func makeMethodValue(op string, v Value) Value {
 	// userdata owns the receiver state. Pointing a hidden-env funcval directly
 	// at Ifn would be invalid because Ifn expects the receiver as an ordinary
 	// first ABI argument.
-	methodReceiver(op, rcvr, int(v.flag)>>flagMethodShift)
+	_, _, recoverTo := methodReceiver(op, rcvr, int(v.flag)>>flagMethodShift)
 	method := v
 	callOp := "Call"
 	if method.Type().(*rtype).t.FuncType().Variadic() {
 		callOp = "CallSlice"
 	}
-	ret := MakeFunc(v.Type(), func(args []Value) []Value {
+	ret := makeFunc(v.Type(), func(args []Value) []Value {
 		return method.call(callOp, args)
-	})
+	}, recoverTo)
 	// Cause panic if method is not appropriate.
 	// The panic would still happen during the call if we omit this,
 	// but we want Interface() and other operations to fail early.

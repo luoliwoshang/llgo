@@ -51,23 +51,12 @@ const (
 )
 
 var (
-	debugInstr bool
-	debugGoSSA bool
-
-	enableCallTracing bool
-	enableDbg         bool
-	enableDbgSyms     bool
-	disableInline     bool
-
-	// enableExportRename enables //export to use different C symbol names than Go function names.
-	// This is for TinyGo compatibility when using -target flag for embedded targets.
-	// Currently, using -target implies TinyGo embedded target mode.
-	enableExportRename bool
+	debugInstr    bool
+	debugGoSSA    bool
+	disableInline bool
 )
 
-// Options contains frontend behavior for one package compilation. Drivers that
-// may host multiple builds in one process should pass Options explicitly
-// instead of changing the legacy package-level Enable* settings.
+// Options contains frontend behavior for one package compilation.
 type Options struct {
 	Debug        bool
 	DebugSymbols bool
@@ -77,16 +66,6 @@ type Options struct {
 	// PreloadedSyntax means all Program-side source metadata was collected
 	// before lowering and is now shared read-only by backend Programs.
 	PreloadedSyntax bool
-}
-
-func legacyOptions() Options {
-	return Options{
-		Debug:        enableDbg,
-		DebugSymbols: enableDbgSyms,
-		Trace:        enableCallTracing,
-		ExportRename: enableExportRename,
-		ShadowStack:  os.Getenv("LLGO_SHADOW_STACK") == "1",
-	}
 }
 
 // SetDebug sets debug flags.
@@ -139,31 +118,6 @@ func dbgGoSSAln(args ...any) {
 	}
 }
 
-// EnableDebug changes the legacy process-wide default.
-// Deprecated: pass Options to NewPackageExWithEmbedMetaOptions.
-func EnableDebug(b bool) {
-	enableDbg = b
-}
-
-// EnableDbgSyms changes the legacy process-wide default.
-// Deprecated: pass Options to NewPackageExWithEmbedMetaOptions.
-func EnableDbgSyms(b bool) {
-	enableDbgSyms = b
-}
-
-// EnableTrace changes the legacy process-wide default.
-// Deprecated: pass Options to NewPackageExWithEmbedMetaOptions.
-func EnableTrace(b bool) {
-	enableCallTracing = b
-}
-
-// EnableExportRename enables or disables //export with different C symbol names.
-// This is enabled when using -target flag for TinyGo compatibility.
-// Deprecated: pass Options to NewPackageExWithEmbedMetaOptions.
-func EnableExportRename(b bool) {
-	enableExportRename = b
-}
-
 // -----------------------------------------------------------------------------
 
 type instrOrValue interface {
@@ -207,12 +161,13 @@ type context struct {
 	linkOnceFns          map[*ssa.Function]none
 	stackDefers          map[*ssa.Function]bool
 	anonDefers           map[*ssa.Function]bool
+	recoverFacts         *recoverFacts
 	debugDIVars          map[*types.Var]llssa.DIVar
 	debugAllocVars       map[*ssa.Alloc]*types.Var
 	runtimeCallerFuncs   map[*ssa.Function]bool
 	pcLineSeq            uint64
 	options              Options
-	optionsSet           bool
+	recoverSlots         map[*ssa.Alloc]none
 
 	patches          Patches
 	blkInfos         []blocks.Info
@@ -244,13 +199,6 @@ type context struct {
 	staticInitStores  map[*ssa.Store]none
 	staticInitInstrs  map[ssa.Instruction]none
 	locality          localityLowering
-}
-
-func (p *context) frontendOptions() Options {
-	if p != nil && p.optionsSet {
-		return p.options
-	}
-	return legacyOptions()
 }
 
 func (p *context) rewriteValue(name string) (string, bool) {
@@ -455,7 +403,13 @@ func (p *context) compileGlobal(pkg llssa.Package, gbl *ssa.Global) {
 	}
 }
 
-func makeClosureCtx(pkg *types.Package, vars []*ssa.FreeVar) *types.Var {
+func (p *context) makeClosureCtx(fn *ssa.Function, pkg *types.Package, vars []*ssa.FreeVar) *types.Var {
+	oldGoFn := p.goFn
+	p.goFn = fn
+	defer func() {
+		p.goFn = oldGoFn
+	}()
+
 	n := len(vars)
 	flds := make([]*types.Var, n)
 	for i, v := range vars {
@@ -463,7 +417,7 @@ func makeClosureCtx(pkg *types.Package, vars []*ssa.FreeVar) *types.Var {
 		if name == "" {
 			name = "_"
 		}
-		flds[i] = types.NewField(token.NoPos, pkg, name, v.Type(), false)
+		flds[i] = types.NewField(token.NoPos, pkg, name, p.patchType(v.Type()), false)
 	}
 	t := types.NewPointer(types.NewStruct(flds, nil))
 	return types.NewParam(token.NoPos, pkg, "$env", t)
@@ -633,7 +587,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		dbgInstrln("==> NewZeroSizedClosure", name, "type:", sig)
 	} else if hasFreeVars {
 		dbgInstrln("==> NewClosure", name, "type:", sig)
-		ctx = makeClosureCtx(pkgTypes, f.FreeVars)
+		ctx = p.makeClosureCtx(f, pkgTypes, f.FreeVars)
 	} else if hasExplicitEnv {
 		dbgInstrln("==> NewEnvFunc", name, "type:", sig)
 		ctx = types.NewVar(token.NoPos, nil, "$env", types.Typ[types.UnsafePointer])
@@ -658,10 +612,11 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 	noInlineDirective := hasNoInlineDirective(f)
 	runtimeStackNoInline := needsRuntimeStackNoInline(pkgTypes, f)
 	pcLineNoInline := p.needsPCLineNoInline(f)
-	if disableInline || noInlineDirective || runtimeStackNoInline || pcLineNoInline {
+	usesRecover := p.functionUsesRecover(f)
+	if disableInline || noInlineDirective || runtimeStackNoInline || pcLineNoInline || usesRecover {
 		fn.Inline(llssa.NoInline)
 	}
-	if noInlineDirective || runtimeStackNoInline || pcLineNoInline {
+	if noInlineDirective || runtimeStackNoInline || pcLineNoInline || usesRecover {
 		fn.DisableTailCalls()
 	}
 	p.funcs[f] = fn
@@ -696,19 +651,26 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		if f.Recover != nil { // set recover block
 			fn.SetRecover(fn.Block(f.Recover.Index))
 		}
-		dbgEnabled := p.frontendOptions().Debug
-		dbgSymsEnabled := p.frontendOptions().DebugSymbols && (f == nil || f.Origin() == nil)
+		dbgEnabled := p.options.Debug
+		dbgSymsEnabled := p.options.DebugSymbols && (f == nil || f.Origin() == nil)
 		p.inits = append(p.inits, func() {
 			oldFn, oldGoFn, oldMethodNilDerefChecks, oldCallerFrameMark := p.fn, p.goFn, p.methodNilDerefChecks, p.callerFrameMark
 			oldLocalityFunction := p.locality.function
+			oldRecoverSlots := p.recoverSlots
 			p.fn = fn
 			p.goFn = f
 			p.callerFrameMark = llssa.Nil
 			p.locality.function = localityFunction{}
 			p.state = state // restore pkgState when compiling funcBody
+			if f.Recover != nil {
+				p.recoverSlots = make(map[*ssa.Alloc]none)
+			} else {
+				p.recoverSlots = nil
+			}
 			defer func() {
 				p.fn, p.goFn, p.methodNilDerefChecks, p.callerFrameMark = oldFn, oldGoFn, oldMethodNilDerefChecks, oldCallerFrameMark
 				p.locality.function = oldLocalityFunction
+				p.recoverSlots = oldRecoverSlots
 			}()
 			p.phis = nil
 			if dbgSymsEnabled {
@@ -939,17 +901,20 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	var instrs = block.Instrs[n:]
 	var ret = fn.Block(block.Index)
 	b.SetBlock(ret)
+	if block.Index == 0 && p.functionUsesRecover(block.Parent()) {
+		b.BindRecoverFrame()
+	}
 	if block.Index == 0 {
 		p.enterExportedLocalContext(b)
 	}
 	if block.Index == 0 && p.shouldTrackCallerFrames() {
 		p.pushCallerLocationFrame(b, block.Parent())
 	}
-	if block.Index == 0 && p.frontendOptions().Trace && !strings.HasPrefix(fn.Name(), "github.com/goplus/llgo/runtime/internal/runtime.Print") {
+	if block.Index == 0 && p.options.Trace && !strings.HasPrefix(fn.Name(), "github.com/goplus/llgo/runtime/internal/runtime.Print") {
 		b.Printf("call " + fn.Name() + "\n\x00")
 	}
 	// place here to avoid wrong current-block
-	if p.frontendOptions().DebugSymbols && block.Parent().Origin() == nil && block.Index == 0 {
+	if p.options.DebugSymbols && block.Parent().Origin() == nil && block.Index == 0 {
 		p.debugParams(b, block.Parent())
 	}
 
@@ -1221,6 +1186,29 @@ func (p *context) syntheticMakeSliceCap(v *ssa.Slice) (llssa.Expr, bool) {
 	return p.prog.IntVal(uint64(arr.Len()), p.prog.Int()), true
 }
 
+func (p *context) markRecoverSlot(v *ssa.Alloc) {
+	if p.recoverSlots == nil || v.Heap {
+		return
+	}
+	p.recoverSlots[v] = none{}
+}
+
+func (p *context) isRecoverSlotAddr(v ssa.Value) bool {
+	if p.recoverSlots == nil {
+		return false
+	}
+	switch v := v.(type) {
+	case *ssa.Alloc:
+		_, ok := p.recoverSlots[v]
+		return ok
+	case *ssa.FieldAddr:
+		return p.isRecoverSlotAddr(v.X)
+	case *ssa.IndexAddr:
+		return p.isRecoverSlotAddr(v.X)
+	}
+	return false
+}
+
 func isAllocVargs(ctx *context, v *ssa.Alloc) bool {
 	refs, ok := nonDebugReferrers(v)
 	if !ok || len(refs) == 0 {
@@ -1410,6 +1398,9 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 				}
 			}
 			ret = b.UnOp(v.Op, x)
+			if v.Op == token.MUL && p.isRecoverSlotAddr(v.X) {
+				ret = ret.SetVolatile(true)
+			}
 		}
 	case *ssa.ChangeType:
 		t := v.Type()
@@ -1445,6 +1436,10 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		elem := p.type_(t.Elem(), llssa.InGo)
 		ret = b.Alloc(elem, v.Heap)
 		p.debugAlloc(b, v, ret)
+		p.markRecoverSlot(v)
+		if p.isRecoverSlotAddr(v) {
+			b.Store(ret, p.prog.Zero(elem)).SetVolatile(true)
+		}
 	case *ssa.IndexAddr:
 		vx := v.X
 		if _, ok := p.isVArgs(vx); ok { // varargs: this is a varargs index
@@ -1757,7 +1752,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	if _, ok := p.staticInitInstrs[instr]; ok {
 		return
 	}
-	if p.frontendOptions().Debug && instr.Parent().Origin() == nil {
+	if p.options.Debug && instr.Parent().Origin() == nil {
 		if _, isDebugRef := instr.(*ssa.DebugRef); !isDebugRef {
 			scope := p.getDebugLocScope(instr.Parent(), instr.Pos())
 			if scope != nil {
@@ -1801,7 +1796,10 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		}
 		ptr := p.compileValue(b, va)
 		val := p.compileValue(b, v.Val)
-		b.Store(ptr, val)
+		store := b.Store(ptr, val)
+		if p.isRecoverSlotAddr(va) {
+			store.SetVolatile(true)
+		}
 	case *ssa.Jump:
 		jmpb := p.jumpTo(v)
 		b.Jump(jmpb)
@@ -1874,7 +1872,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		p.recordPanicLocation(b, v.Pos())
 		b.Send(ch, x)
 	case *ssa.DebugRef:
-		if p.frontendOptions().DebugSymbols && v.Parent().Origin() == nil {
+		if p.options.DebugSymbols && v.Parent().Origin() == nil {
 			p.debugRef(b, v)
 		}
 	default:
@@ -1937,7 +1935,7 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 		if isCgoVar(varName) {
 			p.cgoSymbols = append(p.cgoSymbols, val.Name())
 		}
-		if p.frontendOptions().DebugSymbols && p.localityAllowsGlobalDebug(v) {
+		if p.options.DebugSymbols && p.localityAllowsGlobalDebug(v) {
 			pos := p.fset.Position(v.Pos())
 			b.DIGlobal(val, v.Name(), pos)
 		}
@@ -2196,7 +2194,7 @@ func NewPackage(prog llssa.Program, pkg *ssa.Package, files []*ast.File) (ret ll
 // only affects string-typed globals defined in the current package.
 // Deprecated: use NewPackageExWithEmbedMetaOptions with explicit Options.
 func NewPackageEx(prog llssa.Program, patches Patches, rewrites map[string]string, pkg *ssa.Package, files []*ast.File) (ret llssa.Package, externs []string, err error) {
-	return newPackageEx(prog, nil, patches, rewrites, pkg, files, nil, false, legacyOptions())
+	return newPackageEx(prog, nil, patches, rewrites, pkg, files, nil, false, Options{})
 }
 
 // NewPackageExWithEmbed compiles a package using pre-loaded go:embed metadata.
@@ -2208,13 +2206,13 @@ func NewPackageEx(prog llssa.Program, patches Patches, rewrites map[string]strin
 // instance is created for this call.
 // Deprecated: use NewPackageExWithEmbedMetaOptions with explicit Options.
 func NewPackageExWithEmbed(prog llssa.Program, ct *CallerTracking, patches Patches, rewrites map[string]string, pkg *ssa.Package, files []*ast.File, embedMap goembed.VarMap) (ret llssa.Package, externs []string, err error) {
-	return newPackageEx(prog, ct, patches, rewrites, pkg, files, &embedMap, false, legacyOptions())
+	return newPackageEx(prog, ct, patches, rewrites, pkg, files, &embedMap, false, Options{})
 }
 
 // NewPackageExWithEmbedMeta compiles a package and optionally collects metadata.
 // Deprecated: use NewPackageExWithEmbedMetaOptions with explicit Options.
 func NewPackageExWithEmbedMeta(prog llssa.Program, ct *CallerTracking, patches Patches, rewrites map[string]string, pkg *ssa.Package, files []*ast.File, embedMap goembed.VarMap, metaCollect bool) (ret llssa.Package, externs []string, err error) {
-	return newPackageEx(prog, ct, patches, rewrites, pkg, files, &embedMap, metaCollect, legacyOptions())
+	return newPackageEx(prog, ct, patches, rewrites, pkg, files, &embedMap, metaCollect, Options{})
 }
 
 // NewPackageExWithEmbedMetaOptions is NewPackageExWithEmbedMeta with explicit
@@ -2266,11 +2264,11 @@ func newPackageEx(prog llssa.Program, ct *CallerTracking, patches Patches, rewri
 		goPkg:            pkg,
 		patches:          patches,
 		options:          options,
-		optionsSet:       true,
 		skips:            make(map[string]none),
 		vargs:            make(map[*ssa.Alloc][]llssa.Expr),
 		funcs:            make(map[*ssa.Function]llssa.Function),
 		linkOnceFns:      make(map[*ssa.Function]none),
+		recoverFacts:     ct.recoverAnalysis(),
 		addrOfFieldAddrs: collectAddrOfFieldSelectors(files),
 		loaded: map[*types.Package]*pkgInfo{
 			types.Unsafe: {kind: PkgDeclOnly}, // TODO(xsw): PkgNoInit or PkgDeclOnly?
@@ -2667,19 +2665,16 @@ func (p *context) localTypeOrdinal(obj types.Object) int {
 }
 
 func (p *context) inCurrentFunction(pos token.Pos) bool {
-	if !pos.IsValid() {
-		return false
-	}
-	syntax := p.currentFunctionSyntax()
-	return syntax != nil && syntax.Pos() <= pos && pos <= syntax.End()
+	return p.enclosingFunctionSyntax(pos) != nil
 }
 
 func (p *context) localTypeOrdinalBySyntax(pos token.Pos) int {
-	if !p.inCurrentFunction(pos) {
+	syntax := p.enclosingFunctionSyntax(pos)
+	if syntax == nil {
 		return 0
 	}
 	n := 0
-	ast.Inspect(p.currentFunctionSyntax(), func(node ast.Node) bool {
+	ast.Inspect(syntax, func(node ast.Node) bool {
 		spec, ok := node.(*ast.TypeSpec)
 		if !ok {
 			return true
@@ -2692,15 +2687,22 @@ func (p *context) localTypeOrdinalBySyntax(pos token.Pos) int {
 	return n
 }
 
-func (p *context) currentFunctionSyntax() ast.Node {
-	if p.goFn == nil {
+func (p *context) enclosingFunctionSyntax(pos token.Pos) ast.Node {
+	if !pos.IsValid() {
 		return nil
 	}
-	fn := p.goFn
-	if origin := fn.Origin(); origin != nil {
-		fn = origin
+	// Instantiated local types may lose their scope parent while a nested
+	// closure still refers to a declaration in its enclosing generic function.
+	for fn := p.goFn; fn != nil; fn = fn.Parent() {
+		syntaxFn := fn
+		if origin := fn.Origin(); origin != nil {
+			syntaxFn = origin
+		}
+		if syntax := syntaxFn.Syntax(); syntax != nil && syntax.Pos() <= pos && pos <= syntax.End() {
+			return syntax
+		}
 	}
-	return fn.Syntax()
+	return nil
 }
 
 func isTypeParamObject(obj types.Object) bool {

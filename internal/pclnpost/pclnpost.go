@@ -30,14 +30,18 @@ type Stats struct {
 	NoSymbol     int
 	FtabEntries  int
 	Buckets      int
+	// CarrierBytesRemoved is the number of bytes cut from the metadata carrier
+	// before an existing Mach-O code signature is regenerated. It is not the
+	// signed output file's net size change.
+	CarrierBytesRemoved uint64
 }
 
 // Rewrite parses the linked binary's funcinfo site sections, deduplicates
 // LTO inline copies against the symbol table, builds the Go-layout prebuilt
-// table and rewrites the entry section in place.
+// table, stages a compact executable image, and atomically replaces the input.
 // The runtime adopts the table when it sees the magic header and falls back
 // to first-use construction otherwise, so failures here leave a fully
-// functional binary.
+// functional and byte-for-byte unchanged binary.
 func Rewrite(path string) (Stats, error) {
 	var st Stats
 	info, err := load(path)
@@ -60,10 +64,10 @@ func Rewrite(path string) (Stats, error) {
 	if len(kept) == 0 {
 		return st, fmt.Errorf("no records survived dedup")
 	}
-	ftab, buckets, err := writeBack(path, info, kept)
+	ftab, buckets, removed, err := writeBack(path, info, kept)
 	if err != nil {
 		return st, err
 	}
-	st.FtabEntries, st.Buckets = ftab, buckets
+	st.FtabEntries, st.Buckets, st.CarrierBytesRemoved = ftab, buckets, removed
 	return st, nil
 }

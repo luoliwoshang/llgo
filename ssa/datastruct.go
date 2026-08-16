@@ -568,7 +568,7 @@ func (b Builder) Lookup(x, key Expr, commaOk bool) (ret Expr) {
 	prog := b.Prog
 	typ := b.abiType(x.raw.Type)
 	vtyp := prog.Elem(x.Type)
-	ptr := b.mapKeyPtr(key)
+	ptr := b.mapKeyPtr(x, key)
 	if commaOk {
 		vals := b.Call(b.Pkg.rtFunc("MapAccess2"), typ, x, ptr)
 		val := b.Load(Expr{b.impl.CreateExtractValue(vals.impl, 0, ""), prog.Pointer(vtyp)})
@@ -602,17 +602,33 @@ func (b Builder) MapUpdate(m, k, v Expr) {
 	}
 	dbgInstrf("MapUpdate %v[%v] = %v\n", m.impl, k.impl, v.impl)
 	typ := b.abiType(m.raw.Type)
-	ptr := b.mapKeyPtr(k)
+	ptr := b.mapKeyPtr(m, k)
 	ret := b.Call(b.Pkg.rtFunc("MapAssign"), typ, m, ptr)
 	ret.Type = b.Prog.Pointer(v.Type)
 	b.Store(ret, v)
 }
 
-// key => unsafe.Pointer
-func (b Builder) mapKeyPtr(x Expr) Expr {
-	typ := x.Type
+// mapKeyPtr allocates a temporary key value and returns it as unsafe.Pointer.
+// Use the map's declared key type for the allocation; in an instantiated
+// generic function, the expression may still use a type-parameter representation
+// with a different physical size.
+func (b Builder) mapKeyPtr(m, x Expr) Expr {
+	mapType, ok := m.raw.Type.Underlying().(*types.Map)
+	if !ok {
+		panic("mapKeyPtr called with non-map value")
+	}
+	typ := b.Prog.Type(mapType.Key(), InGo)
+	// Generic map bodies can expose either the instantiated key type or the
+	// type-parameter representation at this point. Keep the larger physical
+	// representation so runtime mapassign never reads past the temporary key.
+	if b.Prog.SizeOf(x.Type) > b.Prog.SizeOf(typ) {
+		typ = x.Type
+	}
 	vtyp := b.Prog.VoidPtr()
 	vptr := b.AllocU(typ)
+	if !types.Identical(typ.RawType(), x.RawType()) {
+		x = b.ChangeType(typ, x)
+	}
 	b.Store(vptr, x)
 	return Expr{vptr.impl, vtyp}
 }

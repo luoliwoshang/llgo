@@ -227,14 +227,14 @@ func TestParsePkgSyntaxCollectsLinknames(t *testing.T) {
 		directive string
 		want      string
 	}{
-		{name: "go-linkname", directive: "//go:linkname Sigsetjmp C.sigsetjmp", want: "C.sigsetjmp"},
-		{name: "go-linkname-tabs", directive: "//go:linkname\tSigsetjmp\tC.sigsetjmp", want: "C.sigsetjmp"},
-		{name: "llgo-linkname", directive: "//llgo:link Sigsetjmp C.sigsetjmp", want: "C.sigsetjmp"},
-		{name: "llgo-linkname-spaced", directive: "// llgo:link Sigsetjmp C.sigsetjmp", want: "C.sigsetjmp"},
+		{name: "go-linkname", directive: "//go:linkname Sigsetjmp C.sigsetjmp\nfunc Sigsetjmp()\n", want: "C.sigsetjmp"},
+		{name: "go-linkname-after", directive: "func Sigsetjmp()\n//go:linkname Sigsetjmp C.sigsetjmp\n", want: "C.sigsetjmp"},
+		{name: "llgo-linkname", directive: "//llgo:link Sigsetjmp C.sigsetjmp\nfunc Sigsetjmp()\n", want: "C.sigsetjmp"},
+		{name: "llgo-linkname-spaced", directive: "// llgo:link Sigsetjmp C.sigsetjmp\nfunc Sigsetjmp()\n", want: "C.sigsetjmp"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			src := "package runtime\nimport _ \"unsafe\"\n" + tt.directive + "\nfunc Sigsetjmp()\n"
+			src := "package runtime\nimport _ \"unsafe\"\n" + tt.directive
 			fset := token.NewFileSet()
 			file, err := parser.ParseFile(fset, "runtime.go", src, parser.ParseComments)
 			if err != nil {
@@ -254,6 +254,29 @@ func TestParsePkgSyntaxCollectsLinknames(t *testing.T) {
 	collectDeclarationDirectives(prog, nil, &ast.CommentGroup{List: []*ast.Comment{{Text: "//go:linkname Other C.other"}}}, llssa.PkgRuntime+".Sigsetjmp", "Sigsetjmp", token.NoPos)
 	if _, ok := prog.Linkname(llssa.PkgRuntime + ".Sigsetjmp"); ok {
 		t.Fatal("mismatched linkname was collected")
+	}
+
+	crossSrc := []string{
+		"package p\nimport _ \"unsafe\"\nfunc main() {}\n//go:linkname alias C.alias\n",
+		"package p\nfunc alias()\n",
+	}
+	crossFset := token.NewFileSet()
+	var crossFiles []*ast.File
+	for i, src := range crossSrc {
+		file, err := parser.ParseFile(crossFset, "cross"+string(rune('0'+i))+".go", src, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		crossFiles = append(crossFiles, file)
+	}
+	prog = llssa.NewProgram(nil)
+	crossPkg := types.NewPackage("example.com/p", "p")
+	crossPkg.Scope().Insert(types.NewFunc(token.NoPos, crossPkg, "alias", types.NewSignature(nil, nil, nil, false)))
+	if err := ParsePkgSyntax(prog, crossFset, crossPkg, crossFiles); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := prog.Linkname("example.com/p.alias"); !ok || got != "C.alias" {
+		t.Fatalf("cross-file linkname = (%q,%v), want (C.alias,true)", got, ok)
 	}
 }
 

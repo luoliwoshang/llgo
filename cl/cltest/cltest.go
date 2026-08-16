@@ -760,13 +760,6 @@ func filterRunOutput(in []byte) []byte {
 
 func CompileIREx(t *testing.T, src any, fname string, dbg bool, configure func(llssa.Program)) string {
 	t.Helper()
-	// Build.Do configures cl debug globals for full-package builds. Keep the
-	// single-file compiler assertions independent from any prior build test.
-	cl.EnableDebug(dbg)
-	cl.EnableDbgSyms(dbg)
-	defer cl.EnableDebug(false)
-	defer cl.EnableDbgSyms(false)
-
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, fname, src, parser.ParseComments)
 	if err != nil {
@@ -792,9 +785,12 @@ func CompileIREx(t *testing.T, src any, fname string, dbg bool, configure func(l
 		configure(prog)
 	}
 
-	ret, err := cl.NewPackage(prog, foo, files)
+	ret, _, err := cl.NewPackageExWithEmbedMetaOptions(
+		prog, nil, nil, nil, foo, files, nil, false,
+		cl.Options{Debug: dbg, DebugSymbols: dbg},
+	)
 	if err != nil {
-		t.Fatal("cl.NewPackage failed:", err)
+		t.Fatal("cl.NewPackageExWithEmbedMetaOptions failed:", err)
 	}
 	return ret.String()
 }

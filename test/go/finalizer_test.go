@@ -94,6 +94,64 @@ func TestRuntimeSetFinalizerCancel(t *testing.T) {
 	}
 }
 
+func TestRuntimeSetFinalizerWithLargeResult(t *testing.T) {
+	finalized := make(chan int, 1)
+	registerFinalizerForTest(func() {
+		x := new(int)
+		*x = 42
+		runtime.SetFinalizer(x, func(p *int) (unused [250]int) {
+			finalized <- *p
+			return
+		})
+	})
+
+	waitForFinalizerValue(t, finalized, 42)
+}
+
+func TestRuntimeSetFinalizerWithNarrowResult(t *testing.T) {
+	finalized := make(chan int, 1)
+	registerFinalizerForTest(func() {
+		x := new(int)
+		*x = 42
+		runtime.SetFinalizer(x, func(p *int) bool {
+			finalized <- *p
+			return true
+		})
+	})
+
+	waitForFinalizerValue(t, finalized, 42)
+}
+
+func registerFinalizerForTest(register func()) {
+	// Let the registration stack disappear before forcing collection. BDWGC
+	// conservatively scans live stacks and may otherwise retain a stale pointer
+	// to the object under test.
+	registered := make(chan struct{})
+	go func() {
+		register()
+		close(registered)
+	}()
+	<-registered
+}
+
+func waitForFinalizerValue(t *testing.T, finalized <-chan int, want int) {
+	t.Helper()
+	deadline := time.After(3 * time.Second)
+	for {
+		runGCWithTimeout(t)
+		select {
+		case got := <-finalized:
+			if got != want {
+				t.Fatalf("finalizer got %d, want %d", got, want)
+			}
+			return
+		case <-deadline:
+			t.Fatal("finalizer did not run")
+		default:
+		}
+	}
+}
+
 func runGCWithTimeout(t *testing.T) {
 	t.Helper()
 	done := make(chan struct{})

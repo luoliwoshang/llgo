@@ -859,24 +859,18 @@ func TestHandleExportDiffName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore global state
-			oldEnableExportRename := enableExportRename
-			defer func() {
-				EnableExportRename(oldEnableExportRename)
-			}()
-			EnableExportRename(tt.enableExportRename)
-
 			// Setup context
 			prog := llssa.NewProgram(nil)
 			pkg := prog.NewPackage("test", "test")
 			ctx := &context{
-				prog: prog,
-				pkg:  pkg,
+				prog:    prog,
+				pkg:     pkg,
+				options: Options{ExportRename: tt.enableExportRename},
 			}
 
 			// Call initLinkname with closure that mimics initLinknameByDoc behavior
 			ret := ctx.initLinkname(tt.line, true, func(name string, isExport bool) (string, bool, bool) {
-				return tt.fullName, false, name == tt.inPkgName || (isExport && enableExportRename)
+				return tt.fullName, false, name == tt.inPkgName || (isExport && ctx.options.ExportRename)
 			})
 
 			// Verify result
@@ -944,7 +938,7 @@ func TestInitLinknameByDocExportDiffNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Without enableExportRename, export with different name will panic
+			// Without ExportRename, export with different names will panic.
 			if !tt.wantExported && !tt.enableExportRename {
 				defer func() {
 					if r := recover(); r == nil {
@@ -953,19 +947,13 @@ func TestInitLinknameByDocExportDiffNames(t *testing.T) {
 				}()
 			}
 
-			// Save and restore global state
-			oldEnableExportRename := enableExportRename
-			defer func() {
-				EnableExportRename(oldEnableExportRename)
-			}()
-			EnableExportRename(tt.enableExportRename)
-
 			// Setup context
 			prog := llssa.NewProgram(nil)
 			pkg := prog.NewPackage("test", "test")
 			ctx := &context{
-				prog: prog,
-				pkg:  pkg,
+				prog:    prog,
+				pkg:     pkg,
+				options: Options{ExportRename: tt.enableExportRename},
 			}
 
 			// Call initLinknameByDoc
@@ -1018,17 +1006,12 @@ func TestInitLinkExportDiffNames(t *testing.T) {
 				}()
 			}
 
-			oldEnableExportRename := enableExportRename
-			defer func() {
-				EnableExportRename(oldEnableExportRename)
-			}()
-			EnableExportRename(tt.enableExportRename)
-
 			prog := llssa.NewProgram(nil)
 			pkg := prog.NewPackage("test", "test")
 			ctx := &context{
-				prog: prog,
-				pkg:  pkg,
+				prog:    prog,
+				pkg:     pkg,
+				options: Options{ExportRename: tt.enableExportRename},
 			}
 
 			ctx.initLinkname(tt.line, true, func(inPkgName string, isExport bool) (fullName string, isVar, ok bool) {

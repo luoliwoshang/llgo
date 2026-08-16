@@ -22,8 +22,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
 	"sort"
 )
 
@@ -52,11 +50,12 @@ type symIndexEntry struct {
 	idx uint32
 }
 
-// writeBack rewrites the entry-site section in place with the prebuilt table.
-func writeBack(path string, info *binaryInfo, kept []siteRecord) (ftabCount, bucketCount int, err error) {
+// writeBack rewrites the entry-site prefix with the prebuilt table, removes
+// the unused physical carrier tail, and publishes the staged image atomically.
+func writeBack(path string, info *binaryInfo, kept []siteRecord) (ftabCount, bucketCount int, bytesRemoved uint64, err error) {
 	symIdx, err := loadSymbolIndex(path, info)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	sort.Slice(kept, func(i, j int) bool { return kept[i].pc < kept[j].pc })
 	type row struct {
@@ -77,7 +76,7 @@ func writeBack(path string, info *binaryInfo, kept []siteRecord) (ftabCount, buc
 		rows = append(rows, row{pc: r.pc, idx: idx})
 	}
 	if len(rows) == 0 {
-		return 0, 0, fmt.Errorf("no resolvable entries")
+		return 0, 0, 0, fmt.Errorf("no resolvable entries")
 	}
 	base := rows[0].pc
 	count := len(rows) + 1 // + sentinel
@@ -108,7 +107,7 @@ func writeBack(path string, info *binaryInfo, kept []siteRecord) (ftabCount, buc
 			subIdx := lastLE(bucketStart + uint64(s)*subbucketSize)
 			delta := subIdx - baseIdx
 			if delta < 0 || delta > 0xffff {
-				return 0, 0, fmt.Errorf("subbucket delta overflow: %d", delta)
+				return 0, 0, 0, fmt.Errorf("subbucket delta overflow: %d", delta)
 			}
 			binary.LittleEndian.PutUint16(tmp[4+2*s:], uint16(delta))
 		}
@@ -117,9 +116,9 @@ func writeBack(path string, info *binaryInfo, kept []siteRecord) (ftabCount, buc
 
 	need := 32 + count*8 + len(buckets)
 	if need > int(info.entryVMSize) {
-		return 0, 0, fmt.Errorf("prebuilt blob needs %d bytes; entry section has %d", need, info.entryVMSize)
+		return 0, 0, 0, fmt.Errorf("prebuilt blob needs %d bytes; entry section has %d", need, info.entryVMSize)
 	}
-	blob := make([]byte, int(info.entryVMSize)) // zero tail
+	blob := make([]byte, need)
 	binary.LittleEndian.PutUint64(blob[0:], prebuiltMagic)
 	binary.LittleEndian.PutUint64(blob[8:], info.entryVMAddr)
 	binary.LittleEndian.PutUint64(blob[16:], base)
@@ -150,29 +149,43 @@ func writeBack(path string, info *binaryInfo, kept []siteRecord) (ftabCount, buc
 		inserts := []fixupInsert{{fileOff: info.entryFileOff + 16, targetVM: base}}
 		pending, err = unchainRanges(raw, ranges, inserts)
 		if err != nil {
-			return 0, 0, fmt.Errorf("chained fixups: %w", err)
+			return 0, 0, 0, fmt.Errorf("chained fixups: %w", err)
 		}
 	}
-	copy(raw[info.entryFileOff:], blob)
+	copy(raw[info.entryFileOff:info.entryFileOff+uint64(len(blob))], blob)
 	for _, pw := range pending {
 		binary.LittleEndian.PutUint64(raw[pw.fileOff:], pw.val)
 	}
-	st, err := os.Stat(path)
+	raw, removed, err := compactCarrier(raw, info, uint64(need))
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	if err := os.WriteFile(path, raw, st.Mode()); err != nil {
-		return 0, 0, err
-	}
-	// Only re-sign binaries that were signed to begin with (lld ad-hoc
-	// signs real executables; unsigned inputs need no signature and
-	// codesign would reject them anyway).
-	if info.format == "macho" && info.hasCodeSignature && runtime.GOOS == "darwin" {
-		if out, err := exec.Command("codesign", "-f", "-s", "-", path).CombinedOutput(); err != nil {
-			return 0, 0, fmt.Errorf("codesign: %v: %s", err, out)
+	verify := func(staged string) error {
+		if removed != 0 {
+			st, err := os.Stat(staged)
+			if err != nil {
+				return err
+			}
+			if st.Size() >= int64(len(info.raw)) {
+				return fmt.Errorf("compacted file did not shrink: old=%d staged=%d", len(info.raw), st.Size())
+			}
 		}
+		stagedInfo, err := load(staged)
+		if err != nil {
+			return fmt.Errorf("reload compact binary: %w", err)
+		}
+		if len(stagedInfo.entrySec) < 8 {
+			return fmt.Errorf("compact entry section is truncated")
+		}
+		if got := binary.LittleEndian.Uint64(stagedInfo.entrySec); got != prebuiltMagic {
+			return fmt.Errorf("compact entry magic %#x, want %#x", got, prebuiltMagic)
+		}
+		return nil
 	}
-	return count, len(buckets) / bucketBytes, nil
+	if err := replaceBinary(path, raw, info.format == ExternalFormatMachO && info.hasCodeSignature, verify); err != nil {
+		return 0, 0, 0, err
+	}
+	return count, len(buckets) / bucketBytes, removed, nil
 }
 
 // metaRecordMagic marks the entry-section meta record ("LLGOMET1" LE); keep

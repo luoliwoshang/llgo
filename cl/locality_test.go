@@ -17,6 +17,10 @@ import (
 )
 
 func compileLocalitySource(t *testing.T, src string) (llssa.Program, string) {
+	return compileLocalitySourceWithOptions(t, src, Options{})
+}
+
+func compileLocalitySourceWithOptions(t *testing.T, src string, options Options) (llssa.Program, string) {
 	t.Helper()
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "locality.go", src, parser.ParseComments)
@@ -33,7 +37,7 @@ func compileLocalitySource(t *testing.T, src string) (llssa.Program, string) {
 	prog := ssatest.NewProgramEx(t, nil, imp)
 	prog.TypeSizes(types.SizesFor("gc", runtime.GOARCH))
 	prog.SetRuntime(localityRuntimePackage())
-	if err := ParsePkgSyntax(prog, fset, pkg, files); err != nil {
+	if err := ParsePkgSyntaxWithOptions(prog, fset, pkg, files, options); err != nil {
 		t.Fatal(err)
 	}
 	if err := PrepareLocalVariables(prog, fset, pkg, info, files); err != nil {
@@ -42,7 +46,9 @@ func compileLocalitySource(t *testing.T, src string) (llssa.Program, string) {
 	goProg := ssa.NewProgram(fset, ssa.SanityCheckFunctions)
 	ssaPkg := goProg.CreatePackage(pkg, files, info, true)
 	ssaPkg.Build()
-	compiled, err := NewPackage(prog, ssaPkg, files)
+	compiled, _, err := NewPackageExWithEmbedMetaOptions(
+		prog, nil, nil, nil, ssaPkg, files, nil, false, options,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,11 +217,7 @@ func values() (int, *int, int, *int) {
 }
 
 func TestLocalityDebugInfoOnlyUsesFixedGlobals(t *testing.T) {
-	EnableDebug(true)
-	EnableDbgSyms(true)
-	defer EnableDebug(false)
-	defer EnableDbgSyms(false)
-	_, ir := compileLocalitySource(t, `package locality
+	_, ir := compileLocalitySourceWithOptions(t, `package locality
 
 //llgo:tls
 var direct int
@@ -224,7 +226,7 @@ var direct int
 var pointer *int
 
 func values() (int, *int) { return direct, pointer }
-`)
+`, Options{Debug: true, DebugSymbols: true})
 
 	direct := `@"example.com/locality.direct" = thread_local global i64`
 	start := strings.Index(ir, direct)

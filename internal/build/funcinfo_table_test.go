@@ -96,6 +96,116 @@ func TestFuncInfoTableMaterializesMetadataWithoutFunctionPointers(t *testing.T) 
 	}
 }
 
+func TestFuncInfoSiteLayoutArgs(t *testing.T) {
+	prog := llssa.NewProgram(&llssa.Target{GOOS: "linux", GOARCH: "amd64"})
+	defer prog.Dispose()
+	prog.EnableFuncInfoSites(true)
+	ctx := &context{prog: prog, buildConf: &Config{
+		BuildMode: BuildModeExe,
+		Goos:      "linux",
+		Goarch:    "amd64",
+	}}
+	dir := t.TempDir()
+	args, cleanup, err := funcInfoSiteLayoutArgs(ctx, filepath.Join(dir, "app"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 1 || !strings.HasPrefix(args[0], "-Wl,-T,") {
+		t.Fatalf("layout args = %#v", args)
+	}
+	script := strings.TrimPrefix(args[0], "-Wl,-T,")
+	raw, err := os.ReadFile(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"llgo_funcinfo_entry", "INSERT BEFORE .bss"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("linker script missing %q:\n%s", want, raw)
+		}
+	}
+	cleanup()
+	if _, err := os.Stat(script); !os.IsNotExist(err) {
+		t.Fatalf("linker script was not removed: %v", err)
+	}
+
+	ctx.buildConf.Goos = "darwin"
+	args, cleanup, err = funcInfoSiteLayoutArgs(ctx, filepath.Join(dir, "app"))
+	if err != nil || len(args) != 0 {
+		t.Fatalf("Darwin layout args = %#v, %v", args, err)
+	}
+	cleanup()
+}
+
+func TestFuncInfoSiteLayoutArgsEligibilityAndCreateFailure(t *testing.T) {
+	newContext := func() (*context, func()) {
+		prog := llssa.NewProgram(&llssa.Target{GOOS: "linux", GOARCH: "amd64"})
+		prog.EnableFuncInfoSites(true)
+		return &context{prog: prog, buildConf: &Config{
+			BuildMode: BuildModeExe,
+			Goos:      "linux",
+			Goarch:    "amd64",
+		}}, prog.Dispose
+	}
+	tests := []struct {
+		name string
+		edit func(*context)
+	}{
+		{"nil context", func(*context) {}},
+		{"nil config", func(ctx *context) { ctx.buildConf = nil }},
+		{"cross target", func(ctx *context) { ctx.buildConf.Target = "wasm32-wasi" }},
+		{"non executable", func(ctx *context) { ctx.buildConf.BuildMode = BuildModeCArchive }},
+		{"sites disabled", func(ctx *context) { ctx.prog.EnableFuncInfoSites(false) }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, dispose := newContext()
+			defer dispose()
+			if test.name == "nil context" {
+				ctx = nil
+			} else {
+				test.edit(ctx)
+			}
+			args, cleanup, err := funcInfoSiteLayoutArgs(ctx, filepath.Join(t.TempDir(), "app"))
+			defer cleanup()
+			if err != nil || len(args) != 0 {
+				t.Fatalf("layout args = %#v, %v", args, err)
+			}
+		})
+	}
+
+	ctx, dispose := newContext()
+	defer dispose()
+	missing := filepath.Join(t.TempDir(), "missing", "app")
+	if _, cleanup, err := funcInfoSiteLayoutArgs(ctx, missing); err == nil {
+		cleanup()
+		t.Fatal("layout script was created in a missing directory")
+	}
+}
+
+func TestRuntimeEntrySiteSectionInfo(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  *context
+		want string
+	}{
+		{name: "nil context", want: "__DATA,__llgo_fie"},
+		{name: "darwin without LTO", ctx: &context{buildConf: &Config{Goos: "darwin", BuildMode: BuildModeExe, PCLNMode: PCLNEmbedded, LTO: lto.Off}}, want: "__DATA,__llgo_fie"},
+		{name: "darwin embedded executable full LTO", ctx: &context{buildConf: &Config{Goos: "darwin", BuildMode: BuildModeExe, PCLNMode: PCLNEmbedded, LTO: lto.Full}}, want: "__LLGO,__llgo_fie"},
+		{name: "darwin embedded executable thin LTO", ctx: &context{buildConf: &Config{Goos: "darwin", BuildMode: BuildModeExe, PCLNMode: PCLNEmbedded, LTO: lto.Thin}}, want: "__LLGO,__llgo_fie"},
+		{name: "darwin external full LTO", ctx: &context{buildConf: &Config{Goos: "darwin", BuildMode: BuildModeExe, PCLNMode: PCLNExternal, LTO: lto.Full}}, want: "__DATA,__llgo_fie"},
+		{name: "darwin c-shared full LTO", ctx: &context{buildConf: &Config{Goos: "darwin", BuildMode: BuildModeCShared, PCLNMode: PCLNEmbedded, LTO: lto.Full}}, want: "__DATA,__llgo_fie"},
+		{name: "darwin c-archive full LTO", ctx: &context{buildConf: &Config{Goos: "darwin", BuildMode: BuildModeCArchive, PCLNMode: PCLNEmbedded, LTO: lto.Full}}, want: "__DATA,__llgo_fie"},
+		{name: "linux full LTO", ctx: &context{buildConf: &Config{Goos: "linux", BuildMode: BuildModeExe, PCLNMode: PCLNEmbedded, LTO: lto.Full}}, want: "__DATA,__llgo_fie"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := runtimeEntrySiteSectionInfo(test.ctx).machO; got != test.want {
+				t.Fatalf("Mach-O entry site section = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestFuncInfoTableMaterializesEntrySites(t *testing.T) {
 	prog := llssa.NewProgram(nil)
 	src := prog.NewPackage("example.com/p", "example.com/p")
@@ -424,17 +534,23 @@ func TestFuncInfoTableEmissionMatrix(t *testing.T) {
 	cases := []struct {
 		goos, goarch string
 		empty        bool
+		lto          lto.Mode
+		entrySection string
 	}{
-		{"linux", "amd64", false},
-		{"darwin", "arm64", false},
-		{"linux", "386", false},
-		{"linux", "amd64", true},
-		{"darwin", "arm64", true},
+		{goos: "linux", goarch: "amd64"},
+		{goos: "darwin", goarch: "arm64", entrySection: "__DATA,__llgo_fie"},
+		{goos: "darwin", goarch: "arm64", lto: lto.Full, entrySection: "__LLGO,__llgo_fie"},
+		{goos: "linux", goarch: "386"},
+		{goos: "linux", goarch: "amd64", empty: true},
+		{goos: "darwin", goarch: "arm64", empty: true, entrySection: "__DATA,__llgo_fie"},
 	}
 	for _, c := range cases {
 		name := c.goos + "/" + c.goarch
 		if c.empty {
 			name += "/empty"
+		}
+		if c.lto.Enabled() {
+			name += "/" + c.lto.String()
 		}
 		t.Run(name, func(t *testing.T) {
 			prog := llssa.NewProgram(&llssa.Target{GOOS: c.goos, GOARCH: c.goarch})
@@ -454,6 +570,7 @@ func TestFuncInfoTableEmissionMatrix(t *testing.T) {
 					BuildMode: BuildModeExe,
 					Goos:      c.goos,
 					Goarch:    c.goarch,
+					LTO:       c.lto,
 				},
 			}
 			records := collectFuncInfo([]Package{{LPkg: src}})
@@ -472,6 +589,9 @@ func TestFuncInfoTableEmissionMatrix(t *testing.T) {
 			}
 			if c.goos == "darwin" && !strings.Contains(ir, "live_support") {
 				t.Fatalf("darwin sections must be live_support:\n%s", ir)
+			}
+			if c.entrySection != "" && !strings.Contains(ir, c.entrySection) {
+				t.Fatalf("missing Mach-O entry section %q:\n%s", c.entrySection, ir)
 			}
 			if c.goos == "linux" && !strings.Contains(ir, "pushsection llgo_funcinfo_entry") {
 				t.Fatalf("missing elf entry section:\n%s", ir)
@@ -657,14 +777,16 @@ func TestFuncInfoTableEmptyEncodedInitializers(t *testing.T) {
 
 func TestExternalFuncInfoTableKeepsPayloadOutOfIR(t *testing.T) {
 	for _, target := range []struct {
-		goos, goarch  string
-		identitySect  string
-		entryBoundary string
+		name, goos, goarch string
+		lto                lto.Mode
+		identitySect       string
+		entryBoundary      string
 	}{
-		{goos: "linux", goarch: "amd64", identitySect: "llgo_pclntab_id", entryBoundary: "__start_llgo_funcinfo_entry"},
-		{goos: "darwin", goarch: "arm64", identitySect: "__llgo_pid", entryBoundary: "section$start$__DATA$__llgo_fie"},
+		{name: "linux", goos: "linux", goarch: "amd64", identitySect: "llgo_pclntab_id", entryBoundary: "__start_llgo_funcinfo_entry"},
+		{name: "darwin/no-lto", goos: "darwin", goarch: "arm64", identitySect: "__llgo_pid", entryBoundary: "section$start$__DATA$__llgo_fie"},
+		{name: "darwin/full-lto", goos: "darwin", goarch: "arm64", lto: lto.Full, identitySect: "__llgo_pid", entryBoundary: "section$start$__DATA$__llgo_fie"},
 	} {
-		t.Run(target.goos+"/"+target.goarch, func(t *testing.T) {
+		t.Run(target.name, func(t *testing.T) {
 			prog := llssa.NewProgram(&llssa.Target{GOOS: target.goos, GOARCH: target.goarch})
 			prog.EnableFuncInfoMetadata(true)
 			prog.EnableFuncInfoSites(true)
@@ -679,6 +801,7 @@ func TestExternalFuncInfoTableKeepsPayloadOutOfIR(t *testing.T) {
 					BuildMode: BuildModeExe,
 					Goos:      target.goos,
 					Goarch:    target.goarch,
+					LTO:       target.lto,
 					PCLNMode:  PCLNExternal,
 				},
 			}

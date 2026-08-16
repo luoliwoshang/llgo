@@ -3,6 +3,51 @@
 # counted as remaining compatibility xfails. Every entry names the mechanism
 # under test and explains the LLGo design choice that puts it out of scope.
 not_applicable:
+  - directive: run
+    case: fixedbugs/issue15277.go
+    reason: "not applicable: this case requires precise PC-specific stack and register liveness after a value's last use; LLGo uses conservative BDWGC roots, so exact GC liveness is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue15281.go
+    reason: "not applicable: this case requires precise last-use liveness across channel operations; LLGo uses conservative BDWGC stack and register roots, so exact GC liveness is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue24491b.go
+    reason: "not applicable: this case requires precise pointer lifetime through uintptr arguments and exact finalizer timing; LLGo uses conservative BDWGC roots, so this is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue27518b.go
+    reason: "not applicable: this case requires precise stack-object and return-slot liveness across faults and defers; LLGo uses conservative BDWGC roots, so this is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue32477.go
+    reason: "not applicable: this case requires precise defer and fault-path live maps with exact finalizer timing; LLGo uses conservative BDWGC roots, so this is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue46725.go
+    reason: "not applicable: this case requires exact interface and slice backing-object lifetime after the final use; LLGo uses conservative BDWGC roots, so this is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue57823.go
+    reason: "not applicable: this case requires exact slice and string data-pointer lifetime after the final use; LLGo uses conservative BDWGC roots, so this is not currently an LLGo compatibility goal"
+  - directive: run
+    case: stackobj.go
+    reason: "not applicable: this case requires typed cross-frame stack-object tracing and precise register liveness; LLGo uses conservative BDWGC roots, so precise stack-object GC is not currently an LLGo compatibility goal"
+  - directive: run
+    case: stackobj3.go
+    reason: "not applicable: this case requires precise liveness for ambiguous by-value stack objects across calls; LLGo uses conservative BDWGC roots, so precise stack-object GC is not currently an LLGo compatibility goal"
+  - directive: run
+    case: deferfin.go
+    reason: "not applicable: this case requires deferred closures to stop retaining objects at gc's exact liveness boundary and observes exact finalizer timing; LLGo uses conservative BDWGC roots, so this is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue29362.go
+    reason: "not applicable: this case requires typed stack maps that exclude non-pointer uintptr arguments from GC roots; LLGo uses conservative BDWGC roots, so excluding pointer-shaped integer values is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue45045.go
+    reason: "not applicable: this case observes the exact finalization boundary of a replaced map key while the equal replacement remains live; LLGo uses conservative BDWGC roots, so exact finalizer timing is not currently an LLGo compatibility goal"
+  - directive: run
+    case: fixedbugs/issue54343.go
+    reason: "not applicable: this case observes the exact receiver lifetime of a cleared bound method through a finalizer; LLGo uses conservative BDWGC roots, so exact finalizer timing is not currently an LLGo compatibility goal"
+  - directive: run
+    case: nilptr2.go
+    reason: "not applicable: this case requires comprehensive explicit nil checks for dereferences and derived addresses even when LLVM emits no faulting load; LLGo only preserves the required check for unused loads and relies on LLVM and target fault behavior for the remaining address-only forms, so reproducing cmd/compile's complete nil-check insertion is not currently an LLGo compatibility goal"
+  - directive: run
+    case: nilptr.go
+    reason: "not applicable: this case requires explicit nil checks for large-offset array, slice, and struct operations whose derived address may be mapped and therefore not fault; LLGo relies on LLVM and target memory faults for these non-load forms, so reproducing cmd/compile's large-offset nil-check strategy is not currently an LLGo compatibility goal"
   - version: go1.26
     directive: errorcheck
     case: escape_array.go
