@@ -1244,7 +1244,7 @@ func finalizePackageBuild(ctx *context, task *packageBuildTask, verbose bool) er
 		if task.kind == cl.PkgLinkExtern {
 			appendExternalLinkArgs(ctx, aPkg, task.kindParam)
 		}
-		return packageBuildResultFor(task), nil
+		return nil
 	}
 	if err := normalizeToArchive(ctx, aPkg, verbose); err != nil {
 		return err
