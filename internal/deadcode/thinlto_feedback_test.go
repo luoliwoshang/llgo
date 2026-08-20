@@ -52,13 +52,16 @@ func TestThinLTOFeedbackRewriteDropsDeadButKeepsLiveMethod(t *testing.T) {
 	opt := requireTool(t, "opt")
 	linker := requireTool(t, "ld.lld")
 	readelf := requireTool(t, "llvm-readelf")
+	archiver := requireTool(t, "llvm-ar")
 	tmp := t.TempDir()
 	mainObj := filepath.Join(tmp, "main.o")
 	demandObj := filepath.Join(tmp, "demand.o")
 	firstApp := filepath.Join(tmp, "first")
 	secondApp := filepath.Join(tmp, "second")
+	archive := filepath.Join(tmp, "libdemand.a")
 	runTool(t, opt, "-module-summary", filepath.Join("testdata", "thinlto_feedback", "method_main.ll"), "-o", mainObj)
 	runTool(t, opt, "-module-summary", filepath.Join("testdata", "thinlto_feedback", "method_demand.ll"), "-o", demandObj)
+	runTool(t, archiver, "rcs", archive, demandObj)
 	runTool(t, linker, "--export-dynamic", "--entry=main", "--save-temps", "--lto-O2", "-o", firstApp, mainObj, demandObj)
 
 	firstSymbols := commandOutput(t, readelf, "-s", firstApp)
@@ -119,13 +122,24 @@ func TestThinLTOFeedbackRewriteDropsDeadButKeepsLiveMethod(t *testing.T) {
 	}
 	buf.Dispose()
 
-	runTool(t, linker, "--export-dynamic", "--entry=main", "--save-temps", "--lto-O2", "-o", secondApp, mainObj, rewrittenObj)
+	// Keep the original package archive after the rewritten direct object. The
+	// overlay satisfies every Go symbol, so LLD leaves the stale Go member in the
+	// archive unextracted while still allowing other archive members to satisfy
+	// cgo/asm references.
+	runTool(t, linker, "--export-dynamic", "--entry=main", "--save-temps", "--lto-O2", "-o", secondApp, mainObj, rewrittenObj, archive)
 	secondSymbols := commandOutput(t, readelf, "-s", secondApp)
 	if strings.Contains(secondSymbols, "T.M") {
 		t.Fatalf("second ThinLTO link retained rewritten dead method T.M:\n%s", secondSymbols)
 	}
 	if !strings.Contains(secondSymbols, "T.N") {
 		t.Fatalf("second ThinLTO link dropped still-live method T.N:\n%s", secondSymbols)
+	}
+	archiveBackends, err := filepath.Glob(archive + "(*).4.opt.bc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(archiveBackends) != 0 {
+		t.Fatalf("rewritten overlay still extracted stale archive member: %v", archiveBackends)
 	}
 
 	secondCtx := llvm.NewContext()
