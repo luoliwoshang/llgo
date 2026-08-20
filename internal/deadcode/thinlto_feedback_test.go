@@ -48,7 +48,7 @@ func TestThinLTOFeedbackShrinksMethodPlan(t *testing.T) {
 	}
 }
 
-func TestThinLTOFeedbackRewriteRemovesMethodBodies(t *testing.T) {
+func TestThinLTOFeedbackRewriteDropsDeadButKeepsLiveMethod(t *testing.T) {
 	opt := requireTool(t, "opt")
 	linker := requireTool(t, "ld.lld")
 	readelf := requireTool(t, "llvm-readelf")
@@ -90,9 +90,12 @@ func TestThinLTOFeedbackRewriteRemovesMethodBodies(t *testing.T) {
 	if _, ok := deadFunctions["semanticDemand"]; !ok {
 		t.Fatalf("post-ThinLTO feedback = %#v, want semanticDemand dead", deadFunctions)
 	}
-	secondPlan := deadcode.BuildPlanWithFeedback(feedbackSummary(t), []string{"main"}, deadcode.Feedback{DeadFunctions: deadFunctions})
-	if len(secondPlan.LiveSlots) != 0 {
-		t.Fatalf("second plan LiveSlots = %#v, want empty", secondPlan.LiveSlots)
+	// liveDemand still reaches T.N, while the constant-false semanticDemand
+	// carried the only reason to keep T.M in the first plan.
+	secondPlan := deadcode.BuildPlanWithFeedback(feedbackMethodSummary(t), []string{"main"}, deadcode.Feedback{DeadFunctions: deadFunctions})
+	wantSecond := map[string][]int{"T": {1}}
+	if !reflect.DeepEqual(secondPlan.LiveSlots, wantSecond) {
+		t.Fatalf("second plan LiveSlots = %#v, want %#v", secondPlan.LiveSlots, wantSecond)
 	}
 
 	ctx := llvm.NewContext()
@@ -118,10 +121,11 @@ func TestThinLTOFeedbackRewriteRemovesMethodBodies(t *testing.T) {
 
 	runTool(t, linker, "--export-dynamic", "--entry=main", "--lto-O2", "-o", secondApp, mainObj, rewrittenObj)
 	secondSymbols := commandOutput(t, readelf, "-s", secondApp)
-	for _, name := range []string{"T.M", "T.N"} {
-		if strings.Contains(secondSymbols, name) {
-			t.Fatalf("second ThinLTO link retained rewritten dead method %s:\n%s", name, secondSymbols)
-		}
+	if strings.Contains(secondSymbols, "T.M") {
+		t.Fatalf("second ThinLTO link retained rewritten dead method T.M:\n%s", secondSymbols)
+	}
+	if !strings.Contains(secondSymbols, "T.N") {
+		t.Fatalf("second ThinLTO link dropped still-live method T.N:\n%s", secondSymbols)
 	}
 }
 
@@ -172,6 +176,39 @@ func feedbackSummary(t *testing.T) *meta.GlobalSummary {
 	b.AddOrdinaryEdge(demand, typ)
 	b.AddIfaceUse(demand, typ)
 	b.AddIfaceMethodUse(demand, iface, 0)
+	pm, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := meta.NewGlobalSummary([]*meta.PackageMeta{pm})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return summary
+}
+
+func feedbackMethodSummary(t *testing.T) *meta.GlobalSummary {
+	t.Helper()
+	b := meta.NewBuilder()
+	main := b.Sym("main")
+	live := b.Sym("liveDemand")
+	dead := b.Sym("semanticDemand")
+	typ := b.Sym("T")
+	iface := b.Sym("_llgo_feedback.I")
+	mtype := b.Sym("_llgo_func$M")
+	b.AddOrdinaryEdge(mtype, mtype)
+	b.AddIfaceMethod(iface, "M", mtype)
+	b.AddIfaceMethod(iface, "N", mtype)
+	b.AddMethodSlot(typ, "M", mtype, b.Sym("feedback.(*T).M"), b.Sym("feedback.T.M"))
+	b.AddMethodSlot(typ, "N", mtype, b.Sym("feedback.(*T).N"), b.Sym("feedback.T.N"))
+	b.AddOrdinaryEdge(main, live)
+	b.AddOrdinaryEdge(main, dead)
+	b.AddOrdinaryEdge(live, typ)
+	b.AddOrdinaryEdge(dead, typ)
+	b.AddIfaceUse(live, typ)
+	b.AddIfaceMethodUse(live, iface, 1)
+	b.AddIfaceUse(dead, typ)
+	b.AddIfaceMethodUse(dead, iface, 0)
 	pm, err := b.Build()
 	if err != nil {
 		t.Fatal(err)
