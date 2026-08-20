@@ -14,61 +14,114 @@ import (
 	gllvm "github.com/xgo-dev/llvm"
 )
 
-// runThinLTOFeedback performs the opt-in two-link prototype. The first link is
+const thinLTOFeedbackMaxRounds = 3
+
+// runThinLTOFeedback performs the opt-in bounded feedback loop. Each link is
 // intentionally real ThinLTO: its backend modules are inspected after
 // optimization, then rewritten package bitcode is overlaid ahead of the old
-// archives for the final link.
-func runThinLTOFeedback(ctx *context, feedbackOutput, outputPath string, linkInputs, linkArgs []string, pkgs []Package, needRuntime bool, firstPlan deadcode.Plan, verbose bool) error {
-	if err := linkObjFiles(ctx, feedbackOutput, linkInputs, linkArgs, verbose); err != nil {
-		return fmt.Errorf("thin LTO feedback first link: %w", err)
-	}
+// archives for the next link.
+func runThinLTOFeedback(ctx *context, feedbackOutput, outputPath string, linkInputs, linkArgs []string, pkgs []Package, needRuntime bool, firstPlan deadcode.Plan, knownDefinitions map[string]struct{}, verbose bool) error {
 	defer os.Remove(feedbackOutput)
 	defer cleanupThinLTOFeedbackOutputTemps(feedbackOutput)
-
-	modulePaths, err := thinLTOFeedbackModulePaths(linkInputs)
-	if err != nil {
-		return err
-	}
-	defer cleanupThinLTOFeedbackTemps(linkInputs)
-	mods, dispose, err := parseThinLTOFeedbackModules(modulePaths)
-	if err != nil {
-		return err
-	}
-	deadFunctions := dcepass.DeadNoInlineFunctionsFromModules(
-		mods,
-		dceEntryRootCandidates(pkgs, needRuntime),
-		thinLTOFeedbackCandidates(pkgs),
-	)
-	dispose()
-	if len(deadFunctions) == 0 {
+	baseInputs := append([]string(nil), linkInputs...)
+	currentInputs := baseInputs
+	currentPlan := firstPlan
+	knownDead := make(map[string]struct{})
+	var overlays []string
+	defer func() { removeThinLTOFeedbackFiles(overlays) }()
+	finish := func() error {
+		if len(knownDefinitions) == 0 {
+			return publishThinLTOFeedbackOutput(feedbackOutput, outputPath)
+		}
+		removeThinLTOFeedbackFiles(overlays)
+		overlays = nil
+		unmarked := unmarkThinLTOFeedbackFunctions(pkgs)
+		finalOverlays, err := materializeThinLTOFeedbackOverlays(ctx, pkgs, currentPlan, verbose)
+		if err != nil {
+			return err
+		}
+		overlays = finalOverlays
+		if len(overlays) == 0 {
+			return publishThinLTOFeedbackOutput(feedbackOutput, outputPath)
+		}
+		finalInputs := insertThinLTOOverlays(baseInputs, overlays)
+		cleanupThinLTOFeedbackOutputTemps(feedbackOutput)
+		if err := linkObjFiles(ctx, feedbackOutput, finalInputs, linkArgs, verbose); err != nil {
+			return fmt.Errorf("thin LTO feedback final link: %w", err)
+		}
+		cleanupThinLTOFeedbackTemps(finalInputs)
+		if verbose {
+			fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback final link removed %d temporary noinline attributes and used %d overlays\n", unmarked, len(overlays))
+		}
 		return publishThinLTOFeedbackOutput(feedbackOutput, outputPath)
 	}
 
-	summaryPlan, err := buildDeadcodePlanWithFeedback(pkgs, needRuntime, deadFunctions)
-	if err != nil {
-		return fmt.Errorf("thin LTO feedback second plan: %w", err)
+	for round := 0; round < thinLTOFeedbackMaxRounds; round++ {
+		cleanupThinLTOFeedbackOutputTemps(feedbackOutput)
+		if err := linkObjFiles(ctx, feedbackOutput, currentInputs, linkArgs, verbose); err != nil {
+			return fmt.Errorf("thin LTO feedback link round %d: %w", round+1, err)
+		}
+		modulePaths, err := thinLTOFeedbackModulePaths(currentInputs)
+		if err != nil {
+			return err
+		}
+		mods, dispose, err := parseThinLTOFeedbackModules(modulePaths)
+		if err != nil {
+			return err
+		}
+		roundDead := dcepass.DeadNoInlineFunctionsFromModulesWithDefinitions(
+			mods,
+			dceEntryRootCandidates(pkgs, needRuntime),
+			thinLTOFeedbackCandidates(pkgs),
+			knownDefinitions,
+		)
+		dispose()
+		cleanupThinLTOFeedbackTemps(currentInputs)
+
+		newFacts := 0
+		for name := range roundDead {
+			if _, seen := knownDead[name]; seen {
+				continue
+			}
+			knownDead[name] = struct{}{}
+			newFacts++
+		}
+		if verbose {
+			fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback round %d found %d new dead function facts (%d cumulative)\n", round+1, newFacts, len(knownDead))
+		}
+		if newFacts == 0 {
+			return finish()
+		}
+
+		nextPlan, err := buildDeadcodePlanWithFeedback(pkgs, needRuntime, knownDead)
+		if err != nil {
+			return fmt.Errorf("thin LTO feedback round %d plan: %w", round+1, err)
+		}
+		if reflect.DeepEqual(currentPlan.LiveSlots, nextPlan.LiveSlots) {
+			return finish()
+		}
+		if round+1 == thinLTOFeedbackMaxRounds {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback reached %d rounds with %d dead function facts\n", thinLTOFeedbackMaxRounds, len(knownDead))
+			}
+			return finish()
+		}
+
+		removeThinLTOFeedbackFiles(overlays)
+		overlays, err = materializeThinLTOFeedbackOverlays(ctx, pkgs, nextPlan, verbose)
+		if err != nil {
+			return err
+		}
+		if len(overlays) == 0 {
+			return finish()
+		}
+		currentInputs = insertThinLTOOverlays(baseInputs, overlays)
+		currentPlan = nextPlan
+		if verbose {
+			fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback round %d removed %d new function facts and relinked %d overlays\n", round+1, newFacts, len(overlays))
+		}
 	}
-	if reflect.DeepEqual(firstPlan.LiveSlots, summaryPlan.LiveSlots) {
-		return publishThinLTOFeedbackOutput(feedbackOutput, outputPath)
-	}
-	overlays, err := materializeThinLTOFeedbackOverlays(ctx, pkgs, summaryPlan, verbose)
-	if err != nil {
-		return err
-	}
-	if len(overlays) == 0 {
-		return publishThinLTOFeedbackOutput(feedbackOutput, outputPath)
-	}
-	defer removeThinLTOFeedbackFiles(overlays)
-	secondInputs := insertThinLTOOverlays(linkInputs, overlays)
-	defer cleanupThinLTOFeedbackTemps(secondInputs)
-	defer cleanupThinLTOFeedbackOutputTemps(outputPath)
-	if err := linkObjFiles(ctx, outputPath, secondInputs, linkArgs, verbose); err != nil {
-		return fmt.Errorf("thin LTO feedback second link: %w", err)
-	}
-	if verbose {
-		fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback removed %d function facts and relinked %d overlays\n", len(deadFunctions), len(overlays))
-	}
-	return nil
+	return finish()
 }
 
 func buildDeadcodePlanWithFeedback(pkgs []Package, needRuntime bool, deadFunctions map[string]struct{}) (deadcode.Plan, error) {
@@ -78,6 +131,36 @@ func buildDeadcodePlanWithFeedback(pkgs []Package, needRuntime bool, deadFunctio
 		return deadcode.Plan{}, err
 	}
 	return deadcode.BuildPlanWithFeedback(summary, dceEntryRootCandidates(pkgs, needRuntime), deadcode.Feedback{DeadFunctions: deadFunctions}), nil
+}
+
+func thinLTOFeedbackKnownDefinitions(pkgs []Package) map[string]struct{} {
+	known := make(map[string]struct{})
+	noInlineKind := gllvm.AttributeKindID("noinline")
+	for _, pkg := range pkgs {
+		if pkg == nil || pkg.Meta == nil || pkg.LPkg == nil {
+			continue
+		}
+		mod := pkg.LPkg.Module()
+		for _, name := range pkg.Meta.DemandFunctionNames() {
+			fn := mod.NamedFunction(name)
+			if fn.IsNil() || fn.IsDeclaration() || fn.GetEnumFunctionAttribute(noInlineKind).IsNil() {
+				continue
+			}
+			known[name] = struct{}{}
+		}
+	}
+	return known
+}
+
+func unmarkThinLTOFeedbackFunctions(pkgs []Package) int {
+	unmarked := 0
+	for _, pkg := range pkgs {
+		if pkg == nil || pkg.Meta == nil || pkg.LPkg == nil {
+			continue
+		}
+		unmarked += dcepass.UnmarkNoInlineFunctions(pkg.LPkg.Module(), pkg.Meta.DemandFunctionNames())
+	}
+	return unmarked
 }
 
 func thinLTOFeedbackCandidates(pkgs []Package) []string {

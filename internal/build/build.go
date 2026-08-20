@@ -1497,6 +1497,7 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 	var rtLinkInputs []string
 	var rtLinkArgs []string
 	var firstThinLTOPlan deadcode.Plan
+	var thinLTOKnownDefinitions map[string]struct{}
 	var err error
 	linkedPkgs := make(map[string]bool) // Track linked packages by ID to avoid duplicates
 	var linkedOrder []Package
@@ -1559,6 +1560,9 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 		}
 		if err := materializeThinLTODeadcodePlan(ctx, linkedOrder, firstThinLTOPlan, verbose); err != nil {
 			return err
+		}
+		if ctx.buildConf.thinLTOFeedbackEnabled() {
+			thinLTOKnownDefinitions = thinLTOFeedbackKnownDefinitions(linkedOrder)
 		}
 		// The package archives are intentionally delayed in this mode so the
 		// rewritten module, rather than the original module, supplies the
@@ -1642,7 +1646,7 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 
 	if ctx.buildConf.thinLTOFeedbackEnabled() {
 		feedbackOutput := outputPath + ".thinlto-feedback"
-		return runThinLTOFeedback(ctx, feedbackOutput, outputPath, linkInputs, linkArgs, linkedOrder, needRuntime, firstThinLTOPlan, verbose)
+		return runThinLTOFeedback(ctx, feedbackOutput, outputPath, linkInputs, linkArgs, linkedOrder, needRuntime, firstThinLTOPlan, thinLTOKnownDefinitions, verbose)
 	}
 	err = linkObjFiles(ctx, outputPath, linkInputs, linkArgs, verbose)
 	if err != nil {

@@ -48,6 +48,82 @@ func TestThinLTOFeedbackShrinksMethodPlan(t *testing.T) {
 	}
 }
 
+func TestThinLTOFeedbackReportsCompletelyDeletedDefinition(t *testing.T) {
+	opt := requireTool(t, "opt")
+	linker := requireTool(t, "ld.lld")
+	tmp := t.TempDir()
+	input := filepath.Join(tmp, "deleted.o")
+	app := filepath.Join(tmp, "app")
+	runTool(t, opt, "-module-summary", filepath.Join("testdata", "thinlto_feedback", "deleted.ll"), "-o", input)
+	runTool(t, linker, "--entry=main", "--save-temps", "--lto-O2", "-o", app, input)
+
+	ctx := llvm.NewContext()
+	defer ctx.Dispose()
+	mod, err := ctx.ParseBitcodeFile(input + ".4.opt.bc")
+	if err != nil {
+		t.Fatalf("parse optimized deleted module: %v", err)
+	}
+	defer mod.Dispose()
+	if !mod.NamedFunction("deletedDemand").IsNil() {
+		t.Fatal("ThinLTO retained the deliberately unreachable noinline definition")
+	}
+	dead := dcepass.DeadNoInlineFunctionsFromModulesWithDefinitions(
+		[]llvm.Module{mod},
+		[]string{"main"},
+		[]string{"deletedDemand"},
+		map[string]struct{}{"deletedDemand": {}},
+	)
+	if _, ok := dead["deletedDemand"]; !ok {
+		t.Fatalf("feedback for completely deleted definition = %#v, want deletedDemand dead", dead)
+	}
+}
+
+func TestThinLTOFeedbackFinalLinkRestoresInlining(t *testing.T) {
+	opt := requireTool(t, "opt")
+	linker := requireTool(t, "ld.lld")
+	tmp := t.TempDir()
+	mainObj := filepath.Join(tmp, "main.o")
+	demandObj := filepath.Join(tmp, "demand.o")
+	rewrittenObj := filepath.Join(tmp, "demand.rewritten.o")
+	firstApp := filepath.Join(tmp, "first")
+	finalApp := filepath.Join(tmp, "final")
+	runTool(t, opt, "-module-summary", filepath.Join("testdata", "thinlto_feedback", "main.ll"), "-o", mainObj)
+	runTool(t, opt, "-module-summary", filepath.Join("testdata", "thinlto_feedback", "demand_live.ll"), "-o", demandObj)
+	runTool(t, linker, "--entry=main", "--save-temps", "--lto-O2", "-o", firstApp, mainObj, demandObj)
+
+	ctx := llvm.NewContext()
+	mod, err := ctx.ParseBitcodeFile(demandObj + ".0.preopt.bc")
+	if err != nil {
+		ctx.Dispose()
+		t.Fatalf("parse preopt demand module: %v", err)
+	}
+	if got := dcepass.UnmarkNoInlineFunctions(mod, []string{"semanticDemand"}); got != 1 {
+		mod.Dispose()
+		ctx.Dispose()
+		t.Fatalf("UnmarkNoInlineFunctions() = %d, want 1", got)
+	}
+	buf := llvm.WriteThinLTOBitcodeToMemoryBuffer(mod)
+	mod.Dispose()
+	ctx.Dispose()
+	if err := os.WriteFile(rewrittenObj, buf.Bytes(), 0o644); err != nil {
+		buf.Dispose()
+		t.Fatalf("write final-link overlay: %v", err)
+	}
+	buf.Dispose()
+
+	runTool(t, linker, "--entry=main", "--save-temps", "--lto-O2", "-o", finalApp, mainObj, rewrittenObj)
+	finalCtx := llvm.NewContext()
+	defer finalCtx.Dispose()
+	finalMod, err := finalCtx.ParseBitcodeFile(rewrittenObj + ".4.opt.bc")
+	if err != nil {
+		t.Fatalf("parse final optimized demand module: %v", err)
+	}
+	defer finalMod.Dispose()
+	if fn := finalMod.NamedFunction("semanticDemand"); !fn.IsNil() && !fn.GetEnumFunctionAttribute(llvm.AttributeKindID("noinline")).IsNil() {
+		t.Fatal("final ThinLTO link retained temporary noinline on semanticDemand")
+	}
+}
+
 func TestThinLTOFeedbackRewriteDropsDeadButKeepsLiveMethod(t *testing.T) {
 	opt := requireTool(t, "opt")
 	linker := requireTool(t, "ld.lld")

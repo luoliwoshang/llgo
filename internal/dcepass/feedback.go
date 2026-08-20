@@ -24,6 +24,25 @@ func MarkNoInlineFunctions(mod llvm.Module, names []string) int {
 	return marked
 }
 
+// UnmarkNoInlineFunctions removes the temporary feedback barrier before the
+// final ThinLTO link so normal cross-package inlining is available again.
+func UnmarkNoInlineFunctions(mod llvm.Module, names []string) int {
+	if mod.IsNil() {
+		return 0
+	}
+	kind := llvm.AttributeKindID("noinline")
+	unmarked := 0
+	for _, name := range names {
+		fn := mod.NamedFunction(name)
+		if fn.IsNil() || fn.GetEnumFunctionAttribute(kind).IsNil() {
+			continue
+		}
+		fn.RemoveEnumFunctionAttribute(kind)
+		unmarked++
+	}
+	return unmarked
+}
+
 // DeadNoInlineFunctionsFromModules returns noinline candidate functions that
 // are not reachable from roots in the post-optimization LLVM global-reference
 // graph.
@@ -36,6 +55,18 @@ func MarkNoInlineFunctions(mod llvm.Module, names []string) int {
 // feedback sound: semantic facts cannot have moved into a live caller. A future
 // instruction-level DemandID design can remove this restriction.
 func DeadNoInlineFunctionsFromModules(mods []llvm.Module, roots, candidates []string) map[string]struct{} {
+	return DeadNoInlineFunctionsFromModulesWithDefinitions(mods, roots, candidates, nil)
+}
+
+// DeadNoInlineFunctionsFromModulesWithDefinitions is the feedback scanner used
+// by the build pipeline. knownDefinitions contains candidate functions that
+// were present and marked noinline before the ThinLTO link. A noinline
+// function can be absent from every optimized module when ThinLTO deletes its
+// whole body; those known definitions are therefore dead as well. Candidates
+// outside knownDefinitions retain the conservative behavior of the legacy
+// scanner and must still appear in an optimized module with a noinline
+// attribute before they can be reported.
+func DeadNoInlineFunctionsFromModulesWithDefinitions(mods []llvm.Module, roots, candidates []string, knownDefinitions map[string]struct{}) map[string]struct{} {
 	edges := make(map[string]map[string]struct{})
 	noInlineDefinitions := make(map[string]struct{})
 	noInlineKind := llvm.AttributeKindID("noinline")
@@ -80,7 +111,8 @@ func DeadNoInlineFunctionsFromModules(mods []llvm.Module, roots, candidates []st
 
 	dead := make(map[string]struct{})
 	for _, name := range candidates {
-		if _, eligible := noInlineDefinitions[name]; !eligible {
+		_, known := knownDefinitions[name]
+		if _, eligible := noInlineDefinitions[name]; !eligible && !known {
 			continue
 		}
 		if _, live := reachable[name]; !live {
