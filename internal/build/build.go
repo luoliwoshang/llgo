@@ -356,6 +356,13 @@ func (c *Config) thinLTODeadcodeEnabled() bool {
 	return c != nil && c.deadcodeDropEnabled() && c.ltoMode() == lto.Thin
 }
 
+// thinLTOFeedbackEnabled selects the opt-in two-link prototype. It is kept
+// behind an environment gate while the archive overlay path is validated; the
+// ordinary ThinLTO deadcode build remains a single link by default.
+func (c *Config) thinLTOFeedbackEnabled() bool {
+	return c != nil && c.thinLTODeadcodeEnabled() && c.Goos == "linux" && c.Target == "" && c.BuildMode == BuildModeExe && os.Getenv("LLGO_THINLTO_FEEDBACK") == "1"
+}
+
 const thinLTODeadcodeImportLimitFlag = "-Wl,-mllvm,-import-instr-limit=5"
 
 func thinLTODeadcodeLinkerArgs(c *Config) []string {
@@ -1489,6 +1496,8 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 	var linkArgs []string
 	var rtLinkInputs []string
 	var rtLinkArgs []string
+	var firstThinLTOPlan deadcode.Plan
+	var err error
 	linkedPkgs := make(map[string]bool) // Track linked packages by ID to avoid duplicates
 	var linkedOrder []Package
 	packages.Visit(visitRoots, nil, func(p *packages.Package) {
@@ -1544,7 +1553,11 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 		archiveInputs = append(archiveInputs, rtLinkInputs...)
 	}
 	if ctx.buildConf.thinLTODeadcodeEnabled() {
-		if err := materializeThinLTODeadcode(ctx, linkedOrder, needRuntime, verbose); err != nil {
+		firstThinLTOPlan, err = buildDeadcodePlan(linkedOrder, needRuntime)
+		if err != nil {
+			return err
+		}
+		if err := materializeThinLTODeadcodePlan(ctx, linkedOrder, firstThinLTOPlan, verbose); err != nil {
 			return err
 		}
 		// The package archives are intentionally delayed in this mode so the
@@ -1627,6 +1640,10 @@ func linkMainPkg(ctx *context, pkg *packages.Package, pkgs []*aPackage, outputPa
 	}
 	linkArgs = append(linkArgs, cSharedExportArgs(ctx, linkedOrder)...)
 
+	if ctx.buildConf.thinLTOFeedbackEnabled() {
+		feedbackOutput := outputPath + ".thinlto-feedback"
+		return runThinLTOFeedback(ctx, feedbackOutput, outputPath, linkInputs, linkArgs, linkedOrder, needRuntime, firstThinLTOPlan, verbose)
+	}
 	err = linkObjFiles(ctx, outputPath, linkInputs, linkArgs, verbose)
 	if err != nil {
 		return err
@@ -1671,12 +1688,19 @@ func materializeThinLTODeadcode(ctx *context, pkgs []Package, needRuntime, verbo
 	if err != nil {
 		return err
 	}
+	return materializeThinLTODeadcodePlan(ctx, pkgs, plan, verbose)
+}
+
+func materializeThinLTODeadcodePlan(ctx *context, pkgs []Package, plan deadcode.Plan, verbose bool) error {
 	for _, aPkg := range pkgs {
 		if aPkg == nil || aPkg.LPkg == nil || aPkg.Package == nil {
 			continue
 		}
 		if aPkg.CacheHit {
 			return fmt.Errorf("thin LTO deadcode planner cannot rewrite cached package %s yet", aPkg.PkgPath)
+		}
+		if ctx.buildConf.thinLTOFeedbackEnabled() && aPkg.Meta != nil {
+			dcepass.MarkNoInlineFunctions(aPkg.LPkg.Module(), aPkg.Meta.DemandFunctionNames())
 		}
 		dcepass.RewriteTypeMethodTables(aPkg.LPkg.Module(), plan.LiveSlots, verbose)
 		if aPkg.Package.ExportFile == "" {
@@ -1776,6 +1800,9 @@ func linkObjFiles(ctx *context, app string, objFiles, linkArgs []string, verbose
 	}
 	buildArgs = append(buildArgs, ltoPluginFlags...)
 	buildArgs = append(buildArgs, thinLTODeadcodeLinkerArgs(ctx.buildConf)...)
+	if ctx.buildConf.thinLTOFeedbackEnabled() && ctx.buildConf.LTO == lto.Thin {
+		buildArgs = append(buildArgs, "-Wl,--save-temps")
+	}
 
 	// Add build mode specific linker arguments
 	switch ctx.buildConf.BuildMode {

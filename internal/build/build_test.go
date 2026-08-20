@@ -1546,6 +1546,22 @@ func TestThinLTODeadcodeEnabled(t *testing.T) {
 	}
 }
 
+func TestThinLTOFeedbackEnabled(t *testing.T) {
+	conf := &Config{Goos: "linux", DeadcodeDrop: true, LTO: lto.Thin, BuildMode: BuildModeExe}
+	if got := conf.thinLTOFeedbackEnabled(); got {
+		t.Fatal("feedback enabled without LLGO_THINLTO_FEEDBACK=1")
+	}
+	t.Setenv("LLGO_THINLTO_FEEDBACK", "1")
+	want := buildenv.Dev
+	if got := conf.thinLTOFeedbackEnabled(); got != want {
+		t.Fatalf("thinLTOFeedbackEnabled() = %v, want %v", got, want)
+	}
+	conf.LTO = lto.Full
+	if conf.thinLTOFeedbackEnabled() {
+		t.Fatal("feedback enabled for full LTO")
+	}
+}
+
 func TestThinLTODeadcodeLinkerArgs(t *testing.T) {
 	tests := []struct {
 		name string
