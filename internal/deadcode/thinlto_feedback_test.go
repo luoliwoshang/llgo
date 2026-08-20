@@ -1,9 +1,11 @@
 package deadcode_test
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/goplus/llgo/internal/dcepass"
@@ -43,6 +45,83 @@ func TestThinLTOFeedbackShrinksMethodPlan(t *testing.T) {
 				t.Fatalf("feedback plan LiveSlots = %#v, want %#v", second.LiveSlots, wantFirst)
 			}
 		})
+	}
+}
+
+func TestThinLTOFeedbackRewriteRemovesMethodBodies(t *testing.T) {
+	opt := requireTool(t, "opt")
+	linker := requireTool(t, "ld.lld")
+	readelf := requireTool(t, "llvm-readelf")
+	tmp := t.TempDir()
+	mainObj := filepath.Join(tmp, "main.o")
+	demandObj := filepath.Join(tmp, "demand.o")
+	firstApp := filepath.Join(tmp, "first")
+	secondApp := filepath.Join(tmp, "second")
+	runTool(t, opt, "-module-summary", filepath.Join("testdata", "thinlto_feedback", "method_main.ll"), "-o", mainObj)
+	runTool(t, opt, "-module-summary", filepath.Join("testdata", "thinlto_feedback", "method_demand.ll"), "-o", demandObj)
+	runTool(t, linker, "--export-dynamic", "--entry=main", "--save-temps", "--lto-O2", "-o", firstApp, mainObj, demandObj)
+
+	firstSymbols := commandOutput(t, readelf, "-s", firstApp)
+	for _, name := range []string{"T.M", "T.N"} {
+		if !strings.Contains(firstSymbols, name) {
+			t.Fatalf("first ThinLTO link symbols missing %s:\n%s", name, firstSymbols)
+		}
+	}
+
+	feedbackCtx := llvm.NewContext()
+	feedbackMods := make([]llvm.Module, 0, 2)
+	for _, path := range []string{mainObj + ".4.opt.bc", demandObj + ".4.opt.bc"} {
+		feedbackMod, err := feedbackCtx.ParseBitcodeFile(path)
+		if err != nil {
+			feedbackCtx.Dispose()
+			t.Fatalf("parse optimized feedback module %s: %v", path, err)
+		}
+		feedbackMods = append(feedbackMods, feedbackMod)
+	}
+	if feedbackMods[1].NamedFunction("semanticDemand").IsNil() {
+		feedbackCtx.Dispose()
+		t.Fatal("expected initial ThinLTO round to retain semanticDemand definition")
+	}
+	deadFunctions := dcepass.DeadNoInlineFunctionsFromModules(feedbackMods, []string{"main"}, []string{"semanticDemand"})
+	for _, feedbackMod := range feedbackMods {
+		feedbackMod.Dispose()
+	}
+	feedbackCtx.Dispose()
+	if _, ok := deadFunctions["semanticDemand"]; !ok {
+		t.Fatalf("post-ThinLTO feedback = %#v, want semanticDemand dead", deadFunctions)
+	}
+	secondPlan := deadcode.BuildPlanWithFeedback(feedbackSummary(t), []string{"main"}, deadcode.Feedback{DeadFunctions: deadFunctions})
+	if len(secondPlan.LiveSlots) != 0 {
+		t.Fatalf("second plan LiveSlots = %#v, want empty", secondPlan.LiveSlots)
+	}
+
+	ctx := llvm.NewContext()
+	mod, err := ctx.ParseBitcodeFile(demandObj + ".0.preopt.bc")
+	if err != nil {
+		ctx.Dispose()
+		t.Fatalf("parse preopt demand module: %v", err)
+	}
+	if got := dcepass.RewriteTypeMethodTables(mod, secondPlan.LiveSlots, false); got != 1 {
+		mod.Dispose()
+		ctx.Dispose()
+		t.Fatalf("RewriteTypeMethodTables rewrote %d globals, want 1", got)
+	}
+	buf := llvm.WriteThinLTOBitcodeToMemoryBuffer(mod)
+	mod.Dispose()
+	ctx.Dispose()
+	rewrittenObj := filepath.Join(tmp, "demand.rewritten.o")
+	if err := os.WriteFile(rewrittenObj, buf.Bytes(), 0o644); err != nil {
+		buf.Dispose()
+		t.Fatalf("write rewritten ThinLTO module: %v", err)
+	}
+	buf.Dispose()
+
+	runTool(t, linker, "--export-dynamic", "--entry=main", "--lto-O2", "-o", secondApp, mainObj, rewrittenObj)
+	secondSymbols := commandOutput(t, readelf, "-s", secondApp)
+	for _, name := range []string{"T.M", "T.N"} {
+		if strings.Contains(secondSymbols, name) {
+			t.Fatalf("second ThinLTO link retained rewritten dead method %s:\n%s", name, secondSymbols)
+		}
 	}
 }
 
@@ -118,4 +197,13 @@ func runTool(t *testing.T, tool string, args ...string) {
 	if out, err := exec.Command(tool, args...).CombinedOutput(); err != nil {
 		t.Fatalf("%s %v: %v\n%s", tool, args, err, out)
 	}
+}
+
+func commandOutput(t *testing.T, tool string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command(tool, args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %v: %v\n%s", tool, args, err, out)
+	}
+	return string(out)
 }
