@@ -2,6 +2,28 @@ package dcepass
 
 import "github.com/xgo-dev/llvm"
 
+// MarkNoInlineFunctions prevents function-scoped Go semantic facts from moving
+// into callers during an experimental feedback link. The final rewritten link
+// does not need this restriction; it exists only while feedback is represented
+// at function granularity rather than by instruction-level DemandIDs.
+func MarkNoInlineFunctions(mod llvm.Module, names []string) int {
+	if mod.IsNil() {
+		return 0
+	}
+	kind := llvm.AttributeKindID("noinline")
+	attr := mod.Context().CreateEnumAttribute(kind, 0)
+	marked := 0
+	for _, name := range names {
+		fn := mod.NamedFunction(name)
+		if fn.IsNil() || fn.IsDeclaration() || !fn.GetEnumFunctionAttribute(kind).IsNil() {
+			continue
+		}
+		fn.AddFunctionAttr(attr)
+		marked++
+	}
+	return marked
+}
+
 // DeadNoInlineFunctionsFromModules returns noinline candidate functions that
 // are not reachable from roots in the post-optimization LLVM global-reference
 // graph.
