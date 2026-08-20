@@ -119,13 +119,39 @@ func TestThinLTOFeedbackRewriteDropsDeadButKeepsLiveMethod(t *testing.T) {
 	}
 	buf.Dispose()
 
-	runTool(t, linker, "--export-dynamic", "--entry=main", "--lto-O2", "-o", secondApp, mainObj, rewrittenObj)
+	runTool(t, linker, "--export-dynamic", "--entry=main", "--save-temps", "--lto-O2", "-o", secondApp, mainObj, rewrittenObj)
 	secondSymbols := commandOutput(t, readelf, "-s", secondApp)
 	if strings.Contains(secondSymbols, "T.M") {
 		t.Fatalf("second ThinLTO link retained rewritten dead method T.M:\n%s", secondSymbols)
 	}
 	if !strings.Contains(secondSymbols, "T.N") {
 		t.Fatalf("second ThinLTO link dropped still-live method T.N:\n%s", secondSymbols)
+	}
+
+	secondCtx := llvm.NewContext()
+	secondMods := make([]llvm.Module, 0, 2)
+	for _, path := range []string{mainObj + ".4.opt.bc", rewrittenObj + ".4.opt.bc"} {
+		secondMod, err := secondCtx.ParseBitcodeFile(path)
+		if err != nil {
+			secondCtx.Dispose()
+			t.Fatalf("parse second-round optimized module %s: %v", path, err)
+		}
+		secondMods = append(secondMods, secondMod)
+	}
+	deadRound2 := dcepass.DeadNoInlineFunctionsFromModules(secondMods, []string{"main"}, []string{"semanticDemand", "liveDemand"})
+	for _, secondMod := range secondMods {
+		secondMod.Dispose()
+	}
+	secondCtx.Dispose()
+	if _, ok := deadRound2["semanticDemand"]; !ok {
+		t.Fatalf("second-round feedback lost dead semanticDemand: %#v", deadRound2)
+	}
+	if _, ok := deadRound2["liveDemand"]; ok {
+		t.Fatalf("second-round feedback incorrectly marked liveDemand dead: %#v", deadRound2)
+	}
+	stablePlan := deadcode.BuildPlanWithFeedback(feedbackMethodSummary(t), []string{"main"}, deadcode.Feedback{DeadFunctions: deadRound2})
+	if !reflect.DeepEqual(stablePlan.LiveSlots, wantSecond) {
+		t.Fatalf("second-round stable plan LiveSlots = %#v, want %#v", stablePlan.LiveSlots, wantSecond)
 	}
 }
 
