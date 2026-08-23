@@ -1,7 +1,7 @@
 target triple = "x86_64-unknown-linux-gnu"
 
-%"github.com/goplus/llgo/runtime/abi.Method" = type { ptr, ptr, ptr, ptr }
-%T.type = type { ptr, [2 x %"github.com/goplus/llgo/runtime/abi.Method"] }
+%"github.com/xgo-dev/llgo/runtime/abi.Method" = type { ptr, ptr, ptr, ptr }
+%T.type = type { ptr, [2 x %"github.com/xgo-dev/llgo/runtime/abi.Method"] }
 @T = external hidden constant %T.type
 @flag = constant i1 false
 

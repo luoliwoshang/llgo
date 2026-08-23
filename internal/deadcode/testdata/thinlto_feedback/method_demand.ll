@@ -1,12 +1,12 @@
 target triple = "x86_64-unknown-linux-gnu"
 
-%"github.com/goplus/llgo/runtime/abi.Method" = type { ptr, ptr, ptr, ptr }
-%T.type = type { ptr, [2 x %"github.com/goplus/llgo/runtime/abi.Method"] }
+%"github.com/xgo-dev/llgo/runtime/abi.Method" = type { ptr, ptr, ptr, ptr }
+%T.type = type { ptr, [2 x %"github.com/xgo-dev/llgo/runtime/abi.Method"] }
 @T = hidden constant %T.type {
   ptr null,
-  [2 x %"github.com/goplus/llgo/runtime/abi.Method"] [
-    %"github.com/goplus/llgo/runtime/abi.Method" { ptr null, ptr null, ptr @T.M, ptr @T.M },
-    %"github.com/goplus/llgo/runtime/abi.Method" { ptr null, ptr null, ptr @T.N, ptr @T.N }
+  [2 x %"github.com/xgo-dev/llgo/runtime/abi.Method"] [
+    %"github.com/xgo-dev/llgo/runtime/abi.Method" { ptr null, ptr null, ptr @T.M, ptr @T.M },
+    %"github.com/xgo-dev/llgo/runtime/abi.Method" { ptr null, ptr null, ptr @T.N, ptr @T.N }
   ]
 }
 
@@ -35,7 +35,7 @@ entry:
   ret void
 }
 
-define hidden void @"github.com/goplus/llgo/runtime/internal/runtime.unreachableMethod"() {
+define hidden void @"github.com/xgo-dev/llgo/runtime/internal/runtime.unreachableMethod"() {
 entry:
   ret void
 }

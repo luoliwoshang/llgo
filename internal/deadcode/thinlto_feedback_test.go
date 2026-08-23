@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goplus/llgo/internal/dcepass"
-	"github.com/goplus/llgo/internal/deadcode"
-	"github.com/goplus/llgo/internal/meta"
+	"github.com/xgo-dev/llgo/internal/dcepass"
+	"github.com/xgo-dev/llgo/internal/deadcode"
+	"github.com/xgo-dev/llgo/internal/meta"
 	"github.com/xgo-dev/llvm"
 )
 

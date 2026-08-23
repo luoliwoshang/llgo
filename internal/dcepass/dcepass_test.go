@@ -78,7 +78,7 @@ func TestRewriteTypeMethodTablesPreservesLinkage(t *testing.T) {
 	if strings.Contains(out, `@_llgo_main.Task = constant`) {
 		t.Fatalf("rewrite introduced a strong duplicate:\n%s", out)
 	}
-	if !strings.Contains(out, `ptr @"github.com/goplus/llgo/runtime/internal/runtime.unreachableMethod"`) {
+	if !strings.Contains(out, `ptr @"github.com/xgo-dev/llgo/runtime/internal/runtime.unreachableMethod"`) {
 		t.Fatalf("rewrite did not replace the dead method slot:\n%s", out)
 	}
 }
