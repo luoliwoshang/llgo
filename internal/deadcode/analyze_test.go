@@ -474,6 +474,83 @@ func TestBuildPlanWithFeedbackDropsFactsFromDeadFunction(t *testing.T) {
 	}
 }
 
+func TestBuildPlanWithFeedbackRefinesDynamicMethodNames(t *testing.T) {
+	summary := newSummary(t, buildPackage(func(b *pkgBuilder) {
+		main := b.sym("pkg.main")
+		dynamic := b.sym("pkg.dynamicMethodByName")
+		typ := b.sym("_llgo_pkg.T")
+		keepA := methodSig(b, "KeepA")
+		keepB := methodSig(b, "KeepB")
+		drop := methodSig(b, "Drop")
+
+		b.addMethodInfo(typ, []pkgSlot{
+			methodSlot(b, keepA, "pkg.(*T).KeepA", "pkg.T.KeepA"),
+			methodSlot(b, keepB, "pkg.(*T).KeepB", "pkg.T.KeepB"),
+			methodSlot(b, drop, "pkg.(*T).Drop", "pkg.T.Drop"),
+		})
+		b.addEdge(main, dynamic)
+		b.addEdge(dynamic, typ)
+		b.addUseIface(dynamic, typ)
+		b.b.MarkReflect(dynamic)
+	}))
+
+	first := BuildPlan(summary, []string{"pkg.main"})
+	wantFirst := map[string][]int{"_llgo_pkg.T": {0, 1, 2}}
+	if !reflect.DeepEqual(first.LiveSlots, wantFirst) {
+		t.Fatalf("initial plan LiveSlots = %#v, want %#v", first.LiveSlots, wantFirst)
+	}
+
+	refined := BuildPlanWithFeedback(summary, []string{"pkg.main"}, Feedback{
+		RefinedMethodNames: map[string][]string{
+			"pkg.dynamicMethodByName": {"KeepA", "KeepB"},
+		},
+	})
+	wantRefined := map[string][]int{"_llgo_pkg.T": {0, 1}}
+	if !reflect.DeepEqual(refined.LiveSlots, wantRefined) {
+		t.Fatalf("refined plan LiveSlots = %#v, want %#v", refined.LiveSlots, wantRefined)
+	}
+
+	// A present but empty result means LLVM proved that every dynamic call in
+	// this owner disappeared. An absent result remains conservative.
+	empty := BuildPlanWithFeedback(summary, []string{"pkg.main"}, Feedback{
+		RefinedMethodNames: map[string][]string{"pkg.dynamicMethodByName": {}},
+	})
+	if len(empty.LiveSlots) != 0 {
+		t.Fatalf("empty refinement LiveSlots = %#v, want empty", empty.LiveSlots)
+	}
+}
+
+func TestBuildPlanWithFeedbackDoesNotRefineMixedReflectOwner(t *testing.T) {
+	summary := newSummary(t, buildPackage(func(b *pkgBuilder) {
+		main := b.sym("pkg.main")
+		dynamic := b.sym("pkg.mixedReflection")
+		typ := b.sym("_llgo_pkg.T")
+		keep := methodSig(b, "Keep")
+		drop := methodSig(b, "Drop")
+
+		b.addMethodInfo(typ, []pkgSlot{
+			methodSlot(b, keep, "pkg.(*T).Keep", "pkg.T.Keep"),
+			methodSlot(b, drop, "pkg.(*T).Drop", "pkg.T.Drop"),
+		})
+		b.addEdge(main, dynamic)
+		b.addEdge(dynamic, typ)
+		b.addUseIface(dynamic, typ)
+		// One demand may come from MethodByName while the other may come from
+		// Method(index). Until metadata carries per-call IDs, owner-level name
+		// feedback must not replace this mixed pair.
+		b.b.MarkReflect(dynamic)
+		b.b.MarkReflect(dynamic)
+	}))
+
+	got := BuildPlanWithFeedback(summary, []string{"pkg.main"}, Feedback{
+		RefinedMethodNames: map[string][]string{"pkg.mixedReflection": {"Keep"}},
+	})
+	want := map[string][]int{"_llgo_pkg.T": {0, 1}}
+	if !reflect.DeepEqual(got.LiveSlots, want) {
+		t.Fatalf("mixed-reflect feedback LiveSlots = %#v, want %#v", got.LiveSlots, want)
+	}
+}
+
 // ── test builder helpers ──────────────────────────────────────────────────────
 
 type pkgSig struct {

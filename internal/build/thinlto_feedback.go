@@ -27,6 +27,8 @@ func runThinLTOFeedback(ctx *context, feedbackOutput, outputPath string, linkInp
 	currentInputs := baseInputs
 	currentPlan := firstPlan
 	knownDead := make(map[string]struct{})
+	knownRefinedNames := make(map[string][]string)
+	candidates := thinLTOFeedbackCandidates(pkgs)
 	var overlays []string
 	defer func() { removeThinLTOFeedbackFiles(overlays) }()
 	finish := func() error {
@@ -72,9 +74,10 @@ func runThinLTOFeedback(ctx *context, feedbackOutput, outputPath string, linkInp
 		roundDead := dcepass.DeadNoInlineFunctionsFromModulesWithDefinitions(
 			mods,
 			dceEntryRootCandidates(pkgs, needRuntime),
-			thinLTOFeedbackCandidates(pkgs),
+			candidates,
 			knownDefinitions,
 		)
+		roundRefinedNames := dcepass.RefinedMethodNamesFromModules(mods, candidates)
 		dispose()
 		cleanupThinLTOFeedbackTemps(currentInputs)
 
@@ -86,16 +89,41 @@ func runThinLTOFeedback(ctx *context, feedbackOutput, outputPath string, linkInp
 			knownDead[name] = struct{}{}
 			newFacts++
 		}
-		if verbose {
-			fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback round %d found %d new dead function facts (%d cumulative)\n", round+1, newFacts, len(knownDead))
+		newRefinements := 0
+		for owner, names := range roundRefinedNames {
+			if reflect.DeepEqual(knownRefinedNames[owner], names) {
+				continue
+			}
+			knownRefinedNames[owner] = append([]string(nil), names...)
+			newRefinements++
 		}
-		if newFacts == 0 {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback round %d found %d new dead function facts (%d cumulative) and %d refined MethodByName owners (%d cumulative)\n", round+1, newFacts, len(knownDead), newRefinements, len(knownRefinedNames))
+			for owner, names := range roundRefinedNames {
+				fmt.Fprintf(os.Stderr, "llgo: ThinLTO MethodByName refinement owner=%s names=%s\n", owner, strings.Join(names, ","))
+			}
+			unrefined, err := thinLTOFeedbackUnrefinedReflectOwners(pkgs, knownDead, knownRefinedNames)
+			if err != nil {
+				return fmt.Errorf("ThinLTO feedback reflection diagnostics: %w", err)
+			}
+			if len(unrefined) > 0 {
+				fmt.Fprintf(os.Stderr, "llgo: ThinLTO feedback has %d remaining unrefined reflect owners: %s\n", len(unrefined), strings.Join(unrefined, ","))
+			}
+		}
+		if newFacts == 0 && newRefinements == 0 {
 			return finish()
 		}
 
-		nextPlan, err := buildDeadcodePlanWithFeedback(pkgs, needRuntime, knownDead)
+		nextPlan, err := buildDeadcodePlanWithFeedback(pkgs, needRuntime, knownDead, knownRefinedNames)
 		if err != nil {
 			return fmt.Errorf("thin LTO feedback round %d plan: %w", round+1, err)
+		}
+		if verbose && len(knownRefinedNames) > 0 {
+			withoutRefinement, err := buildDeadcodePlanWithFeedback(pkgs, needRuntime, knownDead, nil)
+			if err != nil {
+				return fmt.Errorf("thin LTO feedback round %d comparison plan: %w", round+1, err)
+			}
+			fmt.Fprintf(os.Stderr, "llgo: ThinLTO MethodByName refinement changed live method slots from %d to %d\n", liveMethodSlotCount(withoutRefinement), liveMethodSlotCount(nextPlan))
 		}
 		if reflect.DeepEqual(currentPlan.LiveSlots, nextPlan.LiveSlots) {
 			return finish()
@@ -124,13 +152,51 @@ func runThinLTOFeedback(ctx *context, feedbackOutput, outputPath string, linkInp
 	return finish()
 }
 
-func buildDeadcodePlanWithFeedback(pkgs []Package, needRuntime bool, deadFunctions map[string]struct{}) (deadcode.Plan, error) {
+func liveMethodSlotCount(plan deadcode.Plan) int {
+	total := 0
+	for _, slots := range plan.LiveSlots {
+		total += len(slots)
+	}
+	return total
+}
+
+func thinLTOFeedbackUnrefinedReflectOwners(pkgs []Package, deadFunctions map[string]struct{}, refinedMethodNames map[string][]string) ([]string, error) {
+	summary, err := meta.NewGlobalSummary(linkedPackageMetas(pkgs))
+	if err != nil {
+		return nil, err
+	}
+	var owners []string
+	for _, name := range thinLTOFeedbackCandidates(pkgs) {
+		if _, dead := deadFunctions[name]; dead {
+			continue
+		}
+		if _, refined := refinedMethodNames[name]; refined {
+			continue
+		}
+		sym, ok := summary.LookupSymbol(name)
+		if !ok {
+			continue
+		}
+		for _, demand := range summary.FuncDemands(sym) {
+			if demand.Kind == meta.DemandReflectMethod {
+				owners = append(owners, name)
+				break
+			}
+		}
+	}
+	return owners, nil
+}
+
+func buildDeadcodePlanWithFeedback(pkgs []Package, needRuntime bool, deadFunctions map[string]struct{}, refinedMethodNames map[string][]string) (deadcode.Plan, error) {
 	metas := linkedPackageMetas(pkgs)
 	summary, err := meta.NewGlobalSummary(metas)
 	if err != nil {
 		return deadcode.Plan{}, err
 	}
-	return deadcode.BuildPlanWithFeedback(summary, dceEntryRootCandidates(pkgs, needRuntime), deadcode.Feedback{DeadFunctions: deadFunctions}), nil
+	return deadcode.BuildPlanWithFeedback(summary, dceEntryRootCandidates(pkgs, needRuntime), deadcode.Feedback{
+		DeadFunctions:      deadFunctions,
+		RefinedMethodNames: refinedMethodNames,
+	}), nil
 }
 
 func thinLTOFeedbackKnownDefinitions(pkgs []Package) map[string]struct{} {

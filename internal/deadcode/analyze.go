@@ -37,6 +37,8 @@ type pass struct {
 
 	ifaceMethod        map[ifaceMethodKey]struct{}
 	genericIfaceMethod map[meta.Name]struct{}
+	refinedMethodNames map[string]struct{}
+	refinedReflect     map[meta.Symbol][]string
 	reflectSeen        bool
 
 	markableMethods []methodRef
@@ -59,7 +61,8 @@ type Plan struct {
 // from post-optimization references; the mere absence of a function definition
 // is not proof because ThinLTO may have inlined it into a live caller.
 type Feedback struct {
-	DeadFunctions map[string]struct{}
+	DeadFunctions      map[string]struct{}
+	RefinedMethodNames map[string][]string
 }
 
 // BuildPlan computes the conservative Go method liveness plan for one link.
@@ -82,9 +85,15 @@ func Analyze(info *meta.GlobalSummary, rootNames []string) map[string][]int {
 func analyze(info *meta.GlobalSummary, rootNames []string, feedback Feedback) map[string][]int {
 	roots := make([]meta.Symbol, 0, len(rootNames))
 	deadFunctions := make(map[meta.Symbol]struct{}, len(feedback.DeadFunctions))
+	refinedReflect := make(map[meta.Symbol][]string, len(feedback.RefinedMethodNames))
 	for name := range feedback.DeadFunctions {
 		if sym, ok := info.LookupSymbol(name); ok {
 			deadFunctions[sym] = struct{}{}
+		}
+	}
+	for owner, names := range feedback.RefinedMethodNames {
+		if sym, ok := info.LookupSymbol(owner); ok {
+			refinedReflect[sym] = names
 		}
 	}
 	for _, name := range rootNames {
@@ -94,7 +103,7 @@ func analyze(info *meta.GlobalSummary, rootNames []string, feedback Feedback) ma
 		}
 	}
 
-	liveSlots := deadcode(info, roots, deadFunctions)
+	liveSlots := deadcode(info, roots, deadFunctions, refinedReflect)
 	out := make(map[string][]int, len(liveSlots))
 	for typ, slots := range liveSlots {
 		name := info.SymbolName(typ)
@@ -105,7 +114,7 @@ func analyze(info *meta.GlobalSummary, rootNames []string, feedback Feedback) ma
 	return out
 }
 
-func deadcode(info *meta.GlobalSummary, roots []meta.Symbol, deadFunctions map[meta.Symbol]struct{}) map[meta.Symbol][]int {
+func deadcode(info *meta.GlobalSummary, roots []meta.Symbol, deadFunctions map[meta.Symbol]struct{}, refinedReflect map[meta.Symbol][]string) map[meta.Symbol][]int {
 	d := &pass{
 		info:               info,
 		methodImplKeys:     make(map[methodID][]ifaceMethodKey),
@@ -117,6 +126,8 @@ func deadcode(info *meta.GlobalSummary, roots []meta.Symbol, deadFunctions map[m
 		processedIfaceTy:   make(map[meta.Symbol]struct{}),
 		ifaceMethod:        make(map[ifaceMethodKey]struct{}),
 		genericIfaceMethod: make(map[meta.Name]struct{}),
+		refinedMethodNames: make(map[string]struct{}),
+		refinedReflect:     refinedReflect,
 		liveSlots:          make(map[meta.Symbol][]int),
 	}
 	d.buildMethodRefs()
@@ -199,10 +210,21 @@ func (d *pass) flood() {
 			d.markReachable(dst)
 		}
 
-		for _, demand := range d.info.FuncDemands(sym) {
+		demands := d.info.FuncDemands(sym)
+		refinedNames, refined := d.refinedReflect[sym]
+		if refined && reflectDemandCount(demands) != 1 {
+			refined = false
+		}
+		for _, demand := range demands {
 			switch demand.Kind {
 			case meta.DemandReflectMethod:
-				d.reflectSeen = true
+				if refined {
+					for _, name := range refinedNames {
+						d.refinedMethodNames[name] = struct{}{}
+					}
+				} else {
+					d.reflectSeen = true
+				}
 			case meta.DemandUseIface:
 				d.markUsedInIface(demand.Target)
 			case meta.DemandIfaceMethod:
@@ -232,6 +254,16 @@ func (d *pass) flood() {
 			}
 		}
 	}
+}
+
+func reflectDemandCount(demands []meta.FuncDemand) int {
+	count := 0
+	for _, demand := range demands {
+		if demand.Kind == meta.DemandReflectMethod {
+			count++
+		}
+	}
+	return count
 }
 
 func (d *pass) methodMarkingLoop() bool {
@@ -274,6 +306,9 @@ func (d *pass) shouldKeep(method methodRef) bool {
 	}
 
 	if _, ok := d.genericIfaceMethod[method.slotInfo.Name]; ok {
+		return true
+	}
+	if _, ok := d.refinedMethodNames[d.info.Name(method.slotInfo.Name)]; ok {
 		return true
 	}
 

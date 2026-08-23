@@ -516,7 +516,11 @@ func Build(inv Invocation) ([]Package, error) {
 	if conf.PthreadStackSize > 0 {
 		prog.SetPthreadStackSize(uint64(conf.PthreadStackSize))
 	}
-	prog.EnableLTOPluginMarkers(conf.LTOPlugin.Enabled())
+	// ThinLTO feedback consumes the same MethodByName call-site markers as the
+	// optional full-LTO pass plugin.  The feedback path does not emit vcall
+	// checked-loads; it only asks LLVM to refine the dynamic string argument and
+	// feeds the resulting finite name set back into the Go deadcode planner.
+	prog.EnableLTOPluginMarkers(conf.LTOPlugin.Enabled() || conf.thinLTOFeedbackEnabled())
 	funcInfo := conf.Mode != ModeGen && conf.PCLNMode != PCLNNone
 	prog.EnableFuncInfoMetadata(funcInfo)
 	// Site records are inline-asm fragments inside function bodies. Darwin
