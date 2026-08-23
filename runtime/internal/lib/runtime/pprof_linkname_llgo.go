@@ -39,21 +39,8 @@ func runtime_expandFinalInlineFrame(stk []uintptr) []uintptr {
 
 //go:linkname pprof_cyclesPerSecond runtime/pprof.runtime_cyclesPerSecond
 func pprof_cyclesPerSecond() int64 {
-	return 1
-}
-
-var (
-	// C library entry points may reach this hook before ordinary package
-	// initialization, so keep the minimal profile data in static arrays.
-	cpuProfilePeriodRecord = [3]uint64{3, 0, 100} // [len, timestamp, hz]
-	cpuProfilePeriodTags   [1]unsafe.Pointer      // one tag slot for the period record
-)
-
-//go:linkname runtime_pprof_readProfile runtime/pprof.readProfile
-func runtime_pprof_readProfile() (data []uint64, tags []unsafe.Pointer, eof bool) {
-	// Provide a minimal, valid profile stream for runtime/pprof.
-	// The stdlib expects at least the initial "period" record (3 uint64s).
-	return cpuProfilePeriodRecord[:], cpuProfilePeriodTags[:], true
+	// LLGo's runtime clock uses nanoseconds.
+	return 1e9
 }
 
 //go:linkname pprof_goroutineProfileWithLabels runtime.pprof_goroutineProfileWithLabels

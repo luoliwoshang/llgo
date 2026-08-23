@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 import _ "unsafe" // for go:linkname
@@ -80,7 +80,8 @@ func makeWithFree(base int) Fn {
 // CHECK: [[C_ENV:%[0-9]+]] = extractvalue { ptr, ptr } %0, 1
 // CHECK-NEXT: [[C_CODE_RAW:%[0-9]+]] = extractvalue { ptr, ptr } %0, 0
 // CHECK-NEXT: %__llgo_funcval_code = call ptr asm "", "=r,0"(ptr [[C_CODE_RAW]])
-// CHECK-NEXT: [[C_RESULT:%[0-9]+]] = call i32 %__llgo_funcval_code(ptr {{(nest|swiftself)}} [[C_ENV]], i32 %1)
+// DARWIN-ARM64-NEXT: [[C_RESULT:%[0-9]+]] = call i32 %__llgo_funcval_code(ptr swiftself [[C_ENV]], i32 %1)
+// LINUX-AMD64-NEXT: [[C_RESULT:%[0-9]+]] = call i32 %__llgo_funcval_code(ptr nest [[C_ENV]], i32 %1)
 // CHECK: ret i32 [[C_RESULT]]
 
 // CHECK-LABEL: define i32 @main.callCallback(ptr %0, i32 %1){{.*}} {
@@ -94,12 +95,14 @@ func makeWithFree(base int) Fn {
 // CHECK: [[NO_FREE_ENV:%.*]] = extractvalue %main.Fn [[NO_FREE]], 1
 // CHECK: [[NO_FREE_CODE_RAW:%.*]] = extractvalue %main.Fn [[NO_FREE]], 0
 // CHECK: [[NO_FREE_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[NO_FREE_CODE_RAW]])
-// CHECK: call i64 [[NO_FREE_CODE]](ptr {{(nest|swiftself)}} [[NO_FREE_ENV]], i64 1)
+// DARWIN-ARM64: call i64 [[NO_FREE_CODE]](ptr swiftself [[NO_FREE_ENV]], i64 1)
+// LINUX-AMD64: call i64 [[NO_FREE_CODE]](ptr nest [[NO_FREE_ENV]], i64 1)
 // The free-variable closure is invoked with the environment returned by makeWithFree.
 // CHECK: [[WITH_FREE_ENV:%.*]] = extractvalue %main.Fn [[WITH_FREE]], 1
 // CHECK: [[WITH_FREE_CODE_RAW:%.*]] = extractvalue %main.Fn [[WITH_FREE]], 0
 // CHECK: [[WITH_FREE_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[WITH_FREE_CODE_RAW]])
-// CHECK: call i64 [[WITH_FREE_CODE]](ptr {{(nest|swiftself)}} [[WITH_FREE_ENV]], i64 2)
+// DARWIN-ARM64: call i64 [[WITH_FREE_CODE]](ptr swiftself [[WITH_FREE_ENV]], i64 2)
+// LINUX-AMD64: call i64 [[WITH_FREE_CODE]](ptr nest [[WITH_FREE_ENV]], i64 2)
 // CHECK: call i64 @main.globalAdd(i64 1, i64 2)
 // A bound pointer method stores the receiver in the closure environment.
 // CHECK: [[S:%.*]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 8)
@@ -112,7 +115,8 @@ func makeWithFree(base int) Fn {
 // CHECK: [[METHOD_CALL_ENV:%.*]] = extractvalue { ptr, ptr } [[METHOD_FN]], 1
 // CHECK: [[METHOD_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[METHOD_FN]], 0
 // CHECK: [[METHOD_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[METHOD_CODE_RAW]])
-// CHECK: call i64 [[METHOD_CODE]](ptr {{(nest|swiftself)}} [[METHOD_CALL_ENV]], i64 7)
+// DARWIN-ARM64: call i64 [[METHOD_CODE]](ptr swiftself [[METHOD_CALL_ENV]], i64 7)
+// LINUX-AMD64: call i64 [[METHOD_CODE]](ptr nest [[METHOD_CALL_ENV]], i64 7)
 // A method expression uses the receiver as an ordinary first argument.
 // CHECK: call i64 @"main.(*S).Add$thunk"(ptr [[S]], i64 8)
 // The interface method value keeps the same interface payload and checks it is non-nil.
@@ -129,7 +133,8 @@ func makeWithFree(base int) Fn {
 // CHECK: [[IFACE_CALL_ENV:%.*]] = extractvalue { ptr, ptr } [[IFACE_METHOD]], 1
 // CHECK: [[IFACE_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[IFACE_METHOD]], 0
 // CHECK: [[IFACE_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[IFACE_CODE_RAW]])
-// CHECK: call i64 [[IFACE_CODE]](ptr {{(nest|swiftself)}} [[IFACE_CALL_ENV]], i64 9)
+// DARWIN-ARM64: call i64 [[IFACE_CODE]](ptr swiftself [[IFACE_CALL_ENV]], i64 9)
+// LINUX-AMD64: call i64 [[IFACE_CODE]](ptr nest [[IFACE_CALL_ENV]], i64 9)
 // CHECK: call double @sqrt(double 4.000000e+00)
 // CHECK: call i32 @main.callCInt({ ptr, ptr } { ptr @abs, ptr null }, i32 -3)
 // CHECK: call i32 @main.callCallback(ptr @"main.main$1", i32 7)
@@ -157,14 +162,16 @@ func makeWithFree(base int) Fn {
 // CHECK-NEXT: [[WITH_FREE_RET:%[0-9]+]] = load %main.Fn, ptr [[WITH_FREE_OUT]]
 // CHECK: ret %main.Fn [[WITH_FREE_RET]]
 
-// CHECK-LABEL: define i64 @"main.makeWithFree$1"(ptr {{(nest|swiftself)}} %0, i64 %1){{.*}} {
+// DARWIN-ARM64-LABEL: define i64 @"main.makeWithFree$1"(ptr swiftself %0, i64 %1){{.*}} {
+// LINUX-AMD64-LABEL: define i64 @"main.makeWithFree$1"(ptr nest %0, i64 %1){{.*}} {
 // CHECK: [[FREE_ENV:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[FREE_ADDR:%[0-9]+]] = extractvalue { ptr } [[FREE_ENV]], 0
 // CHECK-NEXT: [[FREE_VALUE:%[0-9]+]] = load i64, ptr [[FREE_ADDR]]
 // CHECK-NEXT: [[FREE_RESULT:%[0-9]+]] = add i64 %1, [[FREE_VALUE]]
 // CHECK: ret i64 [[FREE_RESULT]]
 
-// CHECK-LABEL: define i64 @"main.(*S).Add$bound"(ptr {{(nest|swiftself)}} %0, i64 %1){{.*}} {
+// DARWIN-ARM64-LABEL: define i64 @"main.(*S).Add$bound"(ptr swiftself %0, i64 %1){{.*}} {
+// LINUX-AMD64-LABEL: define i64 @"main.(*S).Add$bound"(ptr nest %0, i64 %1){{.*}} {
 // CHECK: [[BOUND_ENV:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[BOUND_RECEIVER:%[0-9]+]] = extractvalue { ptr } [[BOUND_ENV]], 0
 // CHECK-NEXT: [[BOUND_RESULT:%[0-9]+]] = call i64 @"main.(*S).Add"(ptr [[BOUND_RECEIVER]], i64 %1)
@@ -174,7 +181,8 @@ func makeWithFree(base int) Fn {
 // CHECK: [[THUNK_RESULT:%[0-9]+]] = call i64 @"main.(*S).Add"(ptr %0, i64 %1)
 // CHECK: ret i64 [[THUNK_RESULT]]
 
-// CHECK-LABEL: define i64 @"main.interface{Add(int) int}.Add$bound"(ptr {{(nest|swiftself)}} %0, i64 %1){{.*}} {
+// DARWIN-ARM64-LABEL: define i64 @"main.interface{Add(int) int}.Add$bound"(ptr swiftself %0, i64 %1){{.*}} {
+// LINUX-AMD64-LABEL: define i64 @"main.interface{Add(int) int}.Add$bound"(ptr nest %0, i64 %1){{.*}} {
 // CHECK: [[BOUND_IFACE_ENV:%[0-9]+]] = load { %"{{.*}}iface" }, ptr %0
 // CHECK: [[BOUND_IFACE:%[0-9]+]] = extractvalue { %"{{.*}}iface" } [[BOUND_IFACE_ENV]], 0
 // CHECK: [[BOUND_DATA:%.*]] = call ptr @"{{.*}}/runtime/internal/runtime.IfacePtrData"(%"{{.*}}iface" [[BOUND_IFACE]])

@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // Test of promotion of methods of an interface embedded within a
@@ -193,31 +193,36 @@ func main() {
 // CHECK: [[ONE_BOUND_CALL_ENV:%.*]] = extractvalue { ptr, ptr } [[ONE_BOUND]], 1
 // CHECK: [[ONE_BOUND_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[ONE_BOUND]], 0
 // CHECK: [[ONE_BOUND_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[ONE_BOUND_CODE_RAW]])
-// CHECK: [[ONE_BOUND_RESULT:%.*]] = call i64 [[ONE_BOUND_CODE]](ptr {{(nest|swiftself)}} [[ONE_BOUND_CALL_ENV]])
+// DARWIN-ARM64: [[ONE_BOUND_RESULT:%.*]] = call i64 [[ONE_BOUND_CODE]](ptr swiftself [[ONE_BOUND_CALL_ENV]])
+// LINUX-AMD64: [[ONE_BOUND_RESULT:%.*]] = call i64 [[ONE_BOUND_CODE]](ptr nest [[ONE_BOUND_CALL_ENV]])
 // CHECK: [[ONE_BOUND_BAD:%.*]] = icmp ne i64 [[ONE_BOUND_RESULT]], 1
 // CHECK: store %"{{.*}}iface" [[PROMOTED_ONE_CLOSURE_IFACE]], ptr %{{.*}}
 // CHECK: [[PROMOTED_ONE_BOUND:%.*]] = insertvalue { ptr, ptr } { ptr @"main.I.one$bound", ptr undef }, ptr %{{.*}}, 1
 // CHECK: [[PROMOTED_ONE_BOUND_ENV:%.*]] = extractvalue { ptr, ptr } [[PROMOTED_ONE_BOUND]], 1
 // CHECK: [[PROMOTED_ONE_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[PROMOTED_ONE_BOUND]], 0
 // CHECK: [[PROMOTED_ONE_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[PROMOTED_ONE_CODE_RAW]])
-// CHECK: [[PROMOTED_ONE_BOUND_RESULT:%.*]] = call i64 [[PROMOTED_ONE_CODE]](ptr {{(nest|swiftself)}} [[PROMOTED_ONE_BOUND_ENV]])
+// DARWIN-ARM64: [[PROMOTED_ONE_BOUND_RESULT:%.*]] = call i64 [[PROMOTED_ONE_CODE]](ptr swiftself [[PROMOTED_ONE_BOUND_ENV]])
+// LINUX-AMD64: [[PROMOTED_ONE_BOUND_RESULT:%.*]] = call i64 [[PROMOTED_ONE_CODE]](ptr nest [[PROMOTED_ONE_BOUND_ENV]])
 // CHECK: [[PROMOTED_ONE_BOUND_BAD:%.*]] = icmp ne i64 [[PROMOTED_ONE_BOUND_RESULT]], 1
 // CHECK: store %"{{.*}}iface" [[TWO_CLOSURE_IFACE]], ptr %{{.*}}
 // CHECK: [[TWO_BOUND:%.*]] = insertvalue { ptr, ptr } { ptr @"main.I.two$bound", ptr undef }, ptr %{{.*}}, 1
 // CHECK: [[TWO_BOUND_ENV:%.*]] = extractvalue { ptr, ptr } [[TWO_BOUND]], 1
 // CHECK: [[TWO_BOUND_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[TWO_BOUND]], 0
 // CHECK: [[TWO_BOUND_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[TWO_BOUND_CODE_RAW]])
-// CHECK: [[TWO_BOUND_RESULT:%.*]] = call %"{{.*}}String" [[TWO_BOUND_CODE]](ptr {{(nest|swiftself)}} [[TWO_BOUND_ENV]])
+// DARWIN-ARM64: [[TWO_BOUND_RESULT:%.*]] = call %"{{.*}}String" [[TWO_BOUND_CODE]](ptr swiftself [[TWO_BOUND_ENV]])
+// LINUX-AMD64: [[TWO_BOUND_RESULT:%.*]] = call %"{{.*}}String" [[TWO_BOUND_CODE]](ptr nest [[TWO_BOUND_ENV]])
 // CHECK: [[TWO_BOUND_EQ:%.*]] = call i1 @"{{.*}}/runtime/internal/runtime.StringEqual"(%"{{.*}}String" [[TWO_BOUND_RESULT]], %"{{.*}}String" { ptr @{{.*}}, i64 3 })
 // CHECK: store %"{{.*}}iface" [[PROMOTED_TWO_CLOSURE_IFACE]], ptr %{{.*}}
 // CHECK: [[PROMOTED_TWO_BOUND:%.*]] = insertvalue { ptr, ptr } { ptr @"main.I.two$bound", ptr undef }, ptr %{{.*}}, 1
 // CHECK: [[PROMOTED_TWO_BOUND_ENV:%.*]] = extractvalue { ptr, ptr } [[PROMOTED_TWO_BOUND]], 1
 // CHECK: [[PROMOTED_TWO_BOUND_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[PROMOTED_TWO_BOUND]], 0
 // CHECK: [[PROMOTED_TWO_BOUND_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[PROMOTED_TWO_BOUND_CODE_RAW]])
-// CHECK: [[PROMOTED_TWO_BOUND_RESULT:%.*]] = call %"{{.*}}String" [[PROMOTED_TWO_BOUND_CODE]](ptr {{(nest|swiftself)}} [[PROMOTED_TWO_BOUND_ENV]])
+// DARWIN-ARM64: [[PROMOTED_TWO_BOUND_RESULT:%.*]] = call %"{{.*}}String" [[PROMOTED_TWO_BOUND_CODE]](ptr swiftself [[PROMOTED_TWO_BOUND_ENV]])
+// LINUX-AMD64: [[PROMOTED_TWO_BOUND_RESULT:%.*]] = call %"{{.*}}String" [[PROMOTED_TWO_BOUND_CODE]](ptr nest [[PROMOTED_TWO_BOUND_ENV]])
 // CHECK: [[PROMOTED_TWO_BOUND_EQ:%.*]] = call i1 @"{{.*}}/runtime/internal/runtime.StringEqual"(%"{{.*}}String" [[PROMOTED_TWO_BOUND_RESULT]], %"{{.*}}String" { ptr @{{.*}}, i64 3 })
 
-// CHECK-LABEL: define i64 @"main.I.one$bound"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define i64 @"main.I.one$bound"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define i64 @"main.I.one$bound"(ptr nest %0){{.*}} {
 // CHECK: [[BOUND_ONE_ENV:%[0-9]+]] = load { %"{{.*}}iface" }, ptr %0
 // CHECK: [[BOUND_ONE_IFACE:%.*]] = extractvalue { %"{{.*}}iface" } [[BOUND_ONE_ENV]], 0
 // CHECK: [[BOUND_ONE_DATA:%.*]] = call ptr @"{{.*}}/runtime/internal/runtime.IfacePtrData"(%"{{.*}}iface" [[BOUND_ONE_IFACE]])
@@ -234,7 +239,8 @@ func main() {
 // CHECK-NEXT: call void @"{{.*}}/runtime/internal/runtime.EndRecoverFrameAlias"(ptr [[BOUND_ONE_RECOVER]])
 // CHECK: ret i64 [[BOUND_ONE_RESULT]]
 
-// CHECK-LABEL: define %"{{.*}}/runtime/internal/runtime.String" @"main.I.two$bound"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define %"{{.*}}/runtime/internal/runtime.String" @"main.I.two$bound"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define %"{{.*}}/runtime/internal/runtime.String" @"main.I.two$bound"(ptr nest %0){{.*}} {
 // CHECK: [[BOUND_TWO_ENV:%[0-9]+]] = load { %"{{.*}}iface" }, ptr %0
 // CHECK: [[BOUND_TWO_IFACE:%.*]] = extractvalue { %"{{.*}}iface" } [[BOUND_TWO_ENV]], 0
 // CHECK: [[BOUND_TWO_DATA:%.*]] = call ptr @"{{.*}}/runtime/internal/runtime.IfacePtrData"(%"{{.*}}iface" [[BOUND_TWO_IFACE]])

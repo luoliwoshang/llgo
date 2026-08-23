@@ -69,7 +69,7 @@ func (p Package) NewConst(name string, val constant.Value) NamedConst {
 
 type aGlobal struct {
 	Expr
-	//array bool
+	isZeroSizedAlias bool
 }
 
 // A Global is a named Value holding the address of a package-level
@@ -150,7 +150,7 @@ func (p Package) doNewVarEx(name string, t Type, threadLocal bool) Global {
 				// The returned Global intentionally points at the shared
 				// sentinel; the alias above preserves this package variable's
 				// symbol for external references.
-				ret := &aGlobal{zero}
+				ret := &aGlobal{Expr: zero, isZeroSizedAlias: true}
 				p.vars[name] = ret
 				return ret
 			}
@@ -160,7 +160,7 @@ func (p Package) doNewVarEx(name string, t Type, threadLocal bool) Global {
 	gbl.SetThreadLocal(threadLocal)
 	alignment := p.Prog.td.ABITypeAlignment(typ)
 	gbl.SetAlignment(alignment)
-	ret := &aGlobal{Expr{gbl, t}}
+	ret := &aGlobal{Expr: Expr{gbl, t}}
 	p.vars[name] = ret
 	return ret
 }
@@ -172,10 +172,20 @@ func (p Package) VarOf(name string) Global {
 
 // Init initializes the global variable with the given value.
 func (g Global) Init(v Expr) {
+	// Zero-sized globals alias the shared moduleZeroName sentinel, which already has
+	// a null initializer under LinkOnceODRLinkage and must not be mutated.
+	if g.isZeroSizedAlias {
+		return
+	}
 	g.impl.SetInitializer(v.impl)
 }
 
 func (g Global) InitNil() {
+	// Zero-sized globals alias the shared moduleZeroName sentinel, which already has
+	// a null initializer under LinkOnceODRLinkage and must not be mutated.
+	if g.isZeroSizedAlias {
+		return
+	}
 	g.impl.SetInitializer(llvm.ConstNull(g.impl.GlobalValueType()))
 }
 

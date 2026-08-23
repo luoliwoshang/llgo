@@ -1,13 +1,13 @@
 // Copyright 2014 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style license.
+// See LICENSES/Go-BSD-3-Clause.txt at this module root for license terms.
 
 package runtime
 
 import (
 	"unsafe"
 
-	"github.com/goplus/llgo/runtime/abi"
+	"github.com/xgo-dev/llgo/runtime/abi"
 )
 
 // A boundsError represents an indexing or slicing operation gone wrong.
@@ -94,12 +94,6 @@ func boundsAbove(x int64, signed bool, y int64) bool {
 		return x < 0 || x > y
 	}
 	return uint64(x) > uint64(y)
-}
-
-func CheckIndexRange(b bool, x int64, signed bool, y int) {
-	if b {
-		panicBounds(x, signed, y, boundsIndex)
-	}
 }
 
 func appendIntStr(b []byte, v int64, signed bool) []byte {

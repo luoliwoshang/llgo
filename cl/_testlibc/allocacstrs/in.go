@@ -58,9 +58,9 @@ func main() {
 // CHECK-NEXT:   br label %_llgo_[[BB1]]
 // CHECK-EMPTY:
 // CHECK-NEXT: _llgo_[[BB4]]:
-// CHECK-NEXT:   %[[TMP16:[0-9]+]] = phi i64 [ 0, %_llgo_[[BB0]] ], [ %[[TMP30:[0-9]+]], %_llgo_[[BB5:[0-9]+]] ]
+// CHECK-NEXT:   %[[TMP16:[0-9]+]] = phi i64 [ 0, %_llgo_[[BB0]] ], [ %[[TMP31:[0-9]+]], %_llgo_[[BB8:[0-9]+]] ]
 // CHECK-NEXT:   %[[TMP17:[0-9]+]] = icmp slt i64 %[[TMP16]], %[[TMP7]]
-// CHECK-NEXT:   br i1 %[[TMP17]], label %_llgo_[[BB5]], label %_llgo_[[BB6]]
+// CHECK-NEXT:   br i1 %[[TMP17]], label %_llgo_[[BB5:[0-9]+]], label %_llgo_[[BB6]]
 // CHECK-EMPTY:
 // CHECK-NEXT: _llgo_[[BB5]]:
 // CHECK-NEXT:   %[[TMP18:[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %[[TMP6]], 0
@@ -68,20 +68,26 @@ func main() {
 // CHECK-NEXT:   %[[TMP20:[0-9]+]] = icmp slt i64 %[[TMP16]], 0
 // CHECK-NEXT:   %[[TMP21:[0-9]+]] = icmp uge i64 %[[TMP16]], %[[TMP19]]
 // CHECK-NEXT:   %[[TMP22:[0-9]+]] = or i1 %[[TMP21]], %[[TMP20]]
-// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %[[TMP22]], i64 %[[TMP16]], i1 true, i64 %[[TMP19]])
-// CHECK-NEXT:   %[[TMP23:[0-9]+]] = getelementptr inbounds %"{{.*}}/runtime/internal/runtime.String", ptr %[[TMP18]], i64 %[[TMP16]]
-// CHECK-NEXT:   %[[TMP24:[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.String", ptr %[[TMP23]], align 8
-// CHECK-NEXT:   %[[TMP25:[0-9]+]] = getelementptr ptr, ptr %[[TMP9]], i64 %[[TMP16]]
-// CHECK-NEXT:   %[[TMP26:[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.String" %[[TMP24]], 1
-// CHECK-NEXT:   %[[TMP27:[0-9]+]] = add i64 %[[TMP26]], 1
-// CHECK-NEXT:   %[[TMP28:[0-9]+]] = alloca i8, i64 %[[TMP27]], align 1
-// CHECK-NEXT:   %[[TMP29:[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.CStrCopy"(ptr %[[TMP28]], %"{{.*}}/runtime/internal/runtime.String" %[[TMP24]])
-// CHECK-NEXT:   store ptr %[[TMP29]], ptr %[[TMP25]], align 8
-// CHECK-NEXT:   %[[TMP30]] = add i64 %[[TMP16]], 1
-// CHECK-NEXT:   br label %_llgo_[[BB4]]
+// CHECK-NEXT:   br i1 %[[TMP22]], label %_llgo_[[BB7:[0-9]+]], label %_llgo_[[BB8]]
 // CHECK-EMPTY:
 // CHECK-NEXT: _llgo_[[BB6]]:
-// CHECK-NEXT:   %[[TMP31:[0-9]+]] = getelementptr ptr, ptr %[[TMP9]], i64 %[[TMP7]]
-// CHECK-NEXT:   store ptr null, ptr %[[TMP31]], align 8
+// CHECK-NEXT:   %[[TMP23:[0-9]+]] = getelementptr ptr, ptr %[[TMP9]], i64 %[[TMP7]]
+// CHECK-NEXT:   store ptr null, ptr %[[TMP23]], align 8
 // CHECK-NEXT:   br label %_llgo_[[BB1]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB7]]:
+// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.PanicIndex"(i64 %[[TMP16]], i64 %[[TMP19]])
+// CHECK-NEXT:   br label %_llgo_[[BB7]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB8]]:
+// CHECK-NEXT:   %[[TMP24:[0-9]+]] = getelementptr inbounds %"{{.*}}/runtime/internal/runtime.String", ptr %[[TMP18]], i64 %[[TMP16]]
+// CHECK-NEXT:   %[[TMP25:[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.String", ptr %[[TMP24]], align 8
+// CHECK-NEXT:   %[[TMP26:[0-9]+]] = getelementptr ptr, ptr %[[TMP9]], i64 %[[TMP16]]
+// CHECK-NEXT:   %[[TMP27:[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.String" %[[TMP25]], 1
+// CHECK-NEXT:   %[[TMP28:[0-9]+]] = add i64 %[[TMP27]], 1
+// CHECK-NEXT:   %[[TMP29:[0-9]+]] = alloca i8, i64 %[[TMP28]], align 1
+// CHECK-NEXT:   %[[TMP30:[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.CStrCopy"(ptr %[[TMP29]], %"{{.*}}/runtime/internal/runtime.String" %[[TMP25]])
+// CHECK-NEXT:   store ptr %[[TMP30]], ptr %[[TMP26]], align 8
+// CHECK-NEXT:   %[[TMP31]] = add i64 %[[TMP16]], 1
+// CHECK-NEXT:   br label %_llgo_[[BB4]]
 // CHECK-NEXT: }

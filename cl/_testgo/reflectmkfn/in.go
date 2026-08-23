@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 import (
@@ -18,7 +18,8 @@ import (
 // CHECK: %[[CALL_DATA:[0-9]+]] = extractvalue { ptr, ptr } %[[FUNC_PAIR]], 1
 // CHECK: %[[CALL_PTR:[0-9]+]] = extractvalue { ptr, ptr } %[[FUNC_PAIR]], 0
 // CHECK: %[[CALL_CODE:__llgo_funcval_code]] = call ptr asm "", "=r,0"(ptr %[[CALL_PTR]])
-// CHECK: %[[RESULT:[0-9]+]] = call %"g{{.*}}/runtime/internal/runtime.String" %[[CALL_CODE]](ptr {{(nest|swiftself)}} %[[CALL_DATA]], %"g{{.*}}/runtime/internal/runtime.String" { ptr @{{.*}}, i64 3 }, i64 2)
+// DARWIN-ARM64: %[[RESULT:[0-9]+]] = call %"g{{.*}}/runtime/internal/runtime.String" %[[CALL_CODE]](ptr swiftself %[[CALL_DATA]], %"g{{.*}}/runtime/internal/runtime.String" { ptr @{{.*}}, i64 3 }, i64 2)
+// LINUX-AMD64: %[[RESULT:[0-9]+]] = call %"g{{.*}}/runtime/internal/runtime.String" %[[CALL_CODE]](ptr nest %[[CALL_DATA]], %"g{{.*}}/runtime/internal/runtime.String" { ptr @{{.*}}, i64 3 }, i64 2)
 // CHECK: %[[EQUAL:[0-9]+]] = call i1 @"g{{.*}}/runtime/internal/runtime.StringEqual"(%"g{{.*}}/runtime/internal/runtime.String" %[[RESULT]],{{.*}})
 // CHECK: %[[NOT_EQUAL:[0-9]+]] = xor i1 %[[EQUAL]], true
 // CHECK: br i1 %[[NOT_EQUAL]]
@@ -37,14 +38,14 @@ func main() {
 // CHECK-LABEL: define %"g{{.*}}/runtime/internal/runtime.Slice" @"main.main$1"(%"g{{.*}}/runtime/internal/runtime.Slice" %0){{.*}} {
 // CHECK: [[ARG0_DATA:%[0-9]+]] = extractvalue %"g{{.*}}/runtime/internal/runtime.Slice" %0, 0
 // CHECK: [[ARG0_LEN:%[0-9]+]] = extractvalue %"g{{.*}}/runtime/internal/runtime.Slice" %0, 1
-// CHECK: call void @"g{{.*}}/runtime/internal/runtime.CheckIndexRange"({{.*}}i64 0,{{.*}}i64 [[ARG0_LEN]])
+// CHECK: call void @"g{{.*}}/runtime/internal/runtime.PanicIndex"(i64 0, i64 [[ARG0_LEN]])
 // CHECK: [[ARG0_PTR:%[0-9]+]] = getelementptr inbounds %reflect.Value, ptr [[ARG0_DATA]], i64 0
 // CHECK: [[ARG0_SAFE:%[0-9]+]] = call ptr @"g{{.*}}/runtime/internal/runtime.AssertNilDerefPtr"(ptr [[ARG0_PTR]])
 // CHECK-NEXT: [[ARG0:%[0-9]+]] = load %reflect.Value, ptr [[ARG0_SAFE]]
 // CHECK-NEXT: [[TEXT:%[0-9]+]] = call %"g{{.*}}/runtime/internal/runtime.String" @reflect.Value.String(%reflect.Value [[ARG0]])
 // CHECK: [[ARG1_DATA:%[0-9]+]] = extractvalue %"g{{.*}}/runtime/internal/runtime.Slice" %0, 0
 // CHECK: [[ARG1_LEN:%[0-9]+]] = extractvalue %"g{{.*}}/runtime/internal/runtime.Slice" %0, 1
-// CHECK: call void @"g{{.*}}/runtime/internal/runtime.CheckIndexRange"({{.*}}i64 1,{{.*}}i64 [[ARG1_LEN]])
+// CHECK: call void @"g{{.*}}/runtime/internal/runtime.PanicIndex"(i64 1, i64 [[ARG1_LEN]])
 // CHECK: [[ARG1_PTR:%[0-9]+]] = getelementptr inbounds %reflect.Value, ptr [[ARG1_DATA]], i64 1
 // CHECK: [[ARG1_SAFE:%[0-9]+]] = call ptr @"g{{.*}}/runtime/internal/runtime.AssertNilDerefPtr"(ptr [[ARG1_PTR]])
 // CHECK-NEXT: [[ARG1:%[0-9]+]] = load %reflect.Value, ptr [[ARG1_SAFE]]

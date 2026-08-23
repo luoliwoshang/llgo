@@ -10,9 +10,9 @@ commit, branch, or pull-request series.
 
 The program workloads reuse:
 
-- `benchmark/binary_size/cprintf`: only `lib/c.Printf`;
-- `benchmark/binary_size/println`: only the built-in `println`;
-- `benchmark/binary_size/fmtprintf`: `fmt.Printf`.
+- `benchmark/binary_size/cprintf`: only `lib/c.Printf` (default and `-lto=full`);
+- `benchmark/binary_size/println`: only the built-in `println` (default and `-lto=full`);
+- `benchmark/binary_size/fmtprintf`: `fmt.Printf` (default and `-lto=full`).
 
 For each workload, the collector performs an unmeasured warm build, then records
 median build time, median process time, file size, executable-code bytes,

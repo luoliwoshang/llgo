@@ -4,6 +4,7 @@
 package cl
 
 import (
+	"fmt"
 	"go/ast"
 	"go/importer"
 	"go/parser"
@@ -13,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/goplus/gogen/packages"
-	llssa "github.com/goplus/llgo/ssa"
+	llssa "github.com/xgo-dev/llgo/ssa"
 	gossa "golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 )
@@ -248,7 +249,7 @@ func plain() {}
 		t.Fatal("Version should not be a runtime caller metadata function")
 	}
 
-	rtpkg, _ := buildCallerFrameSSAPackage(t, "github.com/goplus/llgo/runtime/internal/lib/runtime", `package runtime
+	rtpkg, _ := buildCallerFrameSSAPackage(t, "github.com/xgo-dev/llgo/runtime/internal/lib/runtime", `package runtime
 func Caller(skip int) (uintptr, string, int, bool) { return 0, "", 0, false }
 func FuncForPC(pc uintptr) uintptr { return 0 }
 `)
@@ -266,6 +267,188 @@ func FuncForPC(pc uintptr) uintptr { return 0 }
 	}
 }
 
+func TestRuntimeCallerFuncSetKeepsRecoverObservableCallees(t *testing.T) {
+	ssapkg, _ := buildCallerFrameSSAPackage(t, "example.com/foo", `package foo
+import "runtime"
+
+func inspect() {
+	recover()
+	runtime.Caller(0)
+}
+
+func staticOwner() {
+	defer inspect()
+	defer deferredLeaf()
+	staticLeaf()
+	go goroutineLeaf()
+}
+
+func staticLeaf() { staticNested() }
+func staticNested() {}
+func deferredLeaf() { deferredNested() }
+func deferredNested() {}
+func goroutineLeaf() {}
+
+func closureObserverOwner() {
+	defer func() {
+		recover()
+		runtime.Caller(0)
+	}()
+	defer closureDeferredLeaf()
+}
+func closureDeferredLeaf() {}
+
+func dynamicOwner(fn func()) {
+	defer inspect()
+	fn()
+}
+
+func dynamicEntry() { dynamicOwner(dynamicLeaf) }
+func dynamicLeaf() {}
+
+type unresolvedArg int
+
+func unresolvedOwner(fn func(unresolvedArg)) {
+	defer inspect()
+	fn(1)
+	fn(2)
+}
+func unresolvedCandidate(unresolvedArg) {}
+func unresolvedCandidate2(unresolvedArg) {}
+func unresolvedWrong(string) {}
+
+func directCallerOwner() {
+	runtime.Caller(0)
+	directCallerLeaf()
+}
+func directCallerLeaf() {}
+
+func noRecoverInspect() { runtime.Caller(0) }
+func noRecoverOwner() {
+	defer noRecoverInspect()
+	noRecoverLeaf()
+}
+func noRecoverLeaf() {}
+
+//go:noinline
+func pinned() {}
+
+func unrelated() {}
+`)
+	tracking := NewCallerTracking()
+	set := runtimeCallerFuncSet(tracking, ssapkg)
+	for _, name := range []string{"staticOwner", "staticLeaf", "staticNested", "deferredLeaf", "deferredNested", "closureObserverOwner", "closureDeferredLeaf", "dynamicOwner", "dynamicEntry", "dynamicLeaf", "unresolvedOwner", "unresolvedCandidate", "unresolvedCandidate2"} {
+		if !set[ssapkg.Func(name)] {
+			t.Fatalf("%s must keep a frame because a recovering defer can inspect its panic pc", name)
+		}
+	}
+	if !set[ssapkg.Func("pinned")] {
+		t.Fatal("//go:noinline function must keep its frame")
+	}
+	if set[ssapkg.Func("unrelated")] {
+		t.Fatal("an unrelated function must not be pinned by recover-visible frame tracking")
+	}
+	for _, name := range []string{"goroutineLeaf", "directCallerLeaf", "noRecoverLeaf", "unresolvedWrong"} {
+		if set[ssapkg.Func(name)] {
+			t.Fatalf("%s must not be pinned without a recover-visible synchronous call path", name)
+		}
+	}
+
+	panicSites := recoverPanicSiteFuncSet(tracking, ssapkg)
+	for _, name := range []string{"staticOwner", "staticLeaf", "staticNested", "deferredLeaf", "deferredNested", "closureObserverOwner", "closureDeferredLeaf", "dynamicOwner", "dynamicLeaf", "unresolvedOwner", "unresolvedCandidate", "unresolvedCandidate2"} {
+		if !panicSites[ssapkg.Func(name)] {
+			t.Fatalf("%s needs implicit panic-site anchors below a recovering defer", name)
+		}
+	}
+	for _, name := range []string{"inspect", "dynamicEntry", "goroutineLeaf", "directCallerOwner", "directCallerLeaf", "noRecoverInspect", "noRecoverOwner", "noRecoverLeaf", "pinned", "unrelated", "unresolvedWrong"} {
+		if panicSites[ssapkg.Func(name)] {
+			t.Fatalf("%s must not get implicit panic-site anchors outside a recover-visible synchronous call subtree", name)
+		}
+	}
+}
+
+func TestCompileRuntimeCallerPanicPCLineMetadata(t *testing.T) {
+	ssapkg, files := buildCallerFrameSSAPackage(t, "example.com/foo", `package foo
+import "runtime"
+
+func inspect() {
+	recover()
+	runtime.Caller(0)
+}
+
+func owner() {
+	defer inspect()
+	defer deferredPanicLeaf()
+	panicLeaf()
+	repeatedPanicLeaf(nil, 0)
+	branchPanicLeaf(nil, 0, true)
+}
+
+func panicLeaf() {
+	var p *int
+//line panic_site.go:123
+	_ = *p
+}
+
+func deferredPanicLeaf() {
+	var p *int
+//line deferred_panic_site.go:234
+	_ = *p
+}
+
+func repeatedPanicLeaf(p *[1]int, i int) int {
+//line repeated_panic_site.go:345
+	return p[i] + p[i]
+}
+
+func branchPanicLeaf(p *[1]int, i int, cond bool) int {
+//line branch_panic_site.go:456
+	if cond { return p[i] }; return p[i]
+}
+
+//go:noinline
+func pinnedPanicSite() {
+	var p *int
+//line non_recover_site.go:321
+	_ = *p
+}
+`)
+	prog := newLLSSAProgForTarget(t, &llssa.Target{GOOS: "linux", GOARCH: "amd64"})
+	prog.EnableFuncInfoMetadata(true)
+	prog.EnableFuncInfoSites(true)
+	pkg, err := NewPackage(prog, ssapkg, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ir := pkg.Module().String()
+	for _, want := range []string{
+		`!"example.com/foo.panicLeaf"`, `!"panic_site.go"`, `i32 123`,
+		`!"example.com/foo.deferredPanicLeaf"`, `!"deferred_panic_site.go"`, `i32 234`,
+	} {
+		if !strings.Contains(ir, want) {
+			t.Fatalf("recover-visible nil dereference is missing panic-site metadata %q:\n%s", want, ir)
+		}
+	}
+	countPCLine := func(symbol, file string, line int) (count int) {
+		want := fmt.Sprintf(`!"%s", !"%s", i32 %d`, symbol, file, line)
+		for _, row := range strings.Split(ir, "\n") {
+			if strings.Contains(row, `!{i32 1, i64 `) && strings.Contains(row, want) {
+				count++
+			}
+		}
+		return count
+	}
+	if got := countPCLine("example.com/foo.repeatedPanicLeaf", "repeated_panic_site.go", 345); got != 1 {
+		t.Fatalf("same-line panic sites in one basic block produced %d metadata records, want 1:\n%s", got, ir)
+	}
+	if got := countPCLine("example.com/foo.branchPanicLeaf", "branch_panic_site.go", 456); got != 2 {
+		t.Fatalf("same-line panic sites in separate basic blocks produced %d metadata records, want 2:\n%s", got, ir)
+	}
+	if strings.Contains(ir, `!"non_recover_site.go"`) {
+		t.Fatalf("ordinary pinned function unexpectedly received implicit panic-site metadata:\n%s", ir)
+	}
+}
+
 func TestRuntimeCallerAnalysisEdgeCases(t *testing.T) {
 	callerCaches := NewCallerTracking()
 	if fnUsesRuntimeCaller(callerCaches, nil) {
@@ -276,6 +459,13 @@ func TestRuntimeCallerAnalysisEdgeCases(t *testing.T) {
 	}
 	if runtimeCallerFuncSet(callerCaches, nil) != nil {
 		t.Fatal("nil package should have no runtime caller set")
+	}
+	if recoverPanicSiteFuncSet(callerCaches, nil) != nil {
+		t.Fatal("nil package should have no recover panic-site set")
+	}
+	emptySignature := types.NewSignatureType(nil, nil, nil, nil, nil, false)
+	if candidates := newRecoverPanicCandidateIndex(nil).compatible(emptySignature); candidates != nil {
+		t.Fatal("empty recover panic candidate index should have no compatible functions")
 	}
 	if fnHasDirectRuntimeCaller(nil) {
 		t.Fatal("nil function should not have direct runtime caller use")
@@ -422,7 +612,7 @@ func TestCallerFrameTrackingEligibility(t *testing.T) {
 		{name: "stdlib", pkgPath: "fmt", track: true, want: true},
 		{name: "runtime", pkgPath: "runtime", track: true, want: false},
 		{name: "llgo runtime", pkgPath: llssa.PkgRuntime, track: true, want: false},
-		{name: "llgo runtime internal", pkgPath: "github.com/goplus/llgo/runtime/internal/foo", track: true, want: false},
+		{name: "llgo runtime internal", pkgPath: "github.com/xgo-dev/llgo/runtime/internal/foo", track: true, want: false},
 		{name: "command line package", pkgPath: "command-line-arguments", track: true, want: true},
 	}
 	for _, tt := range tests {
@@ -461,7 +651,7 @@ func f() { runtime.Caller(0) }
 	}
 	if canTrackCallerFramesForPackage("runtime") ||
 		canTrackCallerFramesForPackage(llssa.PkgRuntime) ||
-		canTrackCallerFramesForPackage("github.com/goplus/llgo/runtime/internal/lib") {
+		canTrackCallerFramesForPackage("github.com/xgo-dev/llgo/runtime/internal/lib") {
 		t.Fatal("runtime core must stay untracked")
 	}
 }

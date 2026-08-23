@@ -1,3 +1,7 @@
+// Portions of this file are derived from tinygo/main.go.
+// Copyright (c) 2018-2025 The TinyGo Authors. All rights reserved.
+// See ../../LICENSES/TinyGo-BSD-3-Clause.txt for license terms.
+
 package flash
 
 import (
@@ -11,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goplus/llgo/internal/env"
-	"github.com/goplus/llgo/internal/shellparse"
+	"github.com/xgo-dev/llgo/internal/env"
+	"github.com/xgo-dev/llgo/internal/shellparse"
 	"go.bug.st/serial"
 	"go.bug.st/serial/enumerator"
 )

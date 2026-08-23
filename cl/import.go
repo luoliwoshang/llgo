@@ -28,10 +28,10 @@ import (
 
 	"golang.org/x/tools/go/ssa"
 
-	"github.com/goplus/llgo/internal/directive"
-	"github.com/goplus/llgo/internal/env"
-	"github.com/goplus/llgo/internal/locality"
-	llssa "github.com/goplus/llgo/ssa"
+	"github.com/xgo-dev/llgo/internal/directive"
+	"github.com/xgo-dev/llgo/internal/env"
+	"github.com/xgo-dev/llgo/internal/locality"
+	llssa "github.com/xgo-dev/llgo/ssa"
 )
 
 // -----------------------------------------------------------------------------
@@ -200,7 +200,7 @@ func (p *context) initFiles(pkgPath string, files []*ast.File, cPkg bool) {
 				}
 				p.processNoInterfaceByDoc(decl.Doc, fullName)
 				if !p.processLinknameByDoc(decl.Doc, fullName, inPkgName, false, true) && cPkg {
-					// package C (https://github.com/goplus/llgo/issues/1165)
+					// package C (https://github.com/xgo-dev/llgo/issues/1165)
 					if decl.Recv == nil && token.IsExported(inPkgName) {
 						exportName := strings.TrimPrefix(inPkgName, "X")
 						p.prog.SetLinkname(fullName, exportName)
@@ -690,15 +690,6 @@ func extractTrampolineCName(name string) string {
 	return base
 }
 
-var syncAtomicIntrinsicMap = map[string]string{
-	// In upstream sync/atomic, pointer helpers are declarations without
-	// per-arch TEXT stubs. Treat them as llgo intrinsics directly.
-	"sync/atomic.LoadPointer":           "atomicLoad",
-	"sync/atomic.StorePointer":          "atomicStore",
-	"sync/atomic.SwapPointer":           "atomicXchg",
-	"sync/atomic.CompareAndSwapPointer": "atomicCmpXchgOK",
-}
-
 func (p *context) funcName(fn *ssa.Function) (*types.Package, string, int) {
 	var pkg *types.Package
 	var orgName string
@@ -752,9 +743,6 @@ func (p *context) funcName(fn *ssa.Function) (*types.Package, string, int) {
 	// See: $(GOROOT)/src/hash/maphash/maphash.go: escapeForHash.
 	if orgName == "hash/maphash.escapeForHash" {
 		return nil, "skip", llgoInstr
-	}
-	if instr, ok := syncAtomicIntrinsicMap[orgName]; ok {
-		return nil, instr, llgoInstr
 	}
 	return pkg, funcName(pkg, fn, false), goFunc
 }

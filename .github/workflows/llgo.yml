@@ -22,14 +22,14 @@ jobs:
     strategy:
       matrix:
         # Compatibility results are tied to these exact patch releases.
-        # Keep the supported Go 1.24 and 1.26 endpoints on macOS so user
+        # Keep the supported Go 1.25 and 1.26 endpoints on macOS so user
         # projects exercise both runtime generations there. macOS Intel is
         # covered by the release artifact smoke test, avoiding a duplicate
         # 35-minute demo job.
         include:
           - os: ubuntu-latest
             llvm: 19
-            go: "1.24.2"
+            go: "1.25.0"
             lane: compatibility
           - os: ubuntu-latest
             llvm: 19
@@ -37,7 +37,7 @@ jobs:
             lane: primary
           - os: macos-latest
             llvm: 19
-            go: "1.24.2"
+            go: "1.25.0"
             lane: compatibility
           - os: macos-latest
             llvm: 19
@@ -148,22 +148,22 @@ jobs:
           - macos-latest
           - ubuntu-latest
         llvm: [19]
-        go: ["1.24.2", "1.26.5"]
+        go: ["1.25.0", "1.26.5"]
         # In-command package parallelism lets Ubuntu use two shards while
         # retaining headroom for the serial std build-mode checks.
         shard: ["0", "1"]
         include:
-          - go: "1.24.2"
+          - go: "1.25.0"
             lane: compatibility
           - go: "1.26.5"
             lane: primary
         exclude:
-          # The full demo lane above exercises Go 1.24 user-project/runtime
+          # The full demo lane above exercises Go 1.25 user-project/runtime
           # compatibility on macOS. Keep the much larger per-package
           # compatibility matrix on Ubuntu and use one parallel primary shard
           # on macOS.
           - os: macos-latest
-            go: "1.24.2"
+            go: "1.25.0"
           - os: macos-latest
             shard: "1"
     runs-on: ${{matrix.os}}
@@ -245,7 +245,7 @@ jobs:
         include:
           - os: ubuntu-latest
             llvm: 19
-            go: "1.24.2"
+            go: "1.25.0"
             lane: compatibility
           - os: ubuntu-latest
             llvm: 19
@@ -279,21 +279,21 @@ jobs:
           go-version: ${{matrix.go}}
 
       - name: Test Hello World with go.mod 1.21
-        if: startsWith(matrix.go, '1.24') || startsWith(matrix.go, '1.26')
+        if: startsWith(matrix.go, '1.25') || startsWith(matrix.go, '1.26')
         uses: ./.github/actions/test-helloworld
         with:
           go-version: ${{matrix.go}}
           mod-version: "1.21"
 
       - name: Test Hello World with go.mod 1.22
-        if: startsWith(matrix.go, '1.24') || startsWith(matrix.go, '1.26')
+        if: startsWith(matrix.go, '1.25') || startsWith(matrix.go, '1.26')
         uses: ./.github/actions/test-helloworld
         with:
           go-version: ${{matrix.go}}
           mod-version: "1.22"
 
       - name: Test Hello World with go.mod 1.24
-        if: startsWith(matrix.go, '1.24') || startsWith(matrix.go, '1.26')
+        if: startsWith(matrix.go, '1.25') || startsWith(matrix.go, '1.26')
         uses: ./.github/actions/test-helloworld
         with:
           go-version: ${{matrix.go}}
@@ -360,7 +360,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ["1.24.2", "1.26.5"]
+        go: ["1.25.0", "1.26.5"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

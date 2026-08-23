@@ -15,7 +15,8 @@ import "C"
 // CHECK: call ptr @malloc(i64 1024)
 // CHECK: call ptr @"{{.*}}GetThreadDefer"()
 // CHECK: call void @"{{.*}}FreeDeferNode"
-// CHECK-LABEL: define void @"main.main$1$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.main$1$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.main$1$1"(ptr nest %0){{.*}} {
 // CHECK: [[DEFER_ENV:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK: [[DEFER_KEEPALIVE_SLOT:%[0-9]+]] = extractvalue { ptr } [[DEFER_ENV]], 0
 // CHECK-NEXT: [[DEFER_KEEPALIVE:%[0-9]+]] = load ptr, ptr [[DEFER_KEEPALIVE_SLOT]]

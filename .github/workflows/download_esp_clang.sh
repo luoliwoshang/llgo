@@ -3,6 +3,7 @@ set -e
 
 ESP_CLANG_VERSION="19.1.2_20250905-3"
 BASE_URL="https://github.com/goplus/espressif-llvm-project-prebuilt/releases/download/${ESP_CLANG_VERSION}"
+LLVM_LICENSE="LICENSES/XGo-LLVM-Apache-2.0-WITH-LLVM-exception.txt"
 
 get_esp_clang_platform() {
     local platform="$1"
@@ -54,11 +55,21 @@ download_and_extract() {
         echo "Error: clang++ not found in ${platform} toolchain"
         exit 1
     fi
+
+    # The upstream archive currently contains only a short license pointer in
+    # include/llvm/Support. Keep the complete LLVM license with the toolchain
+    # that GoReleaser places in LLGo release archives.
+    install -m 0644 "${LLVM_LICENSE}" ".sysroot/${os}/${arch}/crosscompile/clang/LICENSE-LLVM.txt"
     
     echo "${platform} ESP Clang ready in .sysroot/${os}/${arch}/crosscompile/clang"
 }
 
 echo "Downloading ESP Clang toolchain version ${ESP_CLANG_VERSION}..."
+
+if [[ ! -f "${LLVM_LICENSE}" ]]; then
+    echo "Error: complete LLVM license not found at ${LLVM_LICENSE}" >&2
+    exit 1
+fi
 
 for platform in "darwin-amd64" "darwin-arm64" "linux-amd64" "linux-arm64"; do
     download_and_extract "${platform}"

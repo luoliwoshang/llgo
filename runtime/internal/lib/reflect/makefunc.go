@@ -15,8 +15,8 @@
  */
 
 // Copyright 2012 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style license.
+// See LICENSES/Go-BSD-3-Clause.txt at this module root for license terms.
 
 // MakeFunc implementation.
 
@@ -26,10 +26,10 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/goplus/llgo/runtime/abi"
-	c "github.com/goplus/llgo/runtime/internal/clite"
-	"github.com/goplus/llgo/runtime/internal/ffi"
-	"github.com/goplus/llgo/runtime/internal/runtime"
+	"github.com/xgo-dev/llgo/runtime/abi"
+	c "github.com/xgo-dev/llgo/runtime/internal/clite"
+	"github.com/xgo-dev/llgo/runtime/internal/ffi"
+	"github.com/xgo-dev/llgo/runtime/internal/runtime"
 )
 
 type funcData struct {

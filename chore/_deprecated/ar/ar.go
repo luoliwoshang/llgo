@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+// Portions of this file are derived from tinygo/builder/ar.go.
+// Copyright (c) 2018-2025 The TinyGo Authors. All rights reserved.
+// See ../../../LICENSES/TinyGo-BSD-3-Clause.txt for license terms.
+
 package ar
 
 import (
@@ -29,7 +33,7 @@ import (
 	"time"
 
 	wasm "github.com/aykevl/go-wasm"
-	"github.com/goplus/llgo/xtool/ar"
+	"github.com/xgo-dev/llgo/xtool/ar"
 )
 
 // Create creates an arcive for static linking from a list of object files

@@ -30,13 +30,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goplus/llgo/cl/blocks"
-	"github.com/goplus/llgo/cl/ssawrap"
-	"github.com/goplus/llgo/internal/goembed"
-	"github.com/goplus/llgo/internal/typepatch"
+	"github.com/xgo-dev/llgo/cl/blocks"
+	"github.com/xgo-dev/llgo/cl/ssawrap"
+	"github.com/xgo-dev/llgo/internal/goembed"
+	"github.com/xgo-dev/llgo/internal/typepatch"
 	"golang.org/x/tools/go/ssa"
 
-	llssa "github.com/goplus/llgo/ssa"
+	llssa "github.com/xgo-dev/llgo/ssa"
 )
 
 // -----------------------------------------------------------------------------
@@ -165,9 +165,16 @@ type context struct {
 	debugDIVars          map[*types.Var]llssa.DIVar
 	debugAllocVars       map[*ssa.Alloc]*types.Var
 	runtimeCallerFuncs   map[*ssa.Function]bool
+	panicSiteFuncs       map[*ssa.Function]bool
 	pcLineSeq            uint64
+	// The runtime PC-line table stores file and line, but not column. Keep the
+	// last emitted position within one SSA basic block so repeated checks for a
+	// single source line can share an anchor.
+	lastPCLineFile       string
+	lastPCLineLine       int
 	options              Options
 	recoverSlots         map[*ssa.Alloc]none
+	implicitDeferResults []llssa.Expr
 
 	patches          Patches
 	blkInfos         []blocks.Info
@@ -656,7 +663,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 		p.inits = append(p.inits, func() {
 			oldFn, oldGoFn, oldMethodNilDerefChecks, oldCallerFrameMark := p.fn, p.goFn, p.methodNilDerefChecks, p.callerFrameMark
 			oldLocalityFunction := p.locality.function
-			oldRecoverSlots := p.recoverSlots
+			oldRecoverSlots, oldImplicitDeferResults := p.recoverSlots, p.implicitDeferResults
 			p.fn = fn
 			p.goFn = f
 			p.callerFrameMark = llssa.Nil
@@ -671,6 +678,7 @@ func (p *context) compileFuncDecl(pkg llssa.Package, f *ssa.Function) (llssa.Fun
 				p.fn, p.goFn, p.methodNilDerefChecks, p.callerFrameMark = oldFn, oldGoFn, oldMethodNilDerefChecks, oldCallerFrameMark
 				p.locality.function = oldLocalityFunction
 				p.recoverSlots = oldRecoverSlots
+				p.implicitDeferResults = oldImplicitDeferResults
 			}()
 			p.phis = nil
 			if dbgSymsEnabled {
@@ -753,12 +761,12 @@ func needsRuntimeStackNoInline(pkg *types.Package, f *ssa.Function) bool {
 		return false
 	}
 	switch pkg.Path() {
-	case "runtime", "github.com/goplus/llgo/runtime/internal/lib/runtime":
+	case "runtime", "github.com/xgo-dev/llgo/runtime/internal/lib/runtime":
 		switch f.Name() {
 		case "Caller", "Callers", "callers":
 			return true
 		}
-	case "github.com/goplus/llgo/runtime/internal/clite/debug":
+	case "github.com/xgo-dev/llgo/runtime/internal/clite/debug":
 		return f.Name() == "StackTrace"
 	}
 	return false
@@ -890,6 +898,10 @@ func (p *context) debugParams(b llssa.Builder, f *ssa.Function) {
 }
 
 func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, doModInit bool) llssa.BasicBlock {
+	// A control-flow edge can enter this block without executing the preceding
+	// block's anchor, so deduplication must never cross a block boundary.
+	p.lastPCLineFile = ""
+	p.lastPCLineLine = 0
 	oldLocalBlock := p.locality.function.block
 	p.locality.function.block = block
 	defer func() { p.locality.function.block = oldLocalBlock }()
@@ -901,6 +913,9 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	var instrs = block.Instrs[n:]
 	var ret = fn.Block(block.Index)
 	b.SetBlock(ret)
+	if block.Index == 0 {
+		p.prepareImplicitDeferResults(b, block.Parent())
+	}
 	if block.Index == 0 && p.functionUsesRecover(block.Parent()) {
 		b.BindRecoverFrame()
 	}
@@ -910,7 +925,7 @@ func (p *context) compileBlock(b llssa.Builder, block *ssa.BasicBlock, n int, do
 	if block.Index == 0 && p.shouldTrackCallerFrames() {
 		p.pushCallerLocationFrame(b, block.Parent())
 	}
-	if block.Index == 0 && p.options.Trace && !strings.HasPrefix(fn.Name(), "github.com/goplus/llgo/runtime/internal/runtime.Print") {
+	if block.Index == 0 && p.options.Trace && !strings.HasPrefix(fn.Name(), "github.com/xgo-dev/llgo/runtime/internal/runtime.Print") {
 		b.Printf("call " + fn.Name() + "\n\x00")
 	}
 	// place here to avoid wrong current-block
@@ -1325,34 +1340,28 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 			if _, ok := p.methodNilDerefChecks[v]; ok {
 				return p.compileCheckedDeref(b, v)
 			}
-			if isEffectfulArrayPointerDeref(v) {
-				x := p.compileValue(b, v.X)
-				p.recordPanicLocation(b, v.Pos())
-				b.AssertNilDeref(x)
-			}
+			effectfulArrayDeref := isEffectfulArrayPointerDeref(v)
 			if refs, ok := nonDebugReferrers(v); ok && len(refs) == 0 {
-				if t := p.type_(v.Type(), llssa.InGo); t.RawType() != nil {
-					if p.isLargeNonPointerValue(t) {
-						x := p.compileValue(b, v.X)
-						p.recordPanicLocation(b, v.Pos())
-						p.assertNilDerefBase(b, v.X)
-						b.AssertNilDeref(x)
-						return
-					}
-				}
 				if skipUnusedArrayDeref(v) {
-					p.compileValue(b, v.X)
-					return
-				}
-				if _, ok := types.Unalias(v.Type()).Underlying().(*types.Slice); ok {
-					// Zero-length slice-to-array conversions can leave only
-					// an unused slice deref; preserve its required nil check.
 					x := p.compileValue(b, v.X)
-					p.recordPanicLocation(b, v.Pos())
-					p.assertNilDerefBase(b, v.X)
-					b.AssertNilDeref(x)
+					if effectfulArrayDeref {
+						p.recordPanicSite(b, v.Pos())
+						b.AssertNilDeref(x)
+					}
 					return
 				}
+				// Elide the unused load, but keep an explicit nil check so the
+				// Go dereference still panics instead of relying on a trapping load.
+				x := p.compileValue(b, v.X)
+				p.recordPanicSite(b, v.Pos())
+				p.assertNilDerefBase(b, v.X)
+				b.AssertNilDeref(x)
+				return
+			}
+			if effectfulArrayDeref {
+				x := p.compileValue(b, v.X)
+				p.recordPanicSite(b, v.Pos())
+				b.AssertNilDeref(x)
 			}
 			if refs, ok := nonDebugReferrers(v); ok && len(refs) == 1 {
 				if _, ok := refs[0].(*ssa.MakeInterface); ok {
@@ -1380,7 +1389,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		}
 		x := p.compileValue(b, v.X)
 		if v.Op != token.ARROW {
-			p.recordPanicLocation(b, v.Pos())
+			p.recordPanicSite(b, v.Pos())
 		}
 		if shouldAssertDirectNilDeref(v) {
 			b.AssertNilDeref(x)
@@ -1420,7 +1429,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		ret = b.Convert(p.type_(t, llssa.InGo), x)
 	case *ssa.FieldAddr:
 		x := p.compileValue(b, v.X)
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		if p.isAddressOfFieldAddr(v) {
 			b.AssertNilDeref(x)
 		}
@@ -1447,12 +1456,12 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		}
 		x := p.compileValue(b, vx)
 		idx := p.compileValue(b, v.Index)
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		ret = b.IndexAddr(x, idx)
 	case *ssa.Index:
 		x := p.compileValue(b, v.X)
 		idx := p.compileValue(b, v.Index)
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		ret = b.Index(x, idx, func() (addr llssa.Expr, zero bool) {
 			switch n := v.X.(type) {
 			case *ssa.Const:
@@ -1486,7 +1495,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 		if v.Max != nil {
 			max = p.compileValue(b, v.Max)
 		}
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		ret = b.Slice(x, low, high, max)
 		ret.Type = p.type_(v.Type(), llssa.InGo)
 	case *ssa.MakeInterface:
@@ -1547,7 +1556,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 	case *ssa.TypeAssert:
 		x := p.compileValue(b, v.X)
 		t := p.type_(v.AssertedType, llssa.InGo)
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		ret = b.TypeAssert(x, t, v.CommaOk)
 	case *ssa.Extract:
 		x := p.compileValue(b, v.Tuple)
@@ -1588,7 +1597,7 @@ func (p *context) compileInstrOrValue(b llssa.Builder, iv instrOrValue, asValue 
 	case *ssa.SliceToArrayPointer:
 		t := p.type_(v.Type(), llssa.InGo)
 		x := p.compileValue(b, v.X)
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		ret = b.SliceToArrayPointer(x, t)
 	default:
 		panic(fmt.Sprintf("compileInstrAndValue: unknown instr - %T\n", iv))
@@ -1806,6 +1815,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	case *ssa.Return:
 		runDefers := p.returnNeedsImplicitRunDefers(v)
 		if runDefers {
+			p.spillImplicitDeferResults(b, v)
 			p.recordPanicLocation(b, v.Pos())
 			p.emitPCLineLabel(b, p.deferRunPos(v.Pos()))
 			b.RunDefers()
@@ -1814,15 +1824,18 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		if n := len(v.Results); n > 0 {
 			results = make([]llssa.Expr, n)
 			for i, r := range v.Results {
-				// A deferred call may change a named result independently of
-				// the SSA value in Return.Results. Reload the result's storage
-				// in the RunDefers continuation instead of depending on the
-				// particular SSA node used to form the return tuple.
+				// A deferred call may change a named result independently of the
+				// SSA value in Return.Results. An unnamed result, conversely,
+				// must retain its pre-defer SSA value even though that value may
+				// not dominate the shared RunDefers continuation. Reload either
+				// kind from its entry-block storage after RunDefers.
 				if runDefers {
 					if slot := p.namedResultSlot(i); slot != nil {
 						results[i] = b.Load(p.compileValue(b, slot))
 						continue
 					}
+					results[i] = b.Load(p.implicitDeferResultSlot(i))
+					continue
 				}
 				results[i] = p.compileValue(b, r)
 			}
@@ -1843,7 +1856,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 		m := p.compileValue(b, v.Map)
 		key := p.compileValue(b, v.Key)
 		val := p.compileValue(b, v.Value)
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		b.MapUpdate(m, key, val)
 	case *ssa.Defer:
 		if v.DeferStack != nil {
@@ -1869,7 +1882,7 @@ func (p *context) compileInstr(b llssa.Builder, instr ssa.Instruction) {
 	case *ssa.Send:
 		ch := p.compileValue(b, v.Chan)
 		x := p.compileValue(b, v.X)
-		p.recordPanicLocation(b, v.Pos())
+		p.recordPanicSite(b, v.Pos())
 		b.Send(ch, x)
 	case *ssa.DebugRef:
 		if p.options.DebugSymbols && v.Parent().Origin() == nil {
@@ -1961,13 +1974,38 @@ func (p *context) compileValue(b llssa.Builder, v ssa.Value) llssa.Expr {
 	panic(fmt.Sprintf("compileValue: unknown value - %T\n", v))
 }
 
+// isBlankFieldStore also recognizes stores into descendants of an aggregate
+// blank field. IndexAddr is followed only through an array's in-place storage,
+// never through a slice header into its separately allocated backing array.
+// The caller still evaluates the stored value for side effects.
 func isBlankFieldStore(addr ssa.Value) bool {
-	field, ok := addr.(*ssa.FieldAddr)
-	if !ok {
-		return false
+	for {
+		switch current := addr.(type) {
+		case *ssa.FieldAddr:
+			_, st, ok := fieldAddrStruct(current)
+			if !ok {
+				return false
+			}
+			if st.Field(current.Field).Name() == "_" {
+				return true
+			}
+			addr = current.X
+		case *ssa.IndexAddr:
+			if current.X == nil || current.X.Type() == nil {
+				return false
+			}
+			ptr, ok := current.X.Type().Underlying().(*types.Pointer)
+			if !ok {
+				return false
+			}
+			if _, ok := ptr.Elem().Underlying().(*types.Array); !ok {
+				return false
+			}
+			addr = current.X
+		default:
+			return false
+		}
 	}
-	_, st, ok := fieldAddrStruct(field)
-	return ok && st.Field(field.Field).Name() == "_"
 }
 
 const rangeOverFuncYieldSynthetic = "range-over-func yield"
@@ -2044,6 +2082,47 @@ func (p *context) deferRunPos(fallback token.Pos) token.Pos {
 		}
 	}
 	return fallback
+}
+
+// prepareImplicitDeferResults reserves entry-block storage for unnamed return
+// values that must survive the shared range-defer dispatcher. Named results
+// already have source-level slots that deferred calls are allowed to update.
+func (p *context) prepareImplicitDeferResults(b llssa.Builder, fn *ssa.Function) {
+	p.implicitDeferResults = nil
+	if !p.functionHasExplicitStackDeferInAnon(fn) {
+		return
+	}
+	results := fn.Signature.Results()
+	p.implicitDeferResults = make([]llssa.Expr, results.Len())
+	for i := 0; i < results.Len(); i++ {
+		if p.namedResultSlot(i) == nil {
+			p.implicitDeferResults[i] = b.Alloc(p.type_(results.At(i).Type(), llssa.InGo), false)
+		}
+	}
+}
+
+// spillImplicitDeferResults stores unnamed return values before RunDefers so
+// its continuation can reload the pre-defer values from entry-block slots.
+func (p *context) spillImplicitDeferResults(b llssa.Builder, ret *ssa.Return) {
+	for i, result := range ret.Results {
+		if p.namedResultSlot(i) == nil {
+			b.Store(p.implicitDeferResultSlot(i), p.compileValue(b, result))
+		}
+	}
+}
+
+// implicitDeferResultSlot makes the entry-block preparation invariant explicit:
+// compileBlock visits block 0 before any return block and reserves every unnamed
+// result slot needed by the same memoized defer predicate used at the return.
+func (p *context) implicitDeferResultSlot(index int) llssa.Expr {
+	if index < 0 || index >= len(p.implicitDeferResults) {
+		panic(fmt.Sprintf("missing implicit defer result slot %d", index))
+	}
+	slot := p.implicitDeferResults[index]
+	if slot.IsNil() {
+		panic(fmt.Sprintf("missing implicit defer result slot %d", index))
+	}
+	return slot
 }
 
 func (p *context) returnNeedsImplicitRunDefers(ret *ssa.Return) bool {
@@ -2278,6 +2357,7 @@ func newPackageEx(prog llssa.Program, ct *CallerTracking, patches Patches, rewri
 
 		trackCallerFrames:  filesUseRuntimeCaller(files) || packageUsesRuntimeCaller(ct, pkg),
 		runtimeCallerFuncs: runtimeCallerFuncSet(ct, pkg),
+		panicSiteFuncs:     recoverPanicSiteFuncSet(ct, pkg),
 	}
 	if embedMap != nil {
 		ctx.embedMap = *embedMap
@@ -2490,7 +2570,10 @@ func (p *context) patchLocalGenericNamed(t *types.Named) (*types.Named, bool) {
 	if isPatchedLocalGenericName(t.Obj().Name()) {
 		return nil, false
 	}
-	obj := types.NewTypeName(t.Obj().Pos(), t.Obj().Pkg(), p.localNamedName(t, false), nil)
+	// The generated name already carries the local type's complete identity.
+	// Keep this detached object positionless so ABI naming does not append a
+	// loader-relative token.Pos that changes between package-cache processes.
+	obj := types.NewTypeName(token.NoPos, t.Obj().Pkg(), p.localNamedName(t, false), nil)
 	return types.NewNamed(obj, t.Underlying(), nil), true
 }
 

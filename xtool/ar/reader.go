@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+// Portions of this file are derived from github.com/blakesmith/ar.
+// Copyright (c) 2013 Blake Smith <blakesmith0@gmail.com>.
+// See ../../LICENSES/BlakeSmith-AR-MIT.txt for license terms.
+
 package ar
 
 import (

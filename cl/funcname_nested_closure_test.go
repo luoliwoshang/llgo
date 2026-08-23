@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/goplus/gogen/packages"
-	"github.com/goplus/llgo/internal/typepatch"
-	"github.com/goplus/llgo/ssa/ssatest"
+	"github.com/xgo-dev/llgo/internal/typepatch"
+	"github.com/xgo-dev/llgo/ssa/ssatest"
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 )
@@ -101,6 +101,9 @@ func localType[T any]() any {
 	patched, ok := ctx.patchLocalGenericNamed(local)
 	if !ok {
 		t.Fatalf("patchLocalGenericNamed(%v) was not patched", local)
+	}
+	if pos := patched.Obj().Pos(); pos.IsValid() {
+		t.Fatalf("patched local generic type position = %v, want token.NoPos", pos)
 	}
 	name := patched.Obj().Name()
 	if !strings.Contains(name, "[") || strings.Contains(name, "·") {

@@ -78,7 +78,8 @@ import (
 // CHECK: [[CBYTES_CALL_ENV:%.*]] = extractvalue { ptr, ptr } [[CBYTES_CLOSURE]], 1
 // CHECK: [[CBYTES_CALL_FN:%.*]] = extractvalue { ptr, ptr } [[CBYTES_CLOSURE]], 0
 // CHECK: [[CBYTES_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[CBYTES_CALL_FN]])
-// CHECK-NEXT: [[CBYTES:%.*]] = call ptr [[CBYTES_CODE]](ptr {{(nest|swiftself)}} [[CBYTES_CALL_ENV]])
+// DARWIN-ARM64-NEXT: [[CBYTES:%.*]] = call ptr [[CBYTES_CODE]](ptr swiftself [[CBYTES_CALL_ENV]])
+// LINUX-AMD64-NEXT: [[CBYTES:%.*]] = call ptr [[CBYTES_CODE]](ptr nest [[CBYTES_CALL_ENV]])
 // CHECK-NEXT: store ptr [[CBYTES]], ptr [[CBYTES_SLOT]]
 // CHECK: [[CSTR_FOR_GO:%.*]] = load ptr, ptr [[CSTR_SLOT]]
 // CHECK-NEXT: [[GO_STRING:%.*]] = call %"{{.*}}String" @"{{.*}}GoString"(ptr [[CSTR_FOR_GO]])
@@ -90,7 +91,8 @@ import (
 // CHECK: [[GOBYTES_CALL_ENV:%.*]] = extractvalue { ptr, ptr } [[GOBYTES_CLOSURE]], 1
 // CHECK: [[GOBYTES_CALL_FN:%.*]] = extractvalue { ptr, ptr } [[GOBYTES_CLOSURE]], 0
 // CHECK: [[GOBYTES_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[GOBYTES_CALL_FN]])
-// CHECK-NEXT: [[GO_BYTES:%.*]] = call %"{{.*}}Slice" [[GOBYTES_CODE]](ptr {{(nest|swiftself)}} [[GOBYTES_CALL_ENV]])
+// DARWIN-ARM64-NEXT: [[GO_BYTES:%.*]] = call %"{{.*}}Slice" [[GOBYTES_CODE]](ptr swiftself [[GOBYTES_CALL_ENV]])
+// LINUX-AMD64-NEXT: [[GO_BYTES:%.*]] = call %"{{.*}}Slice" [[GOBYTES_CODE]](ptr nest [[GOBYTES_CALL_ENV]])
 // One libm result is followed through boxing into fmt.Printf; the other
 // wrappers already prove their own argument/result forwarding above.
 // CHECK: [[SQRT_CALL:%.*]] = call double @main._Cfunc_sqrt(double 2.000000e+00)
@@ -105,27 +107,31 @@ import (
 // CHECK: call double @main._Cfunc_cos(double 2.000000e+00)
 // CHECK: call double @main._Cfunc_log(double 2.000000e+00)
 
-// CHECK-LABEL: define ptr @"main.main$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define ptr @"main.main$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define ptr @"main.main$1"(ptr nest %0){{.*}} {
 // CHECK: [[CB_CAPTURE:%.*]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[CB_SLOT:%.*]] = extractvalue { ptr } [[CB_CAPTURE]], 0
 // CHECK-NEXT: [[CB_SLICE:%.*]] = load %"{{.*}}Slice", ptr [[CB_SLOT]]
 // CHECK: [[CB_RESULT:%.*]] = call ptr @"{{.*}}CBytes"(%"{{.*}}Slice" [[CB_SLICE]])
 // CHECK-NEXT: ret ptr [[CB_RESULT]]
 
-// CHECK-LABEL: define %"{{.*}}Slice" @"main.main$2"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define %"{{.*}}Slice" @"main.main$2"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define %"{{.*}}Slice" @"main.main$2"(ptr nest %0){{.*}} {
 // CHECK: [[GB_CAPTURE:%.*]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[GB_SLOT:%.*]] = extractvalue { ptr } [[GB_CAPTURE]], 0
 // CHECK-NEXT: [[GB_PTR:%.*]] = load ptr, ptr [[GB_SLOT]]
 // CHECK: [[GB_RESULT:%.*]] = call %"{{.*}}Slice" @"{{.*}}GoBytes"(ptr [[GB_PTR]], i64 4)
 // CHECK-NEXT: ret %"{{.*}}Slice" [[GB_RESULT]]
 
-// CHECK-LABEL: define void @"main.main$3"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.main$3"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.main$3"(ptr nest %0){{.*}} {
 // CHECK: [[FC_CAPTURE:%.*]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[FC_SLOT:%.*]] = extractvalue { ptr } [[FC_CAPTURE]], 0
 // CHECK-NEXT: [[FC_PTR:%.*]] = load ptr, ptr [[FC_SLOT]]
 // CHECK: call [0 x i8] @main._Cfunc_free(ptr [[FC_PTR]])
 
-// CHECK-LABEL: define void @"main.main$4"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.main$4"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.main$4"(ptr nest %0){{.*}} {
 // CHECK: [[FB_CAPTURE:%.*]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[FB_SLOT:%.*]] = extractvalue { ptr } [[FB_CAPTURE]], 0
 // CHECK-NEXT: [[FB_PTR:%.*]] = load ptr, ptr [[FB_SLOT]]

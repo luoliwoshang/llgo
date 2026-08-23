@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // CHECK-LABEL: define void @main.main(){{.*}} {
@@ -13,14 +13,17 @@ func main() {
 	// CHECK: [[OUTER_CALL_ENV:%.*]] = extractvalue { ptr, ptr } [[OUTER]], 1
 	// CHECK: [[OUTER_CALL_FN:%.*]] = extractvalue { ptr, ptr } [[OUTER]], 0
 	// CHECK: [[OUTER_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[OUTER_CALL_FN]])
-	// CHECK: [[INNER:%.*]] = call { ptr, ptr } [[OUTER_CODE]](ptr {{(nest|swiftself)}} [[OUTER_CALL_ENV]], i64 1)
+	// DARWIN-ARM64: [[INNER:%.*]] = call { ptr, ptr } [[OUTER_CODE]](ptr swiftself [[OUTER_CALL_ENV]], i64 1)
+	// LINUX-AMD64: [[INNER:%.*]] = call { ptr, ptr } [[OUTER_CODE]](ptr nest [[OUTER_CALL_ENV]], i64 1)
 	// CHECK: [[INNER_CALL_ENV:%.*]] = extractvalue { ptr, ptr } [[INNER]], 1
 	// CHECK: [[INNER_CALL_FN:%.*]] = extractvalue { ptr, ptr } [[INNER]], 0
 	// CHECK: [[INNER_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[INNER_CALL_FN]])
-	// CHECK: call void [[INNER_CODE]](ptr {{(nest|swiftself)}} [[INNER_CALL_ENV]], i64 2)
+	// DARWIN-ARM64: call void [[INNER_CODE]](ptr swiftself [[INNER_CALL_ENV]], i64 2)
+	// LINUX-AMD64: call void [[INNER_CODE]](ptr nest [[INNER_CALL_ENV]], i64 2)
 	x := 1
 	f := func(i int) func(int) {
-		// CHECK-LABEL: define { ptr, ptr } @"main.main$1"(ptr {{(nest|swiftself)}} %0, i64 %1){{.*}} {
+		// DARWIN-ARM64-LABEL: define { ptr, ptr } @"main.main$1"(ptr swiftself %0, i64 %1){{.*}} {
+		// LINUX-AMD64-LABEL: define { ptr, ptr } @"main.main$1"(ptr nest %0, i64 %1){{.*}} {
 		// CHECK: [[OUTER_CAPTURE:%.*]] = load { ptr }, ptr %0
 		// CHECK-NEXT: [[CAPTURED_X_SLOT:%.*]] = extractvalue { ptr } [[OUTER_CAPTURE]], 0
 		// CHECK: [[INNER_ENV:%.*]] = call ptr @"{{.*}}AllocU"(i64 8)
@@ -28,7 +31,8 @@ func main() {
 		// CHECK: [[INNER_VALUE:%.*]] = insertvalue { ptr, ptr } { ptr @"main.main$1$1", ptr undef }, ptr [[INNER_ENV]], 1
 		// CHECK-NEXT: ret { ptr, ptr } [[INNER_VALUE]]
 		return func(i int) {
-			// CHECK-LABEL: define void @"main.main$1$1"(ptr {{(nest|swiftself)}} %0, i64 %1){{.*}} {
+			// DARWIN-ARM64-LABEL: define void @"main.main$1$1"(ptr swiftself %0, i64 %1){{.*}} {
+			// LINUX-AMD64-LABEL: define void @"main.main$1$1"(ptr nest %0, i64 %1){{.*}} {
 			// CHECK: [[INNER_CAPTURE:%.*]] = load { ptr }, ptr %0
 			// CHECK-NEXT: [[INNER_X_SLOT:%.*]] = extractvalue { ptr } [[INNER_CAPTURE]], 0
 			// CHECK-NEXT: [[INNER_X:%.*]] = load i64, ptr [[INNER_X_SLOT]]

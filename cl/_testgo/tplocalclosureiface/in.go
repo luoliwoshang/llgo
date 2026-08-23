@@ -1,12 +1,14 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
-// CHECK-LABEL: define linkonce %"{{.*}}/runtime/internal/runtime.eface" @"main.boxFuncs$1[int]"(ptr {{(nest|swiftself)}}
-// CHECK: insertvalue %"{{.*}}/runtime/internal/runtime.eface" { ptr [[INT_BOX:@"_llgo_main\.box\[int\]\.p[0-9]+"]], ptr undef }
+// DARWIN-ARM64-LABEL: define linkonce %"{{.*}}/runtime/internal/runtime.eface" @"main.boxFuncs$1[int]"(ptr swiftself
+// LINUX-AMD64-LABEL: define linkonce %"{{.*}}/runtime/internal/runtime.eface" @"main.boxFuncs$1[int]"(ptr nest
+// CHECK: insertvalue %"{{.*}}/runtime/internal/runtime.eface" { ptr [[INT_BOX:@"_llgo_main\.box\[int\]"]], ptr undef }
 // CHECK-LABEL: define linkonce i1 @"main.boxFuncs$2[int]"(
 // CHECK: icmp eq ptr %{{.*}}, [[INT_BOX]]
-// CHECK-LABEL: define linkonce %"{{.*}}/runtime/internal/runtime.eface" @"main.boxFuncs$1[string]"(ptr {{(nest|swiftself)}}
-// CHECK: insertvalue %"{{.*}}/runtime/internal/runtime.eface" { ptr [[STRING_BOX:@"_llgo_main\.box\[string\]\.p[0-9]+"]], ptr undef }
+// DARWIN-ARM64-LABEL: define linkonce %"{{.*}}/runtime/internal/runtime.eface" @"main.boxFuncs$1[string]"(ptr swiftself
+// LINUX-AMD64-LABEL: define linkonce %"{{.*}}/runtime/internal/runtime.eface" @"main.boxFuncs$1[string]"(ptr nest
+// CHECK: insertvalue %"{{.*}}/runtime/internal/runtime.eface" { ptr [[STRING_BOX:@"_llgo_main\.box\[string\]"]], ptr undef }
 // CHECK-LABEL: define linkonce i1 @"main.boxFuncs$2[string]"(
 // CHECK: icmp eq ptr %{{.*}}, [[STRING_BOX]]
 

@@ -30,8 +30,8 @@ import (
 	"go/token"
 	"go/types"
 
-	"github.com/goplus/llgo/internal/packages"
-	llssa "github.com/goplus/llgo/ssa"
+	"github.com/xgo-dev/llgo/internal/packages"
+	llssa "github.com/xgo-dev/llgo/ssa"
 	llvm "github.com/xgo-dev/llvm"
 )
 
@@ -46,6 +46,17 @@ type genConfig struct {
 	abiTypes      []llssa.AbiTypeInfo
 	funcInfo      []funcInfoRecord
 	pcLineInfo    []pcLineRecord
+}
+
+const (
+	processEntrySymbol = "main"
+	runtimeMainSymbol  = "runtime.main"
+	runtimeGoexitName  = "runtime.goexit"
+)
+
+func needsRuntimeMainFrame(ctx *context) bool {
+	conf := ctx.buildConf
+	return conf.BuildMode == BuildModeExe && !isWasmTarget(conf.Goos) && conf.PCLNMode != PCLNNone
 }
 
 // genMainModule generates the main entry module for an llgo program.
@@ -63,7 +74,24 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 	argvValueType := prog.Pointer(prog.CStr())
 	argvVar := mainPkg.NewVarEx("__llgo_argv", prog.Pointer(argvValueType))
 	argvVar.InitNil()
-	emitFuncInfoTable(ctx, mainPkg, cfg.funcInfo, cfg.pcLineInfo)
+	funcInfo := cfg.funcInfo
+	if needsRuntimeMainFrame(ctx) {
+		// The native process entry is the physical frame below runtime.main,
+		// which is runtime.goexit in a Go traceback. Keep the required C symbol
+		// while giving both generated frames their logical Go names.
+		tailRecords := []funcInfoRecord{
+			{symbol: runtimeMainSymbol, name: runtimeMainSymbol},
+			{symbol: processEntrySymbol, name: runtimeGoexitName},
+		}
+		funcInfo = append(funcInfo, tailRecords...)
+		// Entry sites are emitted after these generated functions have bodies.
+		// Keep matching metadata in this module so the generic site emitter can
+		// attach the symbol IDs without adding a special PCLN path.
+		for _, rec := range tailRecords {
+			mainPkg.EmitFuncInfo(rec.symbol, rec.name, "", 0, 0)
+		}
+	}
+	emitFuncInfoTable(ctx, mainPkg, funcInfo, cfg.pcLineInfo)
 
 	exportFile := pkg.ExportFile
 	if exportFile == "" {
@@ -131,7 +159,11 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 			inits = append(inits, packageInits...)
 			inits = append(inits, mainInit)
 		}
-		defineLibraryRuntimeInit(mainPkg, initArraySection, inits...)
+		defineLibraryRuntimeInit(
+			mainPkg, initArraySection, argcVar, argvVar, argvValueType,
+			libraryConstructorReceivesProcessArgs(ctx.buildConf.Goos),
+			inits...,
+		)
 		return mainAPkg
 	}
 
@@ -149,21 +181,43 @@ func genMainModule(ctx *context, rtPkgPath string, pkg *packages.Package, cfg *g
 	if needStart(ctx) {
 		defineStart(mainPkg, entryFn, argvValueType)
 	}
+	emitFuncInfoEntrySites(ctx, mainPkg)
 
 	return mainAPkg
 }
 
+func libraryConstructorReceivesProcessArgs(goos string) bool {
+	return goos == "linux" || goos == "darwin"
+}
+
 // defineLibraryRuntimeInit arranges for the LLGo runtime to be initialized
-// before a C program calls an exported Go function. Linux shared libraries use
-// .init_array explicitly because the raw LLVM target machine lowers
-// llvm.global_ctors to legacy .ctors; other library formats use LLVM's
-// platform-specific constructor lowering.
-func defineLibraryRuntimeInit(pkg llssa.Package, initArraySection string, inits ...llssa.Function) {
+// before a C program calls an exported Go function. Linux and Darwin c-shared
+// and c-archive constructors receive the host process argc/argv; these values
+// must be stored before package initialization so os.Args sees them. Linux
+// c-shared libraries use .init_array explicitly because the raw LLVM target
+// machine lowers llvm.global_ctors to legacy .ctors. Linux c-archive and Darwin
+// library modes use LLVM's platform-specific global constructor lowering.
+func defineLibraryRuntimeInit(
+	pkg llssa.Package, initArraySection string,
+	argcVar, argvVar llssa.Global, argvType llssa.Type,
+	receivesProcessArgs bool, inits ...llssa.Function,
+) {
 	const ctorName = "__llgo_runtime_ctor"
-	ctor := pkg.NewFunc(ctorName, llssa.NoArgsNoRet, llssa.InC)
+	ctorSig := llssa.NoArgsNoRet
+	if receivesProcessArgs {
+		ctorSig = newSignature(
+			[]types.Type{types.Typ[types.Int32], argvType.RawType()},
+			nil,
+		)
+	}
+	ctor := pkg.NewFunc(ctorName, ctorSig, llssa.InC)
 	ctorValue := pkg.Module().NamedFunction(ctorName)
 	ctorValue.SetLinkage(llvm.InternalLinkage)
 	b := ctor.MakeBody(1)
+	if receivesProcessArgs {
+		b.Store(argcVar.Expr, ctor.Param(0))
+		b.Store(argvVar.Expr, ctor.Param(1))
+	}
 	for _, init := range inits {
 		if init != nil {
 			b.Call(init.Expr)
@@ -245,19 +299,21 @@ type entryFunctions struct {
 // "main" for standard targets, or "__main_argc_argv" with hidden visibility
 // for WASM targets that don't require _start.
 //
-// The entry stores argc/argv, optionally disables stdio buffering, runs
-// initialization hooks (Python, runtime, package init), calls main.main,
-// finalizes Python if it was initialized, and returns 0.
+// The entry stores argc/argv, optionally disables stdio buffering, and manages
+// the local context. Native PCLN builds run the common startup sequence through
+// runtime.main; other builds run it inline. That sequence initializes Python,
+// the runtime stub/package, ABI types, and packages, calls main.main, and then
+// finalizes Python. The entry leaves the local context and returns 0.
 func defineEntryFunction(ctx *context, pkg llssa.Package, argcVar, argvVar llssa.Global, argvType llssa.Type, fns entryFunctions) llssa.Function {
 	prog := pkg.Prog
-	entryName := "main"
+	entryName := processEntrySymbol
 	if !needStart(ctx) && isWasmTarget(ctx.buildConf.Goos) {
 		entryName = "__main_argc_argv"
 	}
 	sig := newEntrySignature(argvType.RawType())
 	fn := pkg.NewFunc(entryName, sig, llssa.InC)
 	fnVal := pkg.Module().NamedFunction(entryName)
-	if entryName != "main" {
+	if entryName != processEntrySymbol {
 		fnVal.SetVisibility(llvm.HiddenVisibility)
 		fnVal.SetUnnamedAddr(true)
 	}
@@ -272,6 +328,33 @@ func defineEntryFunction(ctx *context, pkg llssa.Package, argcVar, argvVar llssa
 	if IsStdioNobuf() {
 		emitStdioNobuf(b, pkg, ctx.buildConf.Goos)
 	}
+	if needsRuntimeMainFrame(ctx) {
+		runtimeMain := defineRuntimeMainFunction(pkg, fns)
+		b.Call(runtimeMain.Expr)
+	} else {
+		emitRuntimeMainBody(b, fns)
+	}
+	if hasLocalContext {
+		b.LeaveLocalContext(localCtx, previousLocalCtx)
+	}
+	b.Return(prog.IntVal(0, prog.Int32()))
+	return fn
+}
+
+// defineRuntimeMainFunction gives native executables the same logical tail as
+// gc: user code is called by runtime.main, while the C entry below it is named
+// runtime.goexit in funcinfo metadata. The wrapper is a startup-only call.
+func defineRuntimeMainFunction(pkg llssa.Package, fns entryFunctions) llssa.Function {
+	fn := pkg.NewFunc(runtimeMainSymbol, llssa.NoArgsNoRet, llssa.InGo)
+	fn.Inline(llssa.NoInline)
+	fn.DisableTailCalls()
+	b := fn.MakeBody(1)
+	emitRuntimeMainBody(b, fns)
+	b.Return()
+	return fn
+}
+
+func emitRuntimeMainBody(b llssa.Builder, fns entryFunctions) {
 	if fns.pyInit != nil {
 		b.Call(fns.pyInit.Expr)
 	}
@@ -290,11 +373,6 @@ func defineEntryFunction(ctx *context, pkg llssa.Package, argcVar, argvVar llssa
 	if fns.pyFinalize != nil {
 		b.Call(fns.pyFinalize.Expr)
 	}
-	if hasLocalContext {
-		b.LeaveLocalContext(localCtx, previousLocalCtx)
-	}
-	b.Return(prog.IntVal(0, prog.Int32()))
-	return fn
 }
 
 func defineStart(pkg llssa.Package, entry llssa.Function, argvType llssa.Type) {

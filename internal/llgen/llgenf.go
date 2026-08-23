@@ -19,22 +19,76 @@ package llgen
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/goplus/llgo/internal/build"
-	"github.com/goplus/llgo/internal/goflags"
-	"github.com/goplus/llgo/internal/targets"
+	"github.com/xgo-dev/llgo/internal/build"
+	"github.com/xgo-dev/llgo/internal/cabi"
+	"github.com/xgo-dev/llgo/internal/goflags"
+	"github.com/xgo-dev/llgo/internal/targets"
 )
 
+// GeneratedIR is an LLVM IR snapshot together with its effective target.
+type GeneratedIR struct {
+	Text   string
+	GOOS   string
+	GOARCH string
+	Target string
+}
+
 func GenFrom(fileOrPkg string) string {
-	pkg, err := genFrom(fileOrPkg, 0)
+	return Generate(fileOrPkg).Text
+}
+
+// Generate returns the historical pre-target-ABI module together with its
+// effective target. GenFrom is the text-only compatibility wrapper.
+func Generate(fileOrPkg string) GeneratedIR {
+	return GenerateWithConf(fileOrPkg, nil)
+}
+
+// GenerateWithConf is Generate with caller-provided target and frontend
+// settings. It uses generation mode and does not invoke ModuleHook.
+func GenerateWithConf(fileOrPkg string, input *build.Config) GeneratedIR {
+	return generateWithConf(fileOrPkg, input, cabi.ModeNone)
+}
+
+// GeneratePostABI returns the module after aggregate and target ABI lowering
+// and before LLVM optimization. GenFrom intentionally retains its historical
+// pre-target-ABI behavior.
+func GeneratePostABI(fileOrPkg string) GeneratedIR {
+	return GeneratePostABIWithConf(fileOrPkg, nil)
+}
+
+// GeneratePostABIWithConf is GeneratePostABI with caller-provided target and
+// frontend settings. It uses generation mode and does not invoke ModuleHook.
+func GeneratePostABIWithConf(fileOrPkg string, input *build.Config) GeneratedIR {
+	return generateWithConf(fileOrPkg, input, cabi.ModeAllFunc)
+}
+
+func generateWithConf(fileOrPkg string, input *build.Config, abiMode cabi.Mode) GeneratedIR {
+	conf := &build.Config{}
+	if input != nil {
+		*conf = *input
+	}
+	conf.Mode = build.ModeGen
+	conf.AbiMode = abiMode
+	conf.GenLL = true
+	conf.ModuleHook = nil
+	// Cache hits can skip the module production needed by snapshot generation.
+	conf.ForceRebuild = true
+	pkg, err := genFromConf(fileOrPkg, conf)
 	check(err)
-	out := pkg.LPkg.String()
-	// Release the compile's LLVM context: golden suites call GenFrom for
-	// every test dir inside one process, and undisposed contexts
-	// accumulate C++-side memory for the whole run.
+	return consumeGeneratedIR(pkg)
+}
+
+func consumeGeneratedIR(pkg build.Package) GeneratedIR {
+	target := pkg.LPkg.Prog.Target()
+	out := GeneratedIR{
+		Text:   pkg.LPkg.String(),
+		GOOS:   target.GOOS,
+		GOARCH: target.GOARCH,
+		Target: target.Target,
+	}
 	pkg.LPkg.Prog.Dispose()
 	return out
 }
@@ -45,6 +99,10 @@ func genFrom(pkgPath string, abiMode build.AbiMode) (build.Package, error) {
 		AbiMode: abiMode,
 		GenLL:   true,
 	}
+	return genFromConf(pkgPath, conf)
+}
+
+func genFromConf(pkgPath string, conf *build.Config) (build.Package, error) {
 	if err := applyFlagsFile(conf, filepath.Join(pkgPath, "flags.txt")); err != nil {
 		return nil, err
 	}
@@ -129,13 +187,7 @@ func SmartDoFileEx(pkgPath string, abiMode build.AbiMode) {
 
 	const autgenFile = "llgo_autogen.ll"
 	dir, _ := filepath.Split(pkg.GoFiles[0])
-	absDir, _ := filepath.Abs(dir)
-	absDir = filepath.ToSlash(absDir)
-	fname := autgenFile
-	if inCompilerDir(absDir) {
-		fname = "out.ll"
-	}
-	outFile := dir + fname
+	outFile := dir + autgenFile
 
 	b, err := os.ReadFile(outFile)
 	if err == nil && len(b) == 1 && b[0] == ';' {
@@ -145,19 +197,4 @@ func SmartDoFileEx(pkgPath string, abiMode build.AbiMode) {
 	if err = os.WriteFile(outFile, []byte(pkg.LPkg.String()), 0644); err != nil {
 		panic(err)
 	}
-	if false && fname == autgenFile {
-		genZip(absDir, "llgo_autogen.lla", autgenFile)
-	}
-}
-
-func genZip(dir string, outFile, inFile string) {
-	cmd := exec.Command("zip", outFile, inFile)
-	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Run()
-}
-
-func inCompilerDir(dir string) bool {
-	return strings.Contains(dir, "/cl/_test")
 }

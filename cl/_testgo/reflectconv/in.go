@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 import (
@@ -20,7 +20,8 @@ import (
 // CHECK-NEXT: [[EV_ENV:%[0-9]+]] = extractvalue { ptr, ptr } [[EV_V]], 1
 // CHECK-NEXT: [[EV_RAW_CODE:%[0-9]+]] = extractvalue { ptr, ptr } [[EV_V]], 0
 // CHECK-NEXT: %__llgo_funcval_code = call ptr asm "", "=r,0"(ptr [[EV_RAW_CODE]])
-// CHECK-NEXT: [[EV_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr {{(nest|swiftself)}} [[EV_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[EV_ARG]])
+// DARWIN-ARM64-NEXT: [[EV_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr swiftself [[EV_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[EV_ARG]])
+// LINUX-AMD64-NEXT: [[EV_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr nest [[EV_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[EV_ARG]])
 // CHECK: [[EV_ELEM:%[0-9]+]] = call %reflect.Value @reflect.Value.Elem(%reflect.Value [[EV_PTR]])
 // CHECK: ret %reflect.Value [[EV_ELEM]]
 
@@ -53,7 +54,8 @@ import (
 // CHECK-NEXT: [[RW_ENV:%[0-9]+]] = extractvalue { ptr, ptr } [[RW_V]], 1
 // CHECK-NEXT: [[RW_RAW_CODE:%[0-9]+]] = extractvalue { ptr, ptr } [[RW_V]], 0
 // CHECK-NEXT: %__llgo_funcval_code = call ptr asm "", "=r,0"(ptr [[RW_RAW_CODE]])
-// CHECK-NEXT: [[RW_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr {{(nest|swiftself)}} [[RW_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[RW_ARG]])
+// DARWIN-ARM64-NEXT: [[RW_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr swiftself [[RW_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[RW_ARG]])
+// LINUX-AMD64-NEXT: [[RW_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr nest [[RW_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[RW_ARG]])
 // CHECK: [[RW_ELEM:%[0-9]+]] = call %reflect.Value @reflect.Value.Elem(%reflect.Value [[RW_PTR]])
 // CHECK: ret %reflect.Value [[RW_ELEM]]
 
@@ -65,7 +67,8 @@ import (
 // CHECK-NEXT: [[R_ENV:%[0-9]+]] = extractvalue { ptr, ptr } [[R_V]], 1
 // CHECK-NEXT: [[R_RAW_CODE:%[0-9]+]] = extractvalue { ptr, ptr } [[R_V]], 0
 // CHECK-NEXT: %__llgo_funcval_code = call ptr asm "", "=r,0"(ptr [[R_RAW_CODE]])
-// CHECK-NEXT: [[R_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr {{(nest|swiftself)}} [[R_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[R_ARG]])
+// DARWIN-ARM64-NEXT: [[R_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr swiftself [[R_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[R_ARG]])
+// LINUX-AMD64-NEXT: [[R_PTR:%[0-9]+]] = call %reflect.Value %__llgo_funcval_code(ptr nest [[R_ENV]], %"{{.*}}/runtime/internal/runtime.eface" [[R_ARG]])
 // CHECK: [[R_ELEM:%[0-9]+]] = call %reflect.Value @reflect.Value.Elem(%reflect.Value [[R_PTR]])
 // CHECK: ret %reflect.Value [[R_ELEM]]
 
@@ -75,12 +78,7 @@ import (
 // CHECK: [[CAN_MAP:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.MakeMap"(ptr @"map{{\[\[2\]}}_llgo_reflect.Type]_llgo_bool", i64 0)
 // CHECK: [[ALL_MAP:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.MakeMap"(ptr @"map[_llgo_reflect.Type]_llgo_bool", i64 0)
 // CHECK: [[CONVERT_TABLE:%[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.Slice", ptr @main.convertTests
-// CHECK: [[ENTRY_PTR:%[0-9]+]] = getelementptr inbounds { %reflect.Value, %reflect.Value }, ptr %{{[0-9]+}}, i64 %{{[0-9]+}}
-// CHECK: [[ENTRY:%[0-9]+]] = load { %reflect.Value, %reflect.Value }, ptr [[ENTRY_PTR]]
-// CHECK: [[IN_VALUE:%[0-9]+]] = load %reflect.Value, ptr %{{[0-9]+}}
-// CHECK: [[T1:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.iface" @reflect.Value.Type(%reflect.Value [[IN_VALUE]])
-// CHECK: [[SELF_CONVERTIBLE:%[0-9]+]] = call i1 %{{[0-9]+}}(ptr %{{[0-9]+}}, %"{{.*}}/runtime/internal/runtime.iface" [[T1]])
-// CHECK: br i1 [[SELF_CONVERTIBLE]],
+// CHECK: call ptr @"{{.*}}/runtime/internal/runtime.IfaceType"(%"{{.*}}/runtime/internal/runtime.iface" [[T1:%[0-9]+]])
 // CHECK: [[OUT_VALUE:%[0-9]+]] = load %reflect.Value, ptr %{{[0-9]+}}
 // CHECK: [[T2:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.iface" @reflect.Value.Type(%reflect.Value [[OUT_VALUE]])
 // CHECK: [[PAIR_CONVERTIBLE:%[0-9]+]] = call i1 %{{[0-9]+}}(ptr %{{[0-9]+}}, %"{{.*}}/runtime/internal/runtime.iface" [[T2]])
@@ -129,6 +127,12 @@ import (
 // CHECK: [[BAD_MATRIX:%[0-9]+]] = icmp ne i1 [[MATRIX_OK]], %{{[0-9]+}}
 // CHECK: [[KNOWN_PAIR_PTR:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.MapAccess1"(ptr @"map{{\[\[2\]}}_llgo_reflect.Type]_llgo_bool", ptr [[CAN_MAP]],
 // CHECK: [[KNOWN_PAIR:%[0-9]+]] = load i1, ptr [[KNOWN_PAIR_PTR]]
+// CHECK: [[ENTRY_PTR:%[0-9]+]] = getelementptr inbounds { %reflect.Value, %reflect.Value }, ptr %{{[0-9]+}}, i64 %{{[0-9]+}}
+// CHECK: [[ENTRY:%[0-9]+]] = load { %reflect.Value, %reflect.Value }, ptr [[ENTRY_PTR]]
+// CHECK: [[IN_VALUE:%[0-9]+]] = load %reflect.Value, ptr %{{[0-9]+}}
+// CHECK: [[T1]] = call %"{{.*}}/runtime/internal/runtime.iface" @reflect.Value.Type(%reflect.Value [[IN_VALUE]])
+// CHECK: [[SELF_CONVERTIBLE:%[0-9]+]] = call i1 %{{[0-9]+}}(ptr %{{[0-9]+}}, %"{{.*}}/runtime/internal/runtime.iface" [[T1]])
+// CHECK: br i1 [[SELF_CONVERTIBLE]],
 
 // sNaN must survive both an ordinary store/load and a reflective named-float conversion.
 // CHECK-LABEL: define void @main.TestConvertNaNs(ptr %0){{.*}} {
@@ -137,7 +141,8 @@ import (
 // CHECK: [[SNAN_LOAD:%[0-9]+]] = load float, ptr @main.gFloat32
 // CHECK: [[SNAN_BITS:%[0-9]+]] = call i32 @math.Float32bits(float [[SNAN_LOAD]])
 // CHECK: [[SNAN_BAD:%[0-9]+]] = icmp ne i32 [[SNAN_BITS]], 2139095041
-// CHECK: [[SNAN_X:%[0-9]+]] = call %reflect.Value %{{[^ ]+}}(ptr {{(nest|swiftself)}} %{{[0-9]+}}, %"{{.*}}/runtime/internal/runtime.eface" %{{[0-9]+}})
+// DARWIN-ARM64: [[SNAN_X:%[0-9]+]] = call %reflect.Value %{{[^ ]+}}(ptr swiftself %{{[0-9]+}}, %"{{.*}}/runtime/internal/runtime.eface" %{{[0-9]+}})
+// LINUX-AMD64: [[SNAN_X:%[0-9]+]] = call %reflect.Value %{{[^ ]+}}(ptr nest %{{[0-9]+}}, %"{{.*}}/runtime/internal/runtime.eface" %{{[0-9]+}})
 // CHECK: [[FLOAT32_TYPE:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.iface" @reflect.TypeOf(
 // CHECK: [[SNAN_Y:%[0-9]+]] = call %reflect.Value @reflect.Value.Convert(%reflect.Value [[SNAN_X]], %"{{.*}}/runtime/internal/runtime.iface" [[FLOAT32_TYPE]])
 // CHECK: [[SNAN_ANY:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.eface" @reflect.Value.Interface(%reflect.Value [[SNAN_Y]])
@@ -166,7 +171,8 @@ import (
 // CHECK: [[PANIC_ARRAY_CLOSURE:%[0-9]+]] = insertvalue { ptr, ptr } { ptr @"main.TestConvertPanic$2", ptr undef }, ptr %{{[0-9]+}}, 1
 // CHECK: call void @main.shouldPanic({{.*}}{ ptr, ptr } [[PANIC_ARRAY_CLOSURE]])
 
-// CHECK-LABEL: define void @"main.TestConvertPanic$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.TestConvertPanic$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.TestConvertPanic$1"(ptr nest %0){{.*}} {
 // CHECK: [[PANIC1_ENV:%[0-9]+]] = load { ptr, ptr }, ptr %0
 // CHECK-NEXT: [[PANIC1_V_PTR:%[0-9]+]] = extractvalue { ptr, ptr } [[PANIC1_ENV]], 0
 // CHECK: [[PANIC1_V_SAFE:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AssertNilDerefPtr"(ptr [[PANIC1_V_PTR]])
@@ -175,7 +181,8 @@ import (
 // CHECK-NEXT: [[PANIC1_T:%[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.iface", ptr [[PANIC1_T_PTR]]
 // CHECK-NEXT: call %reflect.Value @reflect.Value.Convert(%reflect.Value [[PANIC1_V]], %"{{.*}}/runtime/internal/runtime.iface" [[PANIC1_T]])
 
-// CHECK-LABEL: define void @"main.TestConvertPanic$2"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.TestConvertPanic$2"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.TestConvertPanic$2"(ptr nest %0){{.*}} {
 // CHECK: [[PANIC2_ENV:%[0-9]+]] = load { ptr, ptr }, ptr %0
 // CHECK-NEXT: [[PANIC2_V_PTR:%[0-9]+]] = extractvalue { ptr, ptr } [[PANIC2_ENV]], 0
 // CHECK: [[PANIC2_V_SAFE:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AssertNilDerefPtr"(ptr [[PANIC2_V_PTR]])

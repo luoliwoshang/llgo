@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goplus/llgo/internal/build"
-	"github.com/goplus/llgo/internal/optlevel"
+	"github.com/xgo-dev/llgo/internal/build"
+	"github.com/xgo-dev/llgo/internal/optlevel"
 )
 
 func TestApplyFlagsFile(t *testing.T) {
@@ -93,5 +93,23 @@ func TestApplyFlagsFileTargetForms(t *testing.T) {
 				t.Fatalf("Target = %q, want wasi", conf.Target)
 			}
 		})
+	}
+}
+
+func TestGeneratePostABIIsExplicit(t *testing.T) {
+	const pkg = "../../cl/_testgo/localitycodegen"
+	preABI := GenFrom(pkg)
+	postABI := GeneratePostABI(pkg)
+	if preABI == postABI.Text {
+		t.Fatal("post-ABI generation did not change the module")
+	}
+	if !strings.Contains(preABI, "define { i64, ptr, ptr } @main.values()") {
+		t.Fatal("GenFrom no longer exposes the historical pre-target-ABI signature")
+	}
+	if !strings.Contains(postABI.Text, "define void @main.values(ptr sret({ i64, ptr, ptr })") {
+		t.Fatal("GeneratePostABI did not expose the lowered sret signature")
+	}
+	if postABI.GOOS == "" || postABI.GOARCH == "" {
+		t.Fatalf("missing effective target: %+v", postABI)
 	}
 }

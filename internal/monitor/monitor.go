@@ -1,3 +1,7 @@
+// Portions of this file are derived from tinygo/monitor.go.
+// Copyright (c) 2018-2025 The TinyGo Authors. All rights reserved.
+// See ../../LICENSES/TinyGo-BSD-3-Clause.txt for license terms.
+
 package monitor
 
 import (
@@ -15,8 +19,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/goplus/llgo/internal/flash"
 	"github.com/mattn/go-tty"
+	"github.com/xgo-dev/llgo/internal/flash"
 	"go.bug.st/serial"
 )
 

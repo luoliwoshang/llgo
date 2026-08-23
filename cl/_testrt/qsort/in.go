@@ -26,39 +26,49 @@ func main() {
 // CHECK-LABEL: define void @main.main(){{.*}} {
 // CHECK-NEXT: _llgo_[[BB0:[0-9]+]]:
 // CHECK-NEXT:   %[[TMP0:[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 40)
-// CHECK-NEXT:   %[[TMP1:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 0
-// CHECK-NEXT:   %[[TMP2:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 1
-// CHECK-NEXT:   %[[TMP3:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 2
-// CHECK-NEXT:   %[[TMP4:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 3
-// CHECK-NEXT:   %[[TMP5:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 4
-// CHECK-NEXT:   store i64 100, ptr %[[TMP1]], align 8
-// CHECK-NEXT:   store i64 8, ptr %[[TMP2]], align 8
-// CHECK-NEXT:   store i64 23, ptr %[[TMP3]], align 8
-// CHECK-NEXT:   store i64 2, ptr %[[TMP4]], align 8
-// CHECK-NEXT:   store i64 7, ptr %[[TMP5]], align 8
-// CHECK-NEXT:   %[[TMP6:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 0
-// CHECK-NEXT:   call void @qsort(ptr %[[TMP6]], i64 5, i64 8, ptr @"main.main$1")
-// CHECK-NEXT:   %[[TMP7:[0-9]+]] = load [5 x i64], ptr %[[TMP0]], align 8
+// CHECK-NEXT:   %[[TMP1:[0-9]+]] = alloca [5 x i64], align 8
+// CHECK-NEXT:   call void @llvm.memset.p0.i64(ptr %[[TMP1]], i8 0, i64 40, i1 false)
+// CHECK-NEXT:   %[[TMP2:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP1]], i64 0
+// CHECK-NEXT:   %[[TMP3:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP1]], i64 1
+// CHECK-NEXT:   %[[TMP4:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP1]], i64 2
+// CHECK-NEXT:   %[[TMP5:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP1]], i64 3
+// CHECK-NEXT:   %[[TMP6:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP1]], i64 4
+// CHECK-NEXT:   store i64 100, ptr %[[TMP2]], align 8
+// CHECK-NEXT:   store i64 8, ptr %[[TMP3]], align 8
+// CHECK-NEXT:   store i64 23, ptr %[[TMP4]], align 8
+// CHECK-NEXT:   store i64 2, ptr %[[TMP5]], align 8
+// CHECK-NEXT:   store i64 7, ptr %[[TMP6]], align 8
+// CHECK-NEXT:   %[[TMP7:[0-9]+]] = load [5 x i64], ptr %[[TMP1]], align 8
+// CHECK-NEXT:   store [5 x i64] %[[TMP7]], ptr %[[TMP0]], align 8
+// CHECK-NEXT:   %[[TMP8:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 0
+// CHECK-NEXT:   call void @qsort(ptr %[[TMP8]], i64 5, i64 8, ptr @"main.main$1")
+// CHECK-NEXT:   %[[TMP9:[0-9]+]] = load [5 x i64], ptr %[[TMP0]], align 8
 // CHECK-NEXT:   br label %_llgo_[[BB1:[0-9]+]]
 // CHECK-EMPTY:
 // CHECK-NEXT: _llgo_[[BB1]]:
-// CHECK-NEXT:   %[[TMP8:[0-9]+]] = phi i64 [ -1, %_llgo_[[BB0]] ], [ %[[TMP9:[0-9]+]], %_llgo_[[BB2:[0-9]+]] ]
-// CHECK-NEXT:   %[[TMP9]] = add i64 %[[TMP8]], 1
-// CHECK-NEXT:   %[[TMP10:[0-9]+]] = icmp slt i64 %[[TMP9]], 5
-// CHECK-NEXT:   br i1 %[[TMP10]], label %_llgo_[[BB2]], label %_llgo_[[BB3:[0-9]+]]
+// CHECK-NEXT:   %[[TMP10:[0-9]+]] = phi i64 [ -1, %_llgo_[[BB0]] ], [ %[[TMP11:[0-9]+]], %_llgo_[[BB5:[0-9]+]] ]
+// CHECK-NEXT:   %[[TMP11]] = add i64 %[[TMP10]], 1
+// CHECK-NEXT:   %[[TMP12:[0-9]+]] = icmp slt i64 %[[TMP11]], 5
+// CHECK-NEXT:   br i1 %[[TMP12]], label %_llgo_[[BB2:[0-9]+]], label %_llgo_[[BB3:[0-9]+]]
 // CHECK-EMPTY:
 // CHECK-NEXT: _llgo_[[BB2]]:
-// CHECK-NEXT:   %[[TMP11:[0-9]+]] = icmp slt i64 %[[TMP9]], 0
-// CHECK-NEXT:   %[[TMP12:[0-9]+]] = icmp uge i64 %[[TMP9]], 5
-// CHECK-NEXT:   %[[TMP13:[0-9]+]] = or i1 %[[TMP12]], %[[TMP11]]
-// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %[[TMP13]], i64 %[[TMP9]], i1 true, i64 5)
-// CHECK-NEXT:   %[[TMP14:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 %[[TMP9]]
-// CHECK-NEXT:   %[[TMP15:[0-9]+]] = load i64, ptr %[[TMP14]], align 8
-// CHECK-NEXT:   %[[TMP16:[0-9]+]] = call i32 (ptr, ...) @printf(ptr @[[GLOB0]], i64 %[[TMP15]])
-// CHECK-NEXT:   br label %_llgo_[[BB1]]
+// CHECK-NEXT:   %[[TMP13:[0-9]+]] = icmp slt i64 %[[TMP11]], 0
+// CHECK-NEXT:   %[[TMP14:[0-9]+]] = icmp uge i64 %[[TMP11]], 5
+// CHECK-NEXT:   %[[TMP15:[0-9]+]] = or i1 %[[TMP14]], %[[TMP13]]
+// CHECK-NEXT:   br i1 %[[TMP15]], label %_llgo_[[BB4:[0-9]+]], label %_llgo_[[BB5]]
 // CHECK-EMPTY:
 // CHECK-NEXT: _llgo_[[BB3]]:
 // CHECK-NEXT:   ret void
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB4]]:
+// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.PanicIndex"(i64 %[[TMP11]], i64 5)
+// CHECK-NEXT:   br label %_llgo_[[BB4]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB5]]:
+// CHECK-NEXT:   %[[TMP16:[0-9]+]] = getelementptr inbounds i64, ptr %[[TMP0]], i64 %[[TMP11]]
+// CHECK-NEXT:   %[[TMP17:[0-9]+]] = load i64, ptr %[[TMP16]], align 8
+// CHECK-NEXT:   %[[TMP18:[0-9]+]] = call i32 (ptr, ...) @printf(ptr @[[GLOB0]], i64 %[[TMP17]])
+// CHECK-NEXT:   br label %_llgo_[[BB1]]
 // CHECK-NEXT: }
 
 // CHECK-LABEL: define i32 @"main.main$1"(

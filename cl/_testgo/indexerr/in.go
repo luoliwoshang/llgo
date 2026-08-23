@@ -2,18 +2,23 @@
 package main
 
 // The fixture covers a matrix of fixed array/slice and signed/unsigned index
-// lowering. Follow each predicate and index into CheckIndexRange; helper names
-// alone would not prove that the right condition is being checked.
+// lowering. Follow each predicate into the panic branch and each index into
+// PanicIndex/PanicIndexU; helper names alone would not prove that the right condition
+// is being checked.
 // CHECK-LABEL: define void @main.array(i64 %0){{.*}} {
 // CHECK: %[[ARRAY_NEG:[0-9]+]] = icmp slt i64 %0, 0
 // CHECK: %[[ARRAY_UPPER:[0-9]+]] = icmp uge i64 %0, 2
 // CHECK: %[[ARRAY_OOB:[0-9]+]] = or i1 %[[ARRAY_UPPER]], %[[ARRAY_NEG]]
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 %[[ARRAY_OOB]], i64 %0, i1 true, i64 2)
+// CHECK: br i1 %[[ARRAY_OOB]], label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndex"(i64 %0, i64 2)
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 // CHECK-LABEL: define void @main.array2(i64 %0){{.*}} {
 // CHECK-NOT: icmp slt
 // CHECK: %[[UARRAY_OOB:[0-9]+]] = icmp uge i64 %0, 2
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 %[[UARRAY_OOB]], i64 %0, i1 false, i64 2)
+// CHECK: br i1 %[[UARRAY_OOB]], label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndexU"(i64 %0, i64 2)
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 // The literal-index cases keep the signedness bit correct after constant
 // folding. They are intentionally representative; defer/recover mechanics are
@@ -22,20 +27,28 @@ package main
 // CHECK: %[[SLICE10_LEN:[0-9]+]] = extractvalue %"{{.*}}Slice" %{{[0-9]+}}, 1
 // CHECK: %[[SLICE10_UPPER:[0-9]+]] = icmp uge i64 -1, %[[SLICE10_LEN]]
 // CHECK: %[[SLICE10_OOB:[0-9]+]] = or i1 %[[SLICE10_UPPER]], true
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 %[[SLICE10_OOB]], i64 -1, i1 true, i64 %[[SLICE10_LEN]])
+// CHECK: br i1 %[[SLICE10_OOB]], label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndex"(i64 -1, i64 %[[SLICE10_LEN]])
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 // CHECK-LABEL: define void @"main.init#12"(){{.*}} {
 // CHECK-NOT: icmp slt
 // CHECK: %[[SLICE12_LEN:[0-9]+]] = extractvalue %"{{.*}}Slice" %{{[0-9]+}}, 1
 // CHECK: %[[SLICE12_OOB:[0-9]+]] = icmp uge i64 2, %[[SLICE12_LEN]]
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 %[[SLICE12_OOB]], i64 2, i1 false, i64 %[[SLICE12_LEN]])
+// CHECK: br i1 %[[SLICE12_OOB]], label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndexU"(i64 2, i64 %[[SLICE12_LEN]])
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 // CHECK-LABEL: define void @"main.init#7"(){{.*}} {
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 true, i64 -1, i1 true, i64 2)
+// CHECK: br i1 true, label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndex"(i64 -1, i64 2)
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 // CHECK-LABEL: define void @"main.init#9"(){{.*}} {
 // CHECK-NOT: icmp slt
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 true, i64 2, i1 false, i64 2)
+// CHECK: br i1 true, label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndexU"(i64 2, i64 2)
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 // Slice bounds use the extracted dynamic length. Both helpers are checked so
 // one source scenario cannot silently lose its range check.
@@ -44,14 +57,18 @@ package main
 // CHECK: %[[SLICE_NEG:[0-9]+]] = icmp slt i64 %0, 0
 // CHECK: %[[SLICE_UPPER:[0-9]+]] = icmp uge i64 %0, %[[SLICE_LEN]]
 // CHECK: %[[SLICE_OOB:[0-9]+]] = or i1 %[[SLICE_UPPER]], %[[SLICE_NEG]]
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 %[[SLICE_OOB]], i64 %0, i1 true, i64 %[[SLICE_LEN]])
+// CHECK: br i1 %[[SLICE_OOB]], label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndex"(i64 %0, i64 %[[SLICE_LEN]])
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 // CHECK-LABEL: define void @main.slice2(i64 %0){{.*}} {
 // CHECK: %[[SLICE2_LEN:[0-9]+]] = extractvalue %"{{.*}}Slice" %{{[0-9]+}}, 1
 // CHECK: %[[SLICE2_NEG:[0-9]+]] = icmp slt i64 %0, 0
 // CHECK: %[[SLICE2_UPPER:[0-9]+]] = icmp uge i64 %0, %[[SLICE2_LEN]]
 // CHECK: %[[SLICE2_OOB:[0-9]+]] = or i1 %[[SLICE2_UPPER]], %[[SLICE2_NEG]]
-// CHECK: call void @"{{.*}}CheckIndexRange"(i1 %[[SLICE2_OOB]], i64 %0, i1 true, i64 %[[SLICE2_LEN]])
+// CHECK: br i1 %[[SLICE2_OOB]], label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}PanicIndex"(i64 %0, i64 %[[SLICE2_LEN]])
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 
 func main() {
 }

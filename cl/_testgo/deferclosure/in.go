@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // Cover the distinct deferred function-value forms in this test without
@@ -33,9 +33,11 @@ package main
 // CHECK: [[VALUE_RUN_ENV:%.*]] = extractvalue { ptr, ptr } [[VALUE_RUN_FN]], 1
 // CHECK: [[VALUE_RUN_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[VALUE_RUN_FN]], 0
 // CHECK: [[VALUE_RUN_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[VALUE_RUN_CODE_RAW]])
-// CHECK: call void [[VALUE_RUN_CODE]](ptr {{(nest|swiftself)}} [[VALUE_RUN_ENV]])
+// DARWIN-ARM64: call void [[VALUE_RUN_CODE]](ptr swiftself [[VALUE_RUN_ENV]])
+// LINUX-AMD64: call void [[VALUE_RUN_CODE]](ptr nest [[VALUE_RUN_ENV]])
 
-// CHECK-LABEL: define void @"main.testDeferClosureValue$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.testDeferClosureValue$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.testDeferClosureValue$1"(ptr nest %0){{.*}} {
 // CHECK: [[VALUE_BODY_ENV:%.*]] = load { ptr }, ptr %0
 // CHECK: [[VALUE_BODY_ADDR:%.*]] = extractvalue { ptr } [[VALUE_BODY_ENV]], 0
 // CHECK: [[VALUE_BODY_X:%.*]] = load i64, ptr [[VALUE_BODY_ADDR]]
@@ -58,7 +60,8 @@ package main
 // CHECK: [[FIELD_RUN_ENV:%.*]] = extractvalue { ptr, ptr } [[FIELD_RUN_FN]], 1
 // CHECK: [[FIELD_RUN_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[FIELD_RUN_FN]], 0
 // CHECK: [[FIELD_RUN_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[FIELD_RUN_CODE_RAW]])
-// CHECK: call void [[FIELD_RUN_CODE]](ptr {{(nest|swiftself)}} [[FIELD_RUN_ENV]])
+// DARWIN-ARM64: call void [[FIELD_RUN_CODE]](ptr swiftself [[FIELD_RUN_ENV]])
+// LINUX-AMD64: call void [[FIELD_RUN_CODE]](ptr nest [[FIELD_RUN_ENV]])
 // CHECK: call void @"{{.*}}/runtime/internal/runtime.EndRecoverFrame"(%"{{.*}}recoverState" [[FIELD_RECOVER]])
 
 // CHECK-LABEL: define void @"main.testDeferFieldAccess$1"(){{.*}} {
@@ -98,7 +101,8 @@ package main
 // CHECK: call void @"{{.*}}/runtime/internal/runtime.FreeDeferNode"(ptr [[STRUCT_NODE]])
 // CHECK: call void @"main.(*Processor).SetCallback"(ptr [[STRUCT_RUN_PROCESSOR]], { ptr, ptr } [[STRUCT_RUN_FN]])
 
-// CHECK-LABEL: define void @"main.testDeferStructClosure$1"(ptr {{(nest|swiftself)}} %0, %"{{.*}}String" %1){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.testDeferStructClosure$1"(ptr swiftself %0, %"{{.*}}String" %1){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.testDeferStructClosure$1"(ptr nest %0, %"{{.*}}String" %1){{.*}} {
 // CHECK: [[STRUCT_BODY_ENV:%.*]] = load { ptr }, ptr %0
 // CHECK: [[STRUCT_BODY_MSG_ADDR:%.*]] = extractvalue { ptr } [[STRUCT_BODY_ENV]], 0
 // CHECK: [[STRUCT_BODY_MSG:%.*]] = load %"{{.*}}String", ptr [[STRUCT_BODY_MSG_ADDR]]

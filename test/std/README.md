@@ -1,6 +1,6 @@
 # Standard Library Compatibility Tests
 
-This directory contains compatibility tests for the Go standard library on llgo. These tests ensure that llgo's libc-backed implementations conform to the Go standard library specification across the pinned supported CI toolchains (Go 1.24 and Go 1.26).
+This directory contains compatibility tests for the Go standard library on llgo. These tests ensure that llgo's libc-backed implementations conform to the Go standard library specification across the pinned supported CI toolchains (Go 1.25 and Go 1.26).
 
 ## Directory Structure
 

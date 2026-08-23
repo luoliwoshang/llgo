@@ -15,11 +15,15 @@ type S []int
 // that selected value are consumed.
 // CHECK: %[[POINT:[0-9]+]] = alloca %main.point
 // CHECK: %[[POINTS:[0-9]+]] = alloca [3 x %main.point]
-// CHECK: %[[POINT2_INIT:[0-9]+]] = getelementptr inbounds %main.point, ptr %[[POINTS]], i64 2
-// CHECK: %[[POINT2_X:[0-9]+]] = getelementptr inbounds %main.point, ptr %[[POINT2_INIT]], i32 0, i32 0
-// CHECK: %[[POINT2_Y:[0-9]+]] = getelementptr inbounds %main.point, ptr %[[POINT2_INIT]], i32 0, i32 1
-// CHECK: store i64 5, ptr %[[POINT2_X]]
-// CHECK: store i64 6, ptr %[[POINT2_Y]]
+// CHECK: %[[POINT2_DST:[0-9]+]] = getelementptr inbounds %main.point, ptr %[[POINTS]], i64 2
+// CHECK: %[[POINT2_TMP:[0-9]+]] = alloca %main.point
+// CHECK: %[[POINT2_INIT_X:[0-9]+]] = getelementptr inbounds %main.point, ptr %[[POINT2_TMP]], i32 0, i32 0
+// CHECK: %[[POINT2_INIT_Y:[0-9]+]] = getelementptr inbounds %main.point, ptr %[[POINT2_TMP]], i32 0, i32 1
+// CHECK: store i64 5, ptr %[[POINT2_INIT_X]]
+// CHECK: store i64 6, ptr %[[POINT2_INIT_Y]]
+// CHECK: %[[POINT2_VALUE:[0-9]+]] = load %main.point, ptr %[[POINT2_TMP]]
+// CHECK: store %main.point %[[POINT2_VALUE]], ptr %[[POINT2_DST]]
+// CHECK: %[[POINTS_VALUE:[0-9]+]] = load [3 x %main.point], ptr %[[POINTS]]
 // CHECK: %[[POINT2:[0-9]+]] = getelementptr inbounds %main.point, ptr %[[POINTS]], i64 2
 // CHECK: %[[SELECTED_POINT:[0-9]+]] = load %main.point, ptr %[[POINT2]]
 // CHECK: store %main.point %[[SELECTED_POINT]], ptr %[[POINT]]
@@ -31,13 +35,15 @@ type S []int
 // Nested arrays select row 1 before indexing its two elements.
 // CHECK: %[[ROW:[0-9]+]] = alloca [2 x i64]
 // CHECK: %[[MATRIX:[0-9]+]] = alloca [2 x [2 x i64]]
-// CHECK: %[[ROW1_INIT:[0-9]+]] = getelementptr inbounds [2 x i64], ptr %[[MATRIX]], i64 1
-// CHECK: call void @"{{.*}}/runtime/internal/runtime.AssertNilDeref"
-// CHECK: %[[ROW1_ELEM0:[0-9]+]] = getelementptr inbounds i64, ptr %[[ROW1_INIT]], i64 0
-// CHECK: call void @"{{.*}}/runtime/internal/runtime.AssertNilDeref"
-// CHECK: %[[ROW1_ELEM1:[0-9]+]] = getelementptr inbounds i64, ptr %[[ROW1_INIT]], i64 1
-// CHECK: store i64 3, ptr %[[ROW1_ELEM0]]
-// CHECK: store i64 4, ptr %[[ROW1_ELEM1]]
+// CHECK: %[[ROW1_DST:[0-9]+]] = getelementptr inbounds [2 x i64], ptr %[[MATRIX]], i64 1
+// CHECK: %[[ROW1_TMP:[0-9]+]] = alloca [2 x i64]
+// CHECK: %[[ROW1_INIT_0:[0-9]+]] = getelementptr inbounds i64, ptr %[[ROW1_TMP]], i64 0
+// CHECK: %[[ROW1_INIT_1:[0-9]+]] = getelementptr inbounds i64, ptr %[[ROW1_TMP]], i64 1
+// CHECK: store i64 3, ptr %[[ROW1_INIT_0]]
+// CHECK: store i64 4, ptr %[[ROW1_INIT_1]]
+// CHECK: %[[ROW1_VALUE:[0-9]+]] = load [2 x i64], ptr %[[ROW1_TMP]]
+// CHECK: store [2 x i64] %[[ROW1_VALUE]], ptr %[[ROW1_DST]]
+// CHECK: %[[MATRIX_VALUE:[0-9]+]] = load [2 x [2 x i64]], ptr %[[MATRIX]]
 // CHECK: %[[ROW1:[0-9]+]] = getelementptr inbounds [2 x i64], ptr %[[MATRIX]], i64 1
 // CHECK: %[[SELECTED_ROW:[0-9]+]] = load [2 x i64], ptr %[[ROW1]]
 // CHECK: store [2 x i64] %[[SELECTED_ROW]], ptr %[[ROW]]
@@ -64,8 +70,13 @@ type S []int
 // Named pointer-to-array indexing and named-slice indexing use different
 // lowering. The slice predicate, length and data pointer must stay associated.
 // CHECK: %[[NAMED_ARRAY:[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 16)
-// CHECK: %[[NAMED_ELEM_INIT:[0-9]+]] = getelementptr inbounds i64, ptr %[[NAMED_ARRAY]], i64 1
-// CHECK: store i64 2, ptr %[[NAMED_ELEM_INIT]]
+// CHECK: %[[NAMED_TMP:[0-9]+]] = alloca [2 x i64]
+// CHECK: %[[NAMED_INIT_0:[0-9]+]] = getelementptr inbounds i64, ptr %[[NAMED_TMP]], i64 0
+// CHECK: %[[NAMED_INIT_1:[0-9]+]] = getelementptr inbounds i64, ptr %[[NAMED_TMP]], i64 1
+// CHECK: store i64 1, ptr %[[NAMED_INIT_0]]
+// CHECK: store i64 2, ptr %[[NAMED_INIT_1]]
+// CHECK: %[[NAMED_VALUE:[0-9]+]] = load [2 x i64], ptr %[[NAMED_TMP]]
+// CHECK: store [2 x i64] %[[NAMED_VALUE]], ptr %[[NAMED_ARRAY]]
 // CHECK: %[[NAMED_ELEM:[0-9]+]] = getelementptr inbounds i64, ptr %[[NAMED_ARRAY]], i64 1
 // CHECK: load i64, ptr %[[NAMED_ELEM]]
 // CHECK: %[[SLICE_DATA_RAW:[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 32)
@@ -75,7 +86,9 @@ type S []int
 // CHECK: %[[SLICE_DATA:[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %[[SLICE]], 0
 // CHECK: %[[SLICE_LEN:[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %[[SLICE]], 1
 // CHECK: %[[SLICE_OOB:[0-9]+]] = icmp uge i64 1, %[[SLICE_LEN]]
-// CHECK: call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %[[SLICE_OOB]], i64 1, i1 true, i64 %[[SLICE_LEN]])
+// CHECK: br i1 %[[SLICE_OOB]], label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}/runtime/internal/runtime.PanicIndex"(i64 1, i64 %[[SLICE_LEN]])
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
 // CHECK: %[[SLICE_ELEM:[0-9]+]] = getelementptr inbounds i64, ptr %[[SLICE_DATA]], i64 1
 // CHECK: load i64, ptr %[[SLICE_ELEM]]
 

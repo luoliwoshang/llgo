@@ -4,11 +4,12 @@ package ssa_test
 
 import (
 	"go/types"
+	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/goplus/llgo/ssa"
-	"github.com/goplus/llgo/ssa/ssatest"
+	"github.com/xgo-dev/llgo/ssa"
+	"github.com/xgo-dev/llgo/ssa/ssatest"
 )
 
 func TestBoundsCheckModesIR(t *testing.T) {
@@ -16,7 +17,7 @@ func TestBoundsCheckModesIR(t *testing.T) {
 	unchecked := boundsCheckModeIR(t, true)
 
 	for _, helper := range []string{
-		"CheckIndexRange",
+		"PanicIndex",
 		"StringSlice2",
 		"NewSlice2",
 		"NewSlice3Bounds",
@@ -31,6 +32,11 @@ func TestBoundsCheckModesIR(t *testing.T) {
 	}
 	if !strings.Contains(unchecked, "AssertNilDeref") {
 		t.Error("unchecked *array slice lost its nil check")
+	}
+	panicPath := regexp.MustCompile(`(?m)^[ \t]+br i1 %[0-9]+, label %(_llgo_[0-9]+), label %_llgo_[0-9]+\n\n(_llgo_[0-9]+):.*\n[ \t]+call void @"[^"]*PanicIndex"\([^\n]*\)\n[ \t]+br label %(_llgo_[0-9]+)$`)
+	match := panicPath.FindStringSubmatch(checked)
+	if len(match) == 0 || match[1] != match[2] || match[2] != match[3] {
+		t.Error("checked IR does not isolate PanicIndex in a non-returning failure branch")
 	}
 	if got := strings.Count(unchecked, "select i1"); got < 4 {
 		t.Errorf("unchecked IR contains %d select operations, want at least 4", got)

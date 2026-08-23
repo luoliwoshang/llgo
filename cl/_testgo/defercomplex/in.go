@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // Nested loop/branch defers must all use one function-level defer chain; the
@@ -57,11 +57,13 @@ package main
 // CHECK: [[RUN_FN:%[0-9]+]] = extractvalue { ptr, i64, { ptr, ptr }, %"{{.*}}String" } [[RUN_RECORD]], 2
 // CHECK-NEXT: [[RUN_LABEL:%[0-9]+]] = extractvalue { ptr, i64, { ptr, ptr }, %"{{.*}}String" } [[RUN_RECORD]], 3
 // CHECK-NEXT: call void @"{{.*}}FreeDeferNode"(ptr [[RUN_NODE]])
-// CHECK: call void %__llgo_funcval_code(ptr {{(nest|swiftself)}} %{{[0-9]+}}, %"{{.*}}String" [[RUN_LABEL]])
+// DARWIN-ARM64: call void %__llgo_funcval_code(ptr swiftself %{{[0-9]+}}, %"{{.*}}String" [[RUN_LABEL]])
+// LINUX-AMD64: call void %__llgo_funcval_code(ptr nest %{{[0-9]+}}, %"{{.*}}String" [[RUN_LABEL]])
 // CHECK: [[SAVED_DEFER:%[0-9]+]] = load %"{{.*}}Defer", ptr [[DEFER_FRAME]]
 // CHECK-NEXT: [[RESTORED_DEFER:%[0-9]+]] = extractvalue %"{{.*}}Defer" [[SAVED_DEFER]], 2
 // CHECK-NEXT: call void @"{{.*}}SetThreadDefer"(ptr [[RESTORED_DEFER]])
-// CHECK-LABEL: define void @"main.complexOrder$1"(ptr {{(nest|swiftself)}} %0, %"{{.*}}String" %1){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.complexOrder$1"(ptr swiftself %0, %"{{.*}}String" %1){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.complexOrder$1"(ptr nest %0, %"{{.*}}String" %1){{.*}} {
 // CHECK: [[RECORD_ENV_VALUE:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[RECORD_RESULT_SLOT:%[0-9]+]] = extractvalue { ptr } [[RECORD_ENV_VALUE]], 0
 // CHECK-NEXT: [[OLD_RESULT:%[0-9]+]] = load %"{{.*}}Slice", ptr [[RECORD_RESULT_SLOT]]

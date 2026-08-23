@@ -439,14 +439,14 @@ func main() {
 // CHECK: [[RR_LEN:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.String" %{{[0-9]+}}, 1
 // CHECK: [[RR_EOF:%[0-9]+]] = icmp sge i64 [[RR_I]], [[RR_LEN]]
 // CHECK: store i64 [[RR_PREV_I:%[0-9]+]], ptr %{{[0-9]+}}
-// CHECK: [[RR_BYTE:%[0-9]+]] = load i8, ptr %{{[0-9]+}}
-// CHECK: [[RR_ASCII:%[0-9]+]] = icmp ult i8 [[RR_BYTE]], -128
 // CHECK: [[RR_ASCII_NEXT:%[0-9]+]] = add i64 %{{[0-9]+}}, 1
-// CHECK: [[RR_RUNE:%[0-9]+]] = zext i8 [[RR_BYTE]] to i32
+// CHECK: [[RR_RUNE:%[0-9]+]] = zext i8 %{{[0-9]+}} to i32
 // CHECK: [[RR_DECODE:%[0-9]+]] = call { i32, i64 } @"unicode/utf8.DecodeRuneInString"
 // CHECK: [[RR_WIDTH:%[0-9]+]] = extractvalue { i32, i64 } [[RR_DECODE]], 1
 // CHECK: [[RR_NEXT:%[0-9]+]] = add i64 %{{[0-9]+}}, [[RR_WIDTH]]
 // CHECK: store i64 [[RR_NEXT]], ptr %{{[0-9]+}}
+// CHECK: [[RR_BYTE:%[0-9]+]] = load i8, ptr %{{[0-9]+}}
+// CHECK: [[RR_ASCII:%[0-9]+]] = icmp ult i8 [[RR_BYTE]], -128
 
 // Seek handles start/current/end, rejects invalid/negative results, and stores abs.
 // CHECK-LABEL: define { i64, %"{{.*}}/runtime/internal/runtime.iface" } @"main.(*stringReader).Seek"(ptr %0, i64 %1, i64 %2){{.*}} {

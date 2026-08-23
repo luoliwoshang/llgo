@@ -26,8 +26,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goplus/llgo/internal/env"
-	"github.com/goplus/llgo/runtime/abi"
+	"github.com/xgo-dev/llgo/internal/env"
+	"github.com/xgo-dev/llgo/runtime/abi"
 )
 
 // -----------------------------------------------------------------------------
@@ -245,6 +245,15 @@ func typeArgString(t types.Type) string {
 	case *types.Alias:
 		return typeArgString(types.Unalias(t))
 	case *types.Basic:
+		// byte and rune are aliases for uint8 and int32. go/types may cache a
+		// generic instance using either spelling, so ABI symbols must not
+		// depend on which spelling was instantiated first.
+		switch t.Kind() {
+		case types.Byte:
+			return types.Typ[types.Uint8].String()
+		case types.Rune:
+			return types.Typ[types.Int32].String()
+		}
 		return t.String()
 	case *types.Named:
 		return namedLikeTypeArgString(t.Obj(), t.TypeArgs())
@@ -277,6 +286,7 @@ func typeArgString(t types.Type) string {
 
 const (
 	PatchPathPrefix = env.LLGoRuntimePkg + "/internal/lib/"
+	ForTestMarker   = "@ForTest"
 )
 
 // PathOf returns the package path of the specified package.
@@ -284,7 +294,7 @@ func PathOf(pkg *types.Package) string {
 	if pkg == nil {
 		return ""
 	}
-	if pkg.Name() == "main" {
+	if pkg.Name() == "main" && pkg.Scope().Lookup(ForTestMarker) == nil {
 		return "main"
 	}
 	return strings.TrimPrefix(pkg.Path(), PatchPathPrefix)

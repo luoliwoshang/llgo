@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goplus/llgo/internal/crosscompile/compile/libc"
-	"github.com/goplus/llgo/internal/crosscompile/compile/rtlib"
+	"github.com/xgo-dev/llgo/internal/crosscompile/compile/libc"
+	"github.com/xgo-dev/llgo/internal/crosscompile/compile/rtlib"
 )
 
 func TestGetLibcCompileConfigByName(t *testing.T) {

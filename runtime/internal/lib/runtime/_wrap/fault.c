@@ -26,6 +26,11 @@ static long llgo_pagesz; /* primed at handler install, out of signal context */
 
 static void (*llgo_fault_go)(uintptr_t pc, uintptr_t fp, int sig);
 
+/* profile.c arms this recovery point only while dereferencing a sampled
+ * frame-pointer chain. A bad frame truncates that sample instead of entering
+ * the Go fault path while the profiler ring lock is held. */
+extern int llgo_cpu_profile_fault_recover(void);
+
 /* Dynamic-libunwind fault unwinding (dynunwind.c); no-ops when disabled
  * (LLGO_DYNUNWIND=0) or no libunwind flavor resolved. */
 extern void llgo_dynunwind_init(void);
@@ -38,6 +43,8 @@ static void llgo_fault_trampoline(int sig, siginfo_t *info, void *uctx)
     uintptr_t pc = 0, fp = 0;
     ucontext_t *uc = (ucontext_t *)uctx;
     (void)info;
+    if (llgo_cpu_profile_fault_recover())
+        return;
     if (llgo_in_fault) {
         signal(sig, SIG_DFL);
         raise(sig);

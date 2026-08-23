@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 import (
@@ -36,20 +36,20 @@ func (c Cursor) Node() ast.Node {
 // CHECK: [[FN_LIMIT:%[0-9]+]] = extractvalue { i32, i32 } [[FN_RANGE]], 1
 // CHECK: [[FN_I:%[0-9]+]] = phi i32 [ [[FN_START]],
 // CHECK: [[FN_MORE:%[0-9]+]] = icmp slt i32 [[FN_I]], [[FN_LIMIT]]
-// CHECK: [[FN_EVENT_PTR:%[0-9]+]] = getelementptr inbounds %main.event, ptr %{{[0-9]+}}, i64 %{{[0-9]+}}
-// CHECK: [[FN_EVENT:%[0-9]+]] = load %main.event, ptr [[FN_EVENT_PTR]]
-// CHECK: [[FN_PAIR_INDEX:%[0-9]+]] = load i32, ptr %{{[0-9]+}}
-// CHECK: [[FN_PUSH:%[0-9]+]] = icmp sgt i32 [[FN_PAIR_INDEX]], [[FN_I]]
 // CHECK: [[FN_EVENT_TYPE:%[0-9]+]] = load i64, ptr %{{[0-9]+}}
 // CHECK: [[FN_TYPE_MATCH:%[0-9]+]] = and i64 [[FN_EVENT_TYPE]], [[FN_MASK]]
 // CHECK: [[FN_MAY_MATCH:%[0-9]+]] = icmp ne i64 [[FN_TYPE_MATCH]], 0
 // CHECK: store i32 [[FN_I]], ptr %{{[0-9]+}}
 // CHECK: store i1 true, ptr %{{[0-9]+}}
 // CHECK: [[FN_POP:%[0-9]+]] = load i32, ptr %{{[0-9]+}}
+// CHECK: [[FN_NODE_EQUAL:%[0-9]+]] = call i1 @"{{.*}}/runtime/internal/runtime.EfaceEqual"
+// CHECK: [[FN_EVENT_PTR:%[0-9]+]] = getelementptr inbounds %main.event, ptr %{{[0-9]+}}, i64 %{{[0-9]+}}
+// CHECK: [[FN_EVENT:%[0-9]+]] = load %main.event, ptr [[FN_EVENT_PTR]]
+// CHECK: [[FN_PAIR_INDEX:%[0-9]+]] = load i32, ptr %{{[0-9]+}}
+// CHECK: [[FN_PUSH:%[0-9]+]] = icmp sgt i32 [[FN_PAIR_INDEX]], [[FN_I]]
 // CHECK: [[FN_POP_TYPE:%[0-9]+]] = load i64, ptr %{{[0-9]+}}
 // CHECK: [[FN_POP_MASK:%[0-9]+]] = and i64 [[FN_POP_TYPE]], [[FN_MASK]]
 // CHECK: [[FN_SKIP:%[0-9]+]] = icmp eq i64 [[FN_POP_MASK]], 0
-// CHECK: [[FN_NODE_EQUAL:%[0-9]+]] = call i1 @"{{.*}}/runtime/internal/runtime.EfaceEqual"
 
 func (c Cursor) FindNode(n ast.Node) (Cursor, bool) {
 
@@ -334,7 +334,8 @@ const (
 // CHECK: [[PRE_CLOSURE:%[0-9]+]] = insertvalue { ptr, ptr } { ptr @"main.Cursor.Preorder$1", ptr undef }, ptr %{{[0-9]+}}, 1
 // CHECK: ret %"iter.Seq[main.Cursor]" %{{[0-9]+}}
 
-// CHECK-LABEL: define void @"main.Cursor.Preorder$1"(ptr {{(nest|swiftself)}} %0, { ptr, ptr } %1){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.Cursor.Preorder$1"(ptr swiftself %0, { ptr, ptr } %1){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.Cursor.Preorder$1"(ptr nest %0, { ptr, ptr } %1){{.*}} {
 // CHECK: [[PRE_ENV:%[0-9]+]] = load { ptr, ptr }, ptr %0
 // CHECK: [[PRE_EVENTS:%[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.Slice", ptr %{{[0-9]+}}
 // CHECK: [[PRE_CURSOR_PTR:%[0-9]+]] = extractvalue { ptr, ptr } [[PRE_ENV]], 0
@@ -344,23 +345,24 @@ const (
 // CHECK: [[PRE_LIMIT:%[0-9]+]] = extractvalue { i32, i32 } [[PRE_RANGE]], 1
 // CHECK: [[PRE_I:%[0-9]+]] = phi i32 [ [[PRE_START]],
 // CHECK: [[PRE_MORE:%[0-9]+]] = icmp slt i32 [[PRE_I]], [[PRE_LIMIT]]
-// CHECK: [[PRE_EVENT:%[0-9]+]] = load %main.event, ptr %{{[0-9]+}}
-// CHECK: [[PRE_POP:%[0-9]+]] = load i32, ptr %{{[0-9]+}}
-// CHECK: [[PRE_PUSH:%[0-9]+]] = icmp sgt i32 [[PRE_POP]], [[PRE_I]]
 // CHECK: [[PRE_EVENT_TYPE:%[0-9]+]] = load i64, ptr %{{[0-9]+}}
 // CHECK: [[PRE_SAVED_MASK:%[0-9]+]] = load i64, ptr %{{[0-9]+}}
 // CHECK: [[PRE_MATCH_BITS:%[0-9]+]] = and i64 [[PRE_EVENT_TYPE]], [[PRE_SAVED_MASK]]
 // CHECK: [[PRE_MATCH:%[0-9]+]] = icmp ne i64 [[PRE_MATCH_BITS]], 0
+// CHECK: store i32 [[PRE_I]], ptr %{{[0-9]+}}
+// CHECK: [[PRE_YIELD_ENV:%[0-9]+]] = extractvalue { ptr, ptr } %1, 1
+// CHECK-NEXT: [[PRE_YIELD_CODE:%[0-9]+]] = extractvalue { ptr, ptr } %1, 0
+// DARWIN-ARM64: [[PRE_YIELD:%[0-9]+]] = call i1 %{{[^ ]+}}(ptr swiftself [[PRE_YIELD_ENV]], %main.Cursor %{{[0-9]+}})
+// LINUX-AMD64: [[PRE_YIELD:%[0-9]+]] = call i1 %{{[^ ]+}}(ptr nest [[PRE_YIELD_ENV]], %main.Cursor %{{[0-9]+}})
+// CHECK: br i1 [[PRE_YIELD]],
+// CHECK: [[PRE_AFTER_POP:%[0-9]+]] = add i32 [[PRE_SKIP_POP:%[0-9]+]], 1
+// CHECK: [[PRE_EVENT:%[0-9]+]] = load %main.event, ptr %{{[0-9]+}}
+// CHECK: [[PRE_POP:%[0-9]+]] = load i32, ptr %{{[0-9]+}}
+// CHECK: [[PRE_PUSH:%[0-9]+]] = icmp sgt i32 [[PRE_POP]], [[PRE_I]]
 // CHECK: [[PRE_SUBTREE_TYPE:%[0-9]+]] = load i64, ptr %{{[0-9]+}}
 // CHECK: [[PRE_SUBTREE_MASK:%[0-9]+]] = load i64, ptr %{{[0-9]+}}
 // CHECK: [[PRE_SUBTREE_BITS:%[0-9]+]] = and i64 [[PRE_SUBTREE_TYPE]], [[PRE_SUBTREE_MASK]]
 // CHECK: [[PRE_SKIP:%[0-9]+]] = icmp eq i64 [[PRE_SUBTREE_BITS]], 0
-// CHECK: store i32 [[PRE_I]], ptr %{{[0-9]+}}
-// CHECK: [[PRE_YIELD_ENV:%[0-9]+]] = extractvalue { ptr, ptr } %1, 1
-// CHECK-NEXT: [[PRE_YIELD_CODE:%[0-9]+]] = extractvalue { ptr, ptr } %1, 0
-// CHECK: [[PRE_YIELD:%[0-9]+]] = call i1 %{{[^ ]+}}(ptr {{(nest|swiftself)}} [[PRE_YIELD_ENV]], %main.Cursor %{{[0-9]+}})
-// CHECK: br i1 [[PRE_YIELD]],
-// CHECK: [[PRE_AFTER_POP:%[0-9]+]] = add i32 [[PRE_SKIP_POP:%[0-9]+]], 1
 
 // A virtual-root Cursor exposes all events; a real Cursor exposes its push/pop subtree.
 // CHECK-LABEL: define { i32, i32 } @main.Cursor.indices(%main.Cursor %0){{.*}} {
@@ -384,10 +386,10 @@ const (
 // CHECK: [[MASK_ALL:%[0-9]+]] = icmp eq i64 [[MASK_LEN]], 0
 // CHECK: ret i64 -1
 // CHECK: [[MASK_ACC:%[0-9]+]] = phi i64 [ 0,
+// CHECK: ret i64 [[MASK_ACC]]
 // CHECK: [[MASK_NODE:%[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.iface", ptr %{{[0-9]+}}
 // CHECK: [[MASK_ONE:%[0-9]+]] = call i64 @main.typeOf(%"{{.*}}/runtime/internal/runtime.iface" [[MASK_NODE]])
 // CHECK: [[MASK_NEXT:%[0-9]+]] = or i64 [[MASK_ACC]], [[MASK_ONE]]
-// CHECK: ret i64 [[MASK_ACC]]
 
 // CHECK-LABEL: define i64 @main.typeOf(%"{{.*}}/runtime/internal/runtime.iface" %0){{.*}} {
 // Ident has the dedicated fast path; the switch covers every declared node type

@@ -16,7 +16,7 @@ func TestDisableBoundsChecksIR(t *testing.T) {
 	checked := boundsChecksModuleIR(t, false)
 	unchecked := boundsChecksModuleIR(t, true)
 
-	for _, helper := range []string{"CheckIndexRange", "StringSlice2", "NewSlice2", "NewSlice3Bounds", "PanicSliceConvert"} {
+	for _, helper := range []string{"PanicIndex", "StringSlice2", "NewSlice2", "NewSlice3Bounds", "PanicSliceConvert"} {
 		if !strings.Contains(checked, helper) {
 			t.Errorf("default IR does not contain bounds helper %q", helper)
 		}
@@ -27,7 +27,7 @@ func TestDisableBoundsChecksIR(t *testing.T) {
 
 	for _, function := range []string{"indexString", "indexSlice", "indexArray", "indexArrayPointer"} {
 		body := llvmFunctionBody(t, unchecked, function)
-		if strings.Contains(body, "CheckIndexRange") {
+		if strings.Contains(body, "PanicIndex") {
 			t.Errorf("-B %s contains an index bounds check:\n%s", function, body)
 		}
 	}

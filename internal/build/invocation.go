@@ -1,6 +1,7 @@
 package build
 
 import (
+	"go/version"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -66,4 +67,11 @@ func withEnv(environ []string, values ...string) []string {
 		}
 	}
 	return append(ret, values...)
+}
+
+func withResolvedGoToolchain(environ []string, goversion string) []string {
+	if !version.IsValid(goversion) {
+		return environ
+	}
+	return withEnv(environ, "GOTOOLCHAIN="+goversion)
 }

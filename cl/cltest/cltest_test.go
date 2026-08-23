@@ -4,8 +4,34 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
+
+	"github.com/xgo-dev/llgo/internal/littest"
 )
+
+func TestAdditionalIRTargets(t *testing.T) {
+	targets := []littest.Target{
+		{GOOS: "darwin", GOARCH: "arm64"},
+		{GOOS: "linux", GOARCH: "amd64"},
+	}
+	tests := []struct {
+		name          string
+		currentPrefix string
+		want          []littest.Target
+	}{
+		{name: "listed current", currentPrefix: "DARWIN-ARM64", want: targets[1:]},
+		{name: "unlisted current", currentPrefix: "LINUX-ARM64", want: targets},
+		{name: "named current", currentPrefix: "TARGET-WASM", want: targets},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := additionalIRTargets(targets, test.currentPrefix); !slices.Equal(got, test.want) {
+				t.Fatalf("additionalIRTargets() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
 
 func TestReadGoldenUsesToolchainVersion(t *testing.T) {
 	dir := t.TempDir()

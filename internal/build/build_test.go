@@ -23,15 +23,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goplus/llgo/cl"
-	"github.com/goplus/llgo/internal/buildenv"
-	"github.com/goplus/llgo/internal/crosscompile"
-	"github.com/goplus/llgo/internal/env"
-	"github.com/goplus/llgo/internal/lto"
-	"github.com/goplus/llgo/internal/meta"
-	"github.com/goplus/llgo/internal/mockable"
-	"github.com/goplus/llgo/internal/packages"
-	llssa "github.com/goplus/llgo/ssa"
+	"github.com/xgo-dev/llgo/cl"
+	"github.com/xgo-dev/llgo/internal/buildenv"
+	"github.com/xgo-dev/llgo/internal/crosscompile"
+	"github.com/xgo-dev/llgo/internal/env"
+	"github.com/xgo-dev/llgo/internal/lto"
+	"github.com/xgo-dev/llgo/internal/meta"
+	"github.com/xgo-dev/llgo/internal/mockable"
+	"github.com/xgo-dev/llgo/internal/packages"
+	llssa "github.com/xgo-dev/llgo/ssa"
 	"github.com/xgo-dev/llvm"
 )
 
@@ -321,6 +321,58 @@ func TestDeadcodeBuildColdAndHotPackageCache(t *testing.T) {
 	}
 }
 
+func TestGenericLocalTypeColdAndHotPackageCache(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := filepath.Join(repoRoot, "internal", "build", "testdata", "genericlocalcache")
+	const (
+		cacheRootEnv  = "LLGO_TEST_GENERIC_LOCAL_CACHE_ROOT"
+		cachePhaseEnv = "LLGO_TEST_GENERIC_LOCAL_CACHE_PHASE"
+	)
+	if cacheRoot := os.Getenv(cacheRootEnv); cacheRoot != "" {
+		cacheRootFunc = func() string { return cacheRoot }
+		t.Setenv("LLGO_ROOT", repoRoot)
+		t.Setenv(llgoBuildCache, "1")
+
+		conf := NewDefaultConf(ModeTest)
+		conf.OutFile = filepath.Join(t.TempDir(), os.Getenv(cachePhaseEnv))
+		conf.RunArgs = []string{"-test.run=^TestLocalRuntimeType$"}
+		pkgs, err := Build(Invocation{Args: []string{"."}, Config: conf, Dir: fixture})
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch phase := os.Getenv(cachePhaseEnv); phase {
+		case "cold":
+			for _, pkg := range pkgs {
+				if pkg.CacheHit {
+					t.Fatalf("cold build unexpectedly hit package cache for %s", pkg.PkgPath)
+				}
+			}
+		case "hot":
+			for _, pkg := range pkgs {
+				if pkg.CacheHit {
+					return
+				}
+			}
+			t.Fatal("hot build did not reuse any package archives")
+		default:
+			t.Fatalf("unknown cache phase %q", phase)
+		}
+		return
+	}
+
+	cacheRoot := t.TempDir()
+	for _, phase := range []string{"cold", "hot"} {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestGenericLocalTypeColdAndHotPackageCache$", "-test.count=1")
+		cmd.Env = append(os.Environ(), cacheRootEnv+"="+cacheRoot, cachePhaseEnv+"="+phase)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s cache build: %v\n%s", phase, err, out)
+		}
+	}
+}
+
 func TestResolveOutputsUsesInvocationDirectory(t *testing.T) {
 	dir := t.TempDir()
 	out := &OutFmtDetails{
@@ -416,6 +468,28 @@ func TestWithEnvLastValueWins(t *testing.T) {
 	want := []string{"B=keep", "A=new", "C=value"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("withEnv = %q, want %q", got, want)
+	}
+}
+
+func TestWithResolvedGoToolchain(t *testing.T) {
+	tests := []struct {
+		name      string
+		environ   []string
+		goversion string
+		want      []string
+	}{
+		{"replace existing", []string{"PATH=/bin", "GOTOOLCHAIN=auto"}, "go1.25.0", []string{"PATH=/bin", "GOTOOLCHAIN=go1.25.0"}},
+		{"append missing", []string{"PATH=/bin"}, "go1.25.0", []string{"PATH=/bin", "GOTOOLCHAIN=go1.25.0"}},
+		{"preserve development version", []string{"PATH=/bin"}, "devel go1.26-deadbeef", []string{"PATH=/bin"}},
+		{"preserve empty version", []string{"PATH=/bin"}, "", []string{"PATH=/bin"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := withResolvedGoToolchain(tt.environ, tt.goversion)
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("withResolvedGoToolchain = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -520,8 +594,8 @@ func TestWasmRuntimeAvoidsNativeHostDependencies(t *testing.T) {
 						t.Fatal(err)
 					}
 					switch path {
-					case "github.com/goplus/llgo/runtime/internal/clite/libuv",
-						"github.com/goplus/llgo/runtime/internal/clite/bdwgc":
+					case "github.com/xgo-dev/llgo/runtime/internal/clite/libuv",
+						"github.com/xgo-dev/llgo/runtime/internal/clite/bdwgc":
 						t.Fatalf("wasm selected %s, which imports native host dependency %s", name, path)
 					}
 				}
@@ -708,8 +782,8 @@ func TestFilterTestPackages(t *testing.T) {
 
 	t.Run("empty after filtering", func(t *testing.T) {
 		initial := []*packages.Package{
-			pkg("github.com/goplus/llgo/chore/ardump"),
-			pkg("github.com/goplus/llgo/chore/ardump [github.com/goplus/llgo/chore/ardump.test]"),
+			pkg("github.com/xgo-dev/llgo/chore/ardump"),
+			pkg("github.com/xgo-dev/llgo/chore/ardump [github.com/xgo-dev/llgo/chore/ardump.test]"),
 		}
 		filtered, err := filterTestPackages(initial, "")
 		if err != nil {
@@ -737,25 +811,6 @@ func TestFilterTestPackages(t *testing.T) {
 		}
 	})
 
-	t.Run("rename main package", func(t *testing.T) {
-		mainPkg := pkg("example.com/cmd")
-		mainPkg.Types = types.NewPackage(mainPkg.ID, "main")
-		initial := []*packages.Package{
-			mainPkg,
-			pkg("example.com/cmd.test"),
-		}
-		filtered, err := filterTestPackages(initial, "")
-		if err != nil {
-			t.Fatalf("filterTestPackages returned unexpected error: %v", err)
-		}
-		if len(filtered) != 1 || filtered[0].ID != "example.com/cmd.test" {
-			t.Fatalf("filtered = %#v, want only example.com/cmd.test", filtered)
-		}
-		if got := mainPkg.Types.Name(); got != "main.test" {
-			t.Fatalf("main package name = %q, want %q", got, "main.test")
-		}
-	})
-
 	t.Run("multiple test packages with output file", func(t *testing.T) {
 		initial := []*packages.Package{
 			pkg("a.test"),
@@ -772,7 +827,7 @@ func TestFilterTestPackages(t *testing.T) {
 }
 
 const (
-	rewriteMainPkg = "github.com/goplus/llgo/cl/_testgo/rewrite"
+	rewriteMainPkg = "github.com/xgo-dev/llgo/cl/_testgo/rewrite"
 	rewriteDepPkg  = rewriteMainPkg + "/dep"
 	rewriteDirPath = "../../cl/_testgo/rewrite"
 )
@@ -1304,7 +1359,7 @@ func TestCSharedExportArgsKeepsTestMain(t *testing.T) {
 		mode:      ModeTest,
 		buildConf: &Config{BuildMode: BuildModeCShared, Goos: "linux"},
 	}
-	if got, want := strings.Join(cSharedExportArgs(ctx, pkgs), " "), "-Wl,--undefined=example.com/p.test.init -Wl,--undefined=example.com/p.test.main"; got != want {
+	if got, want := strings.Join(cSharedExportArgs(ctx, pkgs), " "), "-Wl,--undefined=main.init -Wl,--undefined=main.main"; got != want {
 		t.Fatalf("test main cSharedExportArgs = %q, want %q", got, want)
 	}
 }
@@ -1340,12 +1395,12 @@ func TestCHeaderPackagesExcludesStandardRuntime(t *testing.T) {
 	userLPkg := prog.NewPackage("example.com/p", "example.com/p")
 	userLPkg.SetExport("example.com/p.Export", "Export")
 	runtimeLPkg := prog.NewPackage("runtime", "runtime")
-	llgoRuntimeLPkg := prog.NewPackage("github.com/goplus/llgo/runtime/internal/lib/runtime", "github.com/goplus/llgo/runtime/internal/lib/runtime")
+	llgoRuntimeLPkg := prog.NewPackage("github.com/xgo-dev/llgo/runtime/internal/lib/runtime", "github.com/xgo-dev/llgo/runtime/internal/lib/runtime")
 	dependencyLPkg := prog.NewPackage("example.com/dep", "example.com/dep")
 	pkgs := []*aPackage{
 		{Package: &packages.Package{PkgPath: "example.com/p"}, LPkg: userLPkg},
 		{Package: &packages.Package{PkgPath: "runtime"}, LPkg: runtimeLPkg},
-		{Package: &packages.Package{PkgPath: "github.com/goplus/llgo/runtime/internal/lib/runtime"}, LPkg: llgoRuntimeLPkg},
+		{Package: &packages.Package{PkgPath: "github.com/xgo-dev/llgo/runtime/internal/lib/runtime"}, LPkg: llgoRuntimeLPkg},
 		{Package: &packages.Package{PkgPath: "example.com/dep"}, LPkg: dependencyLPkg},
 		nil,
 	}
@@ -1729,7 +1784,7 @@ func TestDoReportsAltPackageLocalityDirectiveError(t *testing.T) {
 	if err := os.MkdirAll(runtimePkgDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(runtimeDir, "go.mod"), []byte("module github.com/goplus/llgo/runtime\n\ngo 1.24.0\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(runtimeDir, "go.mod"), []byte("module github.com/xgo-dev/llgo/runtime\n\ngo 1.24.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(runtimePkgDir, "runtime.go"), []byte(`package runtime

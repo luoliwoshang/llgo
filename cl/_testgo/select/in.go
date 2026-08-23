@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // Blocking send selection and receive-with-default use different runtime
@@ -51,13 +51,15 @@ package main
 // CHECK: [[RECV_PRINT2:%[0-9]+]] = extractvalue { i64, i1, %"{{.*}}String", %"{{.*}}String" } [[RECV_RESULT]], 3
 // CHECK-NEXT: call void @"{{.*}}PrintString"(%"{{.*}}String" [[RECV_PRINT2]])
 // CHECK: call void @"{{.*}}PrintString"(%"{{.*}}String" { ptr @[[EXIT_TEXT]], i64 4 })
-// CHECK-LABEL: define void @"main.recv$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.recv$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.recv$1"(ptr nest %0){{.*}} {
 // CHECK: [[RECV1_ENV:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[RECV1_CH_SLOT:%[0-9]+]] = extractvalue { ptr } [[RECV1_ENV]], 0
 // CHECK-NEXT: [[RECV1_CH:%[0-9]+]] = load ptr, ptr [[RECV1_CH_SLOT]]
 // CHECK: store %"{{.*}}String" { ptr @[[CH1_TEXT]], i64 3 }, ptr [[RECV1_VALUE:%[0-9]+]]
 // CHECK-NEXT: call i1 @"{{.*}}ChanSend"(ptr [[RECV1_CH]], ptr [[RECV1_VALUE]], i64 16)
-// CHECK-LABEL: define void @"main.recv$2"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.recv$2"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.recv$2"(ptr nest %0){{.*}} {
 // CHECK: [[RECV2_ENV:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[RECV2_CH_SLOT:%[0-9]+]] = extractvalue { ptr } [[RECV2_ENV]], 0
 // CHECK-NEXT: [[RECV2_CH:%[0-9]+]] = load ptr, ptr [[RECV2_CH_SLOT]]
@@ -86,14 +88,16 @@ package main
 // CHECK: [[SEND_DISPATCH:%[0-9]+]] = extractvalue { i64, i1 } %{{[0-9]+}}, 0
 // CHECK-NEXT: [[SEND_IS_CASE0:%[0-9]+]] = icmp eq i64 [[SEND_DISPATCH]], 0
 // CHECK: [[SEND_IS_CASE1:%[0-9]+]] = icmp eq i64 [[SEND_DISPATCH]], 1
-// CHECK-LABEL: define void @"main.send$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.send$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.send$1"(ptr nest %0){{.*}} {
 // CHECK: [[SEND1_ENV:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[SEND1_CH_SLOT:%[0-9]+]] = extractvalue { ptr } [[SEND1_ENV]], 0
 // CHECK-NEXT: [[SEND1_CH:%[0-9]+]] = load ptr, ptr [[SEND1_CH_SLOT]]
 // CHECK: call i1 @"{{.*}}ChanRecv"(ptr [[SEND1_CH]], ptr [[SEND1_BUF:%[0-9]+]], i64 8)
 // CHECK-NEXT: [[SEND1_VALUE:%[0-9]+]] = load i64, ptr [[SEND1_BUF]]
 // CHECK: call void @"{{.*}}PrintInt"(i64 [[SEND1_VALUE]])
-// CHECK-LABEL: define void @"main.send$2"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.send$2"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.send$2"(ptr nest %0){{.*}} {
 // CHECK: [[SEND2_ENV:%[0-9]+]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[SEND2_CH_SLOT:%[0-9]+]] = extractvalue { ptr } [[SEND2_ENV]], 0
 // CHECK-NEXT: [[SEND2_CH:%[0-9]+]] = load ptr, ptr [[SEND2_CH_SLOT]]

@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // Each source section below exercises a different equality lowering. Keep the
@@ -19,16 +19,15 @@ package main
 // CHECK: [[FUNC_SUM:%[0-9]+]] = add i64 %0, %1
 // CHECK-NEXT: ret i64 [[FUNC_SUM]]
 
-// CHECK-LABEL: define void @"main.init#1$2"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.init#1$2"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.init#1$2"(ptr nest %0){{.*}} {
 // CHECK: load { ptr }, ptr %0
 
 // Arrays: all three elements participate in equality, and inequality negates
 // the aggregate result rather than changing element semantics.
 // CHECK-LABEL: define void @"main.init#2"(){{.*}} {
-// CHECK: %[[ARRAY_L:[0-9]+]] = load [3 x i64], ptr %{{[0-9]+}}
-// CHECK: %[[ARRAY_R:[0-9]+]] = load [3 x i64], ptr %{{[0-9]+}}
-// CHECK: extractvalue [3 x i64] %[[ARRAY_L]], 0
-// CHECK: extractvalue [3 x i64] %[[ARRAY_R]], 0
+// CHECK: extractvalue [3 x i64] %[[ARRAY_L:[0-9]+]], 0
+// CHECK: extractvalue [3 x i64] %[[ARRAY_R:[0-9]+]], 0
 // CHECK: extractvalue [3 x i64] %[[ARRAY_L]], 1
 // CHECK: extractvalue [3 x i64] %[[ARRAY_R]], 1
 // CHECK: extractvalue [3 x i64] %[[ARRAY_L]], 2

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/goplus/llgo/xtool/env/llvm"
+	"github.com/xgo-dev/llgo/xtool/env/llvm"
 )
 
 func Match(filename, input string) error {
@@ -29,7 +29,20 @@ func Match(filename, input string) error {
 }
 
 func MatchWithPrefixes(filename, input string, prefixes ...string) error {
-	args := make([]string, 0, len(prefixes)+1)
+	return match(filename, input, false, prefixes...)
+}
+
+// MatchWithTargetPrefixes allows architecture and target-specific prefixes to
+// be absent while still checking portable CHECK directives.
+func MatchWithTargetPrefixes(filename, input string, prefixes ...string) error {
+	return match(filename, input, true, prefixes...)
+}
+
+func match(filename, input string, allowUnusedPrefixes bool, prefixes ...string) error {
+	args := make([]string, 0, len(prefixes)+2)
+	if allowUnusedPrefixes {
+		args = append(args, "--allow-unused-prefixes")
+	}
 	for _, prefix := range prefixes {
 		args = append(args, "--check-prefix="+prefix)
 	}
@@ -48,4 +61,30 @@ func MatchWithPrefixes(filename, input string, prefixes ...string) error {
 		return err
 	}
 	return nil
+}
+
+// TargetPrefixes returns CHECK plus the applicable architecture and specific
+// compile-target prefixes. A named target produces TARGET-<TARGET>; otherwise
+// GOOS and GOARCH produce <GOOS>-<GOARCH>.
+func TargetPrefixes(goos, goarch, target string) []string {
+	prefixes := []string{"CHECK"}
+	if (goos == "") != (goarch == "") {
+		panic("filecheck: GOOS and GOARCH must be provided together")
+	}
+	if goos != "" && goarch != "" {
+		prefixes = append(prefixes, ArchitecturePrefix(goarch))
+	}
+	if target != "" {
+		return append(prefixes, "TARGET-"+strings.ToUpper(target))
+	}
+	if goos != "" && goarch != "" {
+		return append(prefixes, strings.ToUpper(goos+"-"+goarch))
+	}
+	return prefixes
+}
+
+// ArchitecturePrefix returns the FileCheck prefix shared by targets with the
+// same GOARCH.
+func ArchitecturePrefix(goarch string) string {
+	return strings.ToUpper(goarch)
 }

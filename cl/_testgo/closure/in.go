@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 type T func(n int)
@@ -19,7 +19,8 @@ func main() {
 	// CHECK: [[V2_CALL_ENV:%.*]] = extractvalue %main.T [[V2_VALUE]], 1
 	// CHECK: [[V2_CALL_FN:%.*]] = extractvalue %main.T [[V2_VALUE]], 0
 	// CHECK: [[V2_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[V2_CALL_FN]])
-	// CHECK: call void [[V2_CODE]](ptr {{(nest|swiftself)}} [[V2_CALL_ENV]], i64 200)
+	// DARWIN-ARM64: call void [[V2_CODE]](ptr swiftself [[V2_CALL_ENV]], i64 200)
+	// LINUX-AMD64: call void [[V2_CODE]](ptr nest [[V2_CALL_ENV]], i64 200)
 	var env string = "env"
 	var v1 T = func(i int) {
 		// CHECK-LABEL: define void @"main.main$1"(i64 %0){{.*}} {
@@ -27,7 +28,8 @@ func main() {
 		println("func", i)
 	}
 	var v2 T = func(i int) {
-		// CHECK-LABEL: define void @"main.main$2"(ptr {{(nest|swiftself)}} %0, i64 %1){{.*}} {
+		// DARWIN-ARM64-LABEL: define void @"main.main$2"(ptr swiftself %0, i64 %1){{.*}} {
+		// LINUX-AMD64-LABEL: define void @"main.main$2"(ptr nest %0, i64 %1){{.*}} {
 		// CHECK: [[V2_ENV_VALUE:%.*]] = load { ptr }, ptr %0
 		// CHECK-NEXT: [[V2_STRING_SLOT:%.*]] = extractvalue { ptr } [[V2_ENV_VALUE]], 0
 		// CHECK-NEXT: [[V2_STRING:%.*]] = load %"{{.*}}String", ptr [[V2_STRING_SLOT]]

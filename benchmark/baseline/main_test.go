@@ -93,10 +93,11 @@ func TestExportBenchmarks(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"pkg: github.com/goplus/llgo/benchmark/baseline",
+		"pkg: github.com/xgo-dev/llgo/benchmark/baseline",
 		"Unit file-bytes better=lower assume=exact",
 		"Unit build-ns better=lower",
 		"BenchmarkProgram/cprintf 1 1 file-bytes 1 text-bytes 1 data-bytes 1 bss-bytes 1 build-ns 1 run-ns",
+		"BenchmarkProgram/cprintf-lto 1 1 file-bytes 1 text-bytes 1 data-bytes 1 bss-bytes 1 build-ns 1 run-ns",
 		"BenchmarkRuntimeGetG-1 100 12.5 ns/op",
 	} {
 		if !strings.Contains(text, want) {

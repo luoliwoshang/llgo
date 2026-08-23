@@ -1,6 +1,6 @@
 // Copyright 2014 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style license.
+// See LICENSES/Go-BSD-3-Clause.txt at this module root for license terms.
 
 // Hashing algorithm inspired by
 // wyhash: https://github.com/wangyi-fudan/wyhash
@@ -12,7 +12,7 @@ package runtime
 import (
 	"unsafe"
 
-	"github.com/goplus/llgo/runtime/internal/runtime/math"
+	"github.com/xgo-dev/llgo/runtime/internal/runtime/math"
 )
 
 const (

@@ -3,10 +3,11 @@
 package runtime
 
 import (
-	c "github.com/goplus/llgo/runtime/internal/clite"
-	"github.com/goplus/llgo/runtime/internal/clite/libuv"
-	psync "github.com/goplus/llgo/runtime/internal/clite/pthread/sync"
-	latomic "github.com/goplus/llgo/runtime/internal/lib/sync/atomic"
+	latomic "sync/atomic"
+
+	c "github.com/xgo-dev/llgo/runtime/internal/clite"
+	"github.com/xgo-dev/llgo/runtime/internal/clite/libuv"
+	psync "github.com/xgo-dev/llgo/runtime/internal/clite/pthread/sync"
 )
 
 // Minimal signal support for stdlib os/signal on hosted native targets.
@@ -87,10 +88,14 @@ func startSignalWatcher(sig uint32, st *sigState) {
 		})
 		st.inited = true
 	}
+	var code int
+	locked := cpuProfileSignalLock(sig)
 	submitTimerWork(func() bool {
-		checkUV("uv_signal_start", int(libuv.SignalStartRuntime(&st.handle, c.Int(sig))))
+		code = int(libuv.SignalStartRuntime(&st.handle, c.Int(sig)))
 		return true
 	})
+	cpuProfileSignalUnlock(locked)
+	checkUV("uv_signal_start", code)
 }
 
 // signal_enable enables Go signal delivery for sig.
@@ -122,16 +127,21 @@ func signal_disable(sig uint32) {
 		sigMu.Unlock()
 		return
 	}
-	if st.active && !st.ignored {
+	if st.active {
 		st.active = false
+		st.ignored = false
 		doStop = true
 	}
 	sigMu.Unlock()
 	if doStop {
+		var code int
+		locked := cpuProfileSignalLock(sig)
 		submitTimerWork(func() bool {
-			checkUV("uv_signal_stop", int(st.handle.Stop()))
+			code = int(st.handle.Stop())
 			return true
 		})
+		cpuProfileSignalUnlock(locked)
+		checkUV("uv_signal_stop", code)
 	}
 }
 

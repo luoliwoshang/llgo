@@ -71,8 +71,10 @@ func bytes(s string) (ret []byte) {
 // CHECK-NEXT: [[GWRITE_MORE:%[0-9]+]] = icmp slt i64 [[GWRITE_INDEX]], [[GWRITE_RANGE_LEN]]
 // CHECK: [[GWRITE_DATA:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 0
 // CHECK: [[GWRITE_BOUND:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 1
-// CHECK: call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %{{[0-9]+}}, i64 [[GWRITE_INDEX]], i1 true, i64 [[GWRITE_BOUND]])
-// CHECK-NEXT: [[GWRITE_BYTE_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[GWRITE_DATA]], i64 [[GWRITE_INDEX]]
+// CHECK: br i1 %{{[0-9]+}}, label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK: call void @"{{.*}}/runtime/internal/runtime.PanicIndex"(i64 [[GWRITE_INDEX]], i64 [[GWRITE_BOUND]])
+// CHECK-NEXT: br label %{{_llgo_[0-9]+}}
+// CHECK: [[GWRITE_BYTE_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[GWRITE_DATA]], i64 [[GWRITE_INDEX]]
 // CHECK-NEXT: [[GWRITE_BYTE:%[0-9]+]] = load i8, ptr [[GWRITE_BYTE_PTR]]
 // CHECK-NEXT: {{%[0-9]+}} = call i32 (ptr, ...) @printf(ptr [[FMT_CHAR]], i8 [[GWRITE_BYTE]])
 
@@ -296,45 +298,44 @@ func printbool(v bool) {
 }
 
 // CHECK-LABEL: define void @main.printfloat(double %0){{.*}} {
-// CHECK: [[PF_NAN:%[0-9]+]] = fcmp une double %0, %0
-// CHECK-NEXT: br i1 [[PF_NAN]], label %{{.*}}, label %{{.*}}
-// CHECK: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_NAN]], i64 3 })
-// CHECK: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_PINF]], i64 4 })
-// CHECK: [[PF_INF_SUM:%[0-9]+]] = fadd double %0, %0
-// CHECK-NEXT: [[PF_IS_INF:%[0-9]+]] = fcmp oeq double [[PF_INF_SUM]], %0
-// CHECK: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_NINF]], i64 4 })
-// CHECK: [[PF_NINF_SUM:%[0-9]+]] = fadd double %0, %0
-// CHECK-NEXT: [[PF_IS_NINF:%[0-9]+]] = fcmp oeq double [[PF_NINF_SUM]], %0
-// CHECK: [[PF_BUFFER:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 14)
-// CHECK: [[PF_IS_ZERO:%[0-9]+]] = fcmp oeq double %0, 0.000000e+00
-// CHECK: [[PF_ZERO_SIGN:%[0-9]+]] = fdiv double 1.000000e+00, %0
-// CHECK-NEXT: {{%[0-9]+}} = fcmp olt double [[PF_ZERO_SIGN]], 0.000000e+00
-// CHECK: [[PF_NEGATED:%[0-9]+]] = fneg double %0
-// CHECK: [[PF_SCALE_DOWN:%[0-9]+]] = fdiv double [[PF_NORMAL:%[0-9]+]], 1.000000e+01
-// CHECK: [[PF_NORMAL]] = phi double [ %0, %{{.*}} ], [ [[PF_SCALE_DOWN]], %{{.*}} ], [ [[PF_NEGATED]], %{{.*}} ]
-// CHECK: [[PF_TOO_LARGE:%[0-9]+]] = fcmp oge double [[PF_NORMAL]], 1.000000e+01
-// CHECK: [[PF_SCALE_UP:%[0-9]+]] = fmul double [[PF_SMALL_VALUE:%[0-9]+]], 1.000000e+01
-// CHECK: [[PF_SMALL_VALUE]] = phi double [ [[PF_NORMAL]], %{{.*}} ], [ [[PF_SCALE_UP]], %{{.*}} ]
-// CHECK: [[PF_TOO_SMALL:%[0-9]+]] = fcmp olt double [[PF_SMALL_VALUE]], 1.000000e+00
-// CHECK: [[PF_ROUND_COUNT:%[0-9]+]] = phi i64 [ 0, %{{.*}} ], [ %{{[0-9]+}}, %{{.*}} ]
-// CHECK-NEXT: [[PF_ROUND_MORE:%[0-9]+]] = icmp slt i64 [[PF_ROUND_COUNT]], 7
-// CHECK: [[PF_ROUNDED:%[0-9]+]] = fadd double %{{[0-9]+}}, %{{[0-9]+}}
-// CHECK-NEXT: [[PF_ROUND_OVERFLOW:%[0-9]+]] = fcmp oge double [[PF_ROUNDED]], 1.000000e+01
-// CHECK: [[PF_DIGIT_INDEX:%[0-9]+]] = phi i64 [ 0, %{{.*}} ], [ %{{[0-9]+}}, %{{.*}} ]
-// CHECK-NEXT: [[PF_MORE_DIGITS:%[0-9]+]] = icmp slt i64 [[PF_DIGIT_INDEX]], 7
-// CHECK: [[PF_DIGIT:%[0-9]+]] = fptosi double %{{[0-9]+}} to i64
-// CHECK: [[PF_DIGIT_CHAR:%[0-9]+]] = trunc i64 %{{[0-9]+}} to i8
-// CHECK: store i8 [[PF_DIGIT_CHAR]], ptr %{{[0-9]+}}
-// CHECK: [[PF_REMAINDER:%[0-9]+]] = fsub double %{{[0-9]+}}, %{{[0-9]+}}
-// CHECK-NEXT: [[PF_NEXT_DIGIT:%[0-9]+]] = fmul double [[PF_REMAINDER]], 1.000000e+01
-// CHECK: store i8 46, ptr %{{[0-9]+}}
-// CHECK: store i8 101, ptr %{{[0-9]+}}
-// CHECK: [[PF_EXP_NEG:%[0-9]+]] = icmp slt i64 [[PF_EXP:%[0-9]+]], 0
-// CHECK: [[PF_EXP_ABS:%[0-9]+]] = phi i64 [ [[PF_EXP]], %{{.*}} ], [ %{{[0-9]+}}, %{{.*}} ]
-// CHECK: [[PF_SLICE0:%[0-9]+]] = insertvalue %"{{.*}}/runtime/internal/runtime.Slice" undef, ptr [[PF_BUFFER]], 0
-// CHECK-NEXT: [[PF_SLICE1:%[0-9]+]] = insertvalue %"{{.*}}/runtime/internal/runtime.Slice" [[PF_SLICE0]], i64 14, 1
-// CHECK-NEXT: [[PF_SLICE:%[0-9]+]] = insertvalue %"{{.*}}/runtime/internal/runtime.Slice" [[PF_SLICE1]], i64 14, 2
-// CHECK-NEXT: call void @main.gwrite(%"{{.*}}/runtime/internal/runtime.Slice" [[PF_SLICE]])
+// CHECK-DAG: [[PF_NAN:%[0-9]+]] = fcmp une double %0, %0
+// CHECK-DAG: br i1 [[PF_NAN]], label %{{.*}}, label %{{.*}}
+// CHECK-DAG: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_NAN]], i64 3 })
+// CHECK-DAG: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_PINF]], i64 4 })
+// CHECK-DAG: [[PF_INF_SUM:%[0-9]+]] = fadd double %0, %0
+// CHECK-DAG: [[PF_IS_INF:%[0-9]+]] = fcmp oeq double [[PF_INF_SUM]], %0
+// CHECK-DAG: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_NINF]], i64 4 })
+// CHECK-DAG: [[PF_NINF_SUM:%[0-9]+]] = fadd double %0, %0
+// CHECK-DAG: [[PF_IS_NINF:%[0-9]+]] = fcmp oeq double [[PF_NINF_SUM]], %0
+// CHECK-DAG: [[PF_BUFFER:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 14)
+// CHECK-DAG: [[PF_IS_ZERO:%[0-9]+]] = fcmp oeq double %0, 0.000000e+00
+// CHECK-DAG: [[PF_ZERO_SIGN:%[0-9]+]] = fdiv double 1.000000e+00, %0
+// CHECK-DAG: {{%[0-9]+}} = fcmp olt double [[PF_ZERO_SIGN]], 0.000000e+00
+// CHECK-DAG: [[PF_NEGATED:%[0-9]+]] = fneg double %0
+// CHECK-DAG: [[PF_SCALE_DOWN:%[0-9]+]] = fdiv double [[PF_NORMAL:%[0-9]+]], 1.000000e+01
+// CHECK-DAG: [[PF_NORMAL]] = phi double [ %0, %{{.*}} ], [ [[PF_SCALE_DOWN]], %{{.*}} ], [ [[PF_NEGATED]], %{{.*}} ]
+// CHECK-DAG: [[PF_TOO_LARGE:%[0-9]+]] = fcmp oge double [[PF_NORMAL]], 1.000000e+01
+// CHECK-DAG: [[PF_SCALE_UP:%[0-9]+]] = fmul double [[PF_SMALL_VALUE:%[0-9]+]], 1.000000e+01
+// CHECK-DAG: [[PF_SMALL_VALUE]] = phi double [ [[PF_NORMAL]], %{{.*}} ], [ [[PF_SCALE_UP]], %{{.*}} ]
+// CHECK-DAG: [[PF_TOO_SMALL:%[0-9]+]] = fcmp olt double [[PF_SMALL_VALUE]], 1.000000e+00
+// CHECK-DAG: [[PF_ROUND_MORE:%[0-9]+]] = icmp slt i64 %{{[0-9]+}}, 7
+// CHECK-DAG: [[PF_ROUNDED:%[0-9]+]] = fadd double %{{[0-9]+}}, %{{[0-9]+}}
+// CHECK-DAG: [[PF_ROUND_OVERFLOW:%[0-9]+]] = fcmp oge double [[PF_ROUNDED]], 1.000000e+01
+// CHECK-DAG: [[PF_MORE_DIGITS:%[0-9]+]] = icmp slt i64 %{{[0-9]+}}, 7
+// CHECK-DAG: [[PF_DIGIT:%[0-9]+]] = fptosi double %{{[0-9]+}} to i64
+// CHECK-DAG: [[PF_DIGIT_CHAR:%[0-9]+]] = trunc i64 %{{[0-9]+}} to i8
+// CHECK-DAG: store i8 [[PF_DIGIT_CHAR]], ptr %{{[0-9]+}}
+// CHECK-DAG: [[PF_REMAINDER:%[0-9]+]] = fsub double %{{[0-9]+}}, %{{[0-9]+}}
+// CHECK-DAG: [[PF_NEXT_DIGIT:%[0-9]+]] = fmul double [[PF_REMAINDER]], 1.000000e+01
+// CHECK-DAG: store i8 46, ptr %{{[0-9]+}}
+// CHECK-DAG: store i8 101, ptr %{{[0-9]+}}
+// CHECK-DAG: [[PF_EXP:%[0-9]+]] = phi i64 [ 0, %{{.*}} ], [ %{{[0-9]+}}, %{{.*}} ], [ 0, %{{.*}} ], [ %{{[0-9]+}}, %{{.*}} ]
+// CHECK-DAG: [[PF_EXP_NEG:%[0-9]+]] = icmp slt i64 [[PF_EXP]], 0
+// CHECK-DAG: [[PF_EXP_ABS:%[0-9]+]] = phi i64 [ [[PF_EXP]], %{{.*}} ], [ %{{[0-9]+}}, %{{.*}} ]
+// CHECK-DAG: [[PF_SLICE0:%[0-9]+]] = insertvalue %"{{.*}}/runtime/internal/runtime.Slice" undef, ptr [[PF_BUFFER]], 0
+// CHECK-DAG: [[PF_SLICE1:%[0-9]+]] = insertvalue %"{{.*}}/runtime/internal/runtime.Slice" [[PF_SLICE0]], i64 14, 1
+// CHECK-DAG: [[PF_SLICE:%[0-9]+]] = insertvalue %"{{.*}}/runtime/internal/runtime.Slice" [[PF_SLICE1]], i64 14, 2
+// CHECK-DAG: call void @main.gwrite(%"{{.*}}/runtime/internal/runtime.Slice" [[PF_SLICE]])
 
 func printfloat(v float64) {
 	switch {
@@ -409,24 +410,24 @@ func printfloat(v float64) {
 }
 
 // CHECK-LABEL: define void @main.printhex(i64 %0){{.*}} {
-// CHECK: [[PH_BUFFER:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 100)
-// CHECK: [[PH_DIGIT:%[0-9]+]] = urem i64 [[PH_VALUE:%[0-9]+]], 16
-// CHECK: [[PH_DIGIT_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[HEX_DIGITS]], i64 [[PH_DIGIT]]
-// CHECK-NEXT: [[PH_DIGIT_CHAR:%[0-9]+]] = load i8, ptr [[PH_DIGIT_PTR]]
-// CHECK: [[PH_BUFFER_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[PH_BUFFER]], i64 [[PH_INDEX:%[0-9]+]]
-// CHECK-NEXT: store i8 [[PH_DIGIT_CHAR]], ptr [[PH_BUFFER_PTR]]
-// CHECK: [[PH_LAST_DIGIT:%[0-9]+]] = icmp ult i64 [[PH_VALUE]], 16
-// CHECK: store i8 120, ptr %{{[0-9]+}}
-// CHECK: store i8 48, ptr %{{[0-9]+}}
-// CHECK: [[PH_SLICE:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.Slice" @"{{.*}}/runtime/internal/runtime.NewSlice2"(ptr [[PH_BUFFER]], i64 1, i64 100, i64 %{{[0-9]+}}, i64 100, i1 true, i1 true, i1 true)
-// CHECK-NEXT: call void @main.gwrite(%"{{.*}}/runtime/internal/runtime.Slice" [[PH_SLICE]])
-// CHECK: [[PH_VALUE]] = phi i64 [ %0, %{{.*}} ], [ [[PH_QUOTIENT:%[0-9]+]], %{{.*}} ]
-// CHECK-NEXT: [[PH_INDEX]] = phi i64 [ 99, %{{.*}} ], [ [[PH_PREV_INDEX:%[0-9]+]], %{{.*}} ]
-// CHECK: [[PH_QUOTIENT]] = udiv i64 [[PH_VALUE]], 16
-// CHECK-NEXT: [[PH_PREV_INDEX]] = sub i64 [[PH_INDEX]], 1
-// CHECK: [[PH_WIDTH:%[0-9]+]] = sub i64 100, [[PH_INDEX]]
-// CHECK-NEXT: [[PH_MIN_WIDTH:%[0-9]+]] = load i64, ptr @main.minhexdigits
-// CHECK-NEXT: [[PH_WIDE_ENOUGH:%[0-9]+]] = icmp sge i64 [[PH_WIDTH]], [[PH_MIN_WIDTH]]
+// CHECK-DAG: [[PH_BUFFER:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 100)
+// CHECK-DAG: [[PH_DIGIT:%[0-9]+]] = urem i64 [[PH_VALUE:%[0-9]+]], 16
+// CHECK-DAG: [[PH_DIGIT_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[HEX_DIGITS]], i64 [[PH_DIGIT]]
+// CHECK-DAG: [[PH_DIGIT_CHAR:%[0-9]+]] = load i8, ptr [[PH_DIGIT_PTR]]
+// CHECK-DAG: [[PH_BUFFER_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[PH_BUFFER]], i64 [[PH_INDEX:%[0-9]+]]
+// CHECK-DAG: store i8 [[PH_DIGIT_CHAR]], ptr [[PH_BUFFER_PTR]]
+// CHECK-DAG: [[PH_LAST_DIGIT:%[0-9]+]] = icmp ult i64 [[PH_VALUE]], 16
+// CHECK-DAG: store i8 120, ptr %{{[0-9]+}}
+// CHECK-DAG: store i8 48, ptr %{{[0-9]+}}
+// CHECK-DAG: [[PH_SLICE:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.Slice" @"{{.*}}/runtime/internal/runtime.NewSlice2"(ptr [[PH_BUFFER]], i64 1, i64 100, i64 %{{[0-9]+}}, i64 100, i1 true, i1 true, i1 true)
+// CHECK-DAG: call void @main.gwrite(%"{{.*}}/runtime/internal/runtime.Slice" [[PH_SLICE]])
+// CHECK-DAG: [[PH_VALUE]] = phi i64 [ %0, %{{.*}} ], [ [[PH_QUOTIENT:%[0-9]+]], %{{.*}} ]
+// CHECK-DAG: [[PH_INDEX]] = phi i64 [ 99, %{{.*}} ], [ [[PH_PREV_INDEX:%[0-9]+]], %{{.*}} ]
+// CHECK-DAG: [[PH_QUOTIENT]] = udiv i64 [[PH_VALUE]], 16
+// CHECK-DAG: [[PH_PREV_INDEX]] = sub i64 [[PH_INDEX]], 1
+// CHECK-DAG: [[PH_WIDTH:%[0-9]+]] = sub i64 100, [[PH_INDEX]]
+// CHECK-DAG: [[PH_MIN_WIDTH:%[0-9]+]] = load i64, ptr @main.minhexdigits
+// CHECK-DAG: [[PH_WIDE_ENOUGH:%[0-9]+]] = icmp sge i64 [[PH_WIDTH]], [[PH_MIN_WIDTH]]
 
 func printhex(v uint64) {
 	const dig = "0123456789abcdef"
@@ -463,18 +464,20 @@ func printint(v int64) {
 }
 
 // CHECK-LABEL: define void @main.println(%"{{.*}}/runtime/internal/runtime.Slice" %0){{.*}} {
-// CHECK: [[PL_LEN:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 1
-// CHECK: [[PL_INDEX:%[0-9]+]] = add i64 %{{[0-9]+}}, 1
-// CHECK-NEXT: [[PL_MORE:%[0-9]+]] = icmp slt i64 [[PL_INDEX]], [[PL_LEN]]
-// CHECK: [[PL_DATA:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 0
-// CHECK: [[PL_BOUND:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 1
-// CHECK: call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %{{[0-9]+}}, i64 [[PL_INDEX]], i1 true, i64 [[PL_BOUND]])
-// CHECK-NEXT: [[PL_ITEM_PTR:%[0-9]+]] = getelementptr inbounds %"{{.*}}/runtime/internal/runtime.eface", ptr [[PL_DATA]], i64 [[PL_INDEX]]
-// CHECK-NEXT: [[PL_ITEM:%[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.eface", ptr [[PL_ITEM_PTR]]
-// CHECK: [[PL_NEEDS_SPACE:%[0-9]+]] = icmp ne i64 [[PL_INDEX]], 0
-// CHECK: call void @main.printnl()
-// CHECK: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_SPACE]], i64 1 })
-// CHECK: call void @main.printany(%"{{.*}}/runtime/internal/runtime.eface" [[PL_ITEM]])
+// CHECK-DAG: [[PL_LEN:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 1
+// CHECK-DAG: [[PL_INDEX:%[0-9]+]] = add i64 %{{[0-9]+}}, 1
+// CHECK-DAG: [[PL_MORE:%[0-9]+]] = icmp slt i64 [[PL_INDEX]], [[PL_LEN]]
+// CHECK-DAG: [[PL_DATA:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 0
+// CHECK-DAG: [[PL_BOUND:%[0-9]+]] = extractvalue %"{{.*}}/runtime/internal/runtime.Slice" %0, 1
+// CHECK-DAG: br i1 %{{[0-9]+}}, label %{{_llgo_[0-9]+}}, label %{{_llgo_[0-9]+}}
+// CHECK-DAG: call void @"{{.*}}/runtime/internal/runtime.PanicIndex"(i64 [[PL_INDEX]], i64 [[PL_BOUND]])
+// CHECK-DAG: br label %{{_llgo_[0-9]+}}
+// CHECK-DAG: [[PL_ITEM_PTR:%[0-9]+]] = getelementptr inbounds %"{{.*}}/runtime/internal/runtime.eface", ptr [[PL_DATA]], i64 [[PL_INDEX]]
+// CHECK-DAG: [[PL_ITEM:%[0-9]+]] = load %"{{.*}}/runtime/internal/runtime.eface", ptr [[PL_ITEM_PTR]]
+// CHECK-DAG: [[PL_NEEDS_SPACE:%[0-9]+]] = icmp ne i64 [[PL_INDEX]], 0
+// CHECK-DAG: call void @main.printnl()
+// CHECK-DAG: call void @main.printstring(%"{{.*}}/runtime/internal/runtime.String" { ptr [[STR_SPACE]], i64 1 })
+// CHECK-DAG: call void @main.printany(%"{{.*}}/runtime/internal/runtime.eface" [[PL_ITEM]])
 
 func println(args ...any) {
 	for i, v := range args {
@@ -509,19 +512,19 @@ func printstring(s string) {
 }
 
 // CHECK-LABEL: define void @main.printuint(i64 %0){{.*}} {
-// CHECK: [[PU_BUFFER:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 100)
-// CHECK: [[PU_DIGIT:%[0-9]+]] = urem i64 [[PU_VALUE:%[0-9]+]], 10
-// CHECK-NEXT: [[PU_ASCII:%[0-9]+]] = add i64 [[PU_DIGIT]], 48
-// CHECK-NEXT: [[PU_CHAR:%[0-9]+]] = trunc i64 [[PU_ASCII]] to i8
-// CHECK: [[PU_CHAR_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[PU_BUFFER]], i64 [[PU_INDEX:%[0-9]+]]
-// CHECK-NEXT: store i8 [[PU_CHAR]], ptr [[PU_CHAR_PTR]]
-// CHECK-NEXT: [[PU_LAST_DIGIT:%[0-9]+]] = icmp ult i64 [[PU_VALUE]], 10
-// CHECK: [[PU_SLICE:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.Slice" @"{{.*}}/runtime/internal/runtime.NewSlice2"(ptr [[PU_BUFFER]], i64 1, i64 100, i64 [[PU_INDEX]], i64 100, i1 true, i1 true, i1 true)
-// CHECK-NEXT: call void @main.gwrite(%"{{.*}}/runtime/internal/runtime.Slice" [[PU_SLICE]])
-// CHECK: [[PU_VALUE]] = phi i64 [ %0, %{{.*}} ], [ [[PU_QUOTIENT:%[0-9]+]], %{{.*}} ]
-// CHECK-NEXT: [[PU_INDEX]] = phi i64 [ 99, %{{.*}} ], [ [[PU_PREV_INDEX:%[0-9]+]], %{{.*}} ]
-// CHECK: [[PU_QUOTIENT]] = udiv i64 [[PU_VALUE]], 10
-// CHECK-NEXT: [[PU_PREV_INDEX]] = sub i64 [[PU_INDEX]], 1
+// CHECK-DAG: [[PU_BUFFER:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 100)
+// CHECK-DAG: [[PU_DIGIT:%[0-9]+]] = urem i64 [[PU_VALUE:%[0-9]+]], 10
+// CHECK-DAG: [[PU_ASCII:%[0-9]+]] = add i64 [[PU_DIGIT]], 48
+// CHECK-DAG: [[PU_CHAR:%[0-9]+]] = trunc i64 [[PU_ASCII]] to i8
+// CHECK-DAG: [[PU_CHAR_PTR:%[0-9]+]] = getelementptr inbounds i8, ptr [[PU_BUFFER]], i64 [[PU_INDEX:%[0-9]+]]
+// CHECK-DAG: store i8 [[PU_CHAR]], ptr [[PU_CHAR_PTR]]
+// CHECK-DAG: [[PU_LAST_DIGIT:%[0-9]+]] = icmp ult i64 [[PU_VALUE]], 10
+// CHECK-DAG: [[PU_SLICE:%[0-9]+]] = call %"{{.*}}/runtime/internal/runtime.Slice" @"{{.*}}/runtime/internal/runtime.NewSlice2"(ptr [[PU_BUFFER]], i64 1, i64 100, i64 [[PU_INDEX]], i64 100, i1 true, i1 true, i1 true)
+// CHECK-DAG: call void @main.gwrite(%"{{.*}}/runtime/internal/runtime.Slice" [[PU_SLICE]])
+// CHECK-DAG: [[PU_VALUE]] = phi i64 [ %0, %{{.*}} ], [ [[PU_QUOTIENT:%[0-9]+]], %{{.*}} ]
+// CHECK-DAG: [[PU_INDEX]] = phi i64 [ 99, %{{.*}} ], [ [[PU_PREV_INDEX:%[0-9]+]], %{{.*}} ]
+// CHECK-DAG: [[PU_QUOTIENT]] = udiv i64 [[PU_VALUE]], 10
+// CHECK-DAG: [[PU_PREV_INDEX]] = sub i64 [[PU_INDEX]], 1
 
 func printuint(v uint64) {
 	var buf [100]byte

@@ -15,8 +15,8 @@
  */
 
 // Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style license.
+// See LICENSES/Go-BSD-3-Clause.txt at this module root for license terms.
 
 package reflect
 
@@ -27,10 +27,10 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/goplus/llgo/runtime/abi"
-	clite "github.com/goplus/llgo/runtime/internal/clite"
-	"github.com/goplus/llgo/runtime/internal/runtime"
-	"github.com/goplus/llgo/runtime/internal/runtime/goarch"
+	"github.com/xgo-dev/llgo/runtime/abi"
+	clite "github.com/xgo-dev/llgo/runtime/internal/clite"
+	"github.com/xgo-dev/llgo/runtime/internal/runtime"
+	"github.com/xgo-dev/llgo/runtime/internal/runtime/goarch"
 )
 
 // A Kind represents the specific kind of type that a Type represents.
@@ -1087,7 +1087,7 @@ func (t *rtype) Comparable() bool {
 
 // implements reports whether the type V implements the interface type T.
 //
-//go:linkname implements github.com/goplus/llgo/runtime/internal/runtime.Implements
+//go:linkname implements github.com/xgo-dev/llgo/runtime/internal/runtime.Implements
 func implements(T, V *abi.Type) bool
 
 // specialChannelAssignability reports whether a value x of channel type V
@@ -2517,7 +2517,7 @@ func runtimeStructField(field StructField) (structField, string) {
 	return f, field.PkgPath
 }
 
-//go:linkname typelist github.com/goplus/llgo/runtime/internal/runtime.typelist
+//go:linkname typelist github.com/xgo-dev/llgo/runtime/internal/runtime.typelist
 var typelist []*abi.Type
 
 func typesByString(s string) (typs []*abi.Type) {

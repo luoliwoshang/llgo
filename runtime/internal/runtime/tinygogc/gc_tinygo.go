@@ -1,8 +1,13 @@
 //go:build baremetal
 
 /*
+ * Portions of this file are derived from TinyGo and remain subject to the
+ * BSD 3-Clause License in ../../../LICENSES/TinyGo-BSD-3-Clause.txt.
+ *
  * Copyright (c) 2018-2025 The TinyGo Authors. All rights reserved.
  * Copyright (c) 2024 The XGo Authors (xgo.dev). All rights reserved.
+ *
+ * LLGo modifications are licensed under the Apache License, Version 2.0.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +39,7 @@ package tinygogc
 import (
 	"unsafe"
 
-	c "github.com/goplus/llgo/runtime/internal/clite"
+	c "github.com/xgo-dev/llgo/runtime/internal/clite"
 )
 
 const gcDebug = false

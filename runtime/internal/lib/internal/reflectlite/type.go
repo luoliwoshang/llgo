@@ -1,6 +1,6 @@
 // Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style license.
+// See LICENSES/Go-BSD-3-Clause.txt at this module root for license terms.
 
 // Package reflectlite implements lightweight version of reflect, not using
 // any package except for "runtime", "unsafe", and "internal/abi"
@@ -9,7 +9,7 @@ package reflectlite
 import (
 	"unsafe"
 
-	"github.com/goplus/llgo/runtime/abi"
+	"github.com/xgo-dev/llgo/runtime/abi"
 )
 
 // Type is the representation of a Go type.
@@ -305,7 +305,7 @@ func (t rtype) Comparable() bool {
 
 // implements reports whether the type V implements the interface type T.
 //
-//go:linkname implements github.com/goplus/llgo/runtime/internal/runtime.Implements
+//go:linkname implements github.com/xgo-dev/llgo/runtime/internal/runtime.Implements
 func implements(T, V *abi.Type) bool
 
 // directlyAssignable reports whether a value x of type V can be directly

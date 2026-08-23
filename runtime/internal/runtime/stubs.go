@@ -1,15 +1,15 @@
 // Copyright 2014 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style license.
+// See LICENSES/Go-BSD-3-Clause.txt at this module root for license terms.
 
 package runtime
 
 import (
 	"unsafe"
 
-	"github.com/goplus/llgo/runtime/internal/clite/sync/atomic"
-	"github.com/goplus/llgo/runtime/internal/clite/time"
-	"github.com/goplus/llgo/runtime/internal/runtime/math"
+	"github.com/xgo-dev/llgo/runtime/internal/clite/sync/atomic"
+	"github.com/xgo-dev/llgo/runtime/internal/clite/time"
+	"github.com/xgo-dev/llgo/runtime/internal/runtime/math"
 )
 
 //go:linkname fastrand C.rand

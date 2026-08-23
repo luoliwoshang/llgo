@@ -650,6 +650,137 @@ func TestESPClangDownloadWhenNotExists(t *testing.T) {
 	}
 }
 
+func TestESPClangDownloadLicenseFailure(t *testing.T) {
+	archivePath := createTestTarGz(t, map[string]string{
+		"esp-clang/bin/clang": "fake esp clang binary",
+	})
+	defer os.Remove(archivePath)
+
+	archiveContent, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := createTestServer(t, map[string]string{
+		fmt.Sprintf("clang-esp-%s-linux.tar.xz", espClangVersion): string(archiveContent),
+	})
+	defer server.Close()
+
+	originalESPClangBaseURL := espClangBaseUrl
+	espClangBaseUrl = server.URL
+	defer func() { espClangBaseUrl = originalESPClangBaseURL }()
+
+	llgoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(llgoRoot, "runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(llgoRoot, "runtime", "go.mod"),
+		[]byte("module github.com/xgo-dev/llgo/runtime\n"), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LLGO_ROOT", llgoRoot)
+
+	destDir := filepath.Join(t.TempDir(), "esp-clang")
+	err = checkDownloadAndExtractESPClang("linux", destDir)
+	if err == nil || !strings.Contains(err.Error(), "read ESP Clang license") {
+		t.Fatalf("checkDownloadAndExtractESPClang() error = %v, want license read error", err)
+	}
+	if _, err := os.Stat(destDir); !os.IsNotExist(err) {
+		t.Fatalf("destination status after failed install = %v, want not exist", err)
+	}
+	if _, err := os.Stat(destDir + ".extract"); !os.IsNotExist(err) {
+		t.Fatalf("temporary extraction directory status = %v, want not exist", err)
+	}
+}
+
+func TestInstallESPClangLicense(t *testing.T) {
+	llgoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(llgoRoot, "runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(llgoRoot, "runtime", "go.mod"),
+		[]byte("module github.com/xgo-dev/llgo/runtime\n"), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(llgoRoot, "LICENSES"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const want = "complete LLVM license\n"
+	if err := os.WriteFile(
+		filepath.Join(llgoRoot, "LICENSES", espClangLicenseFile),
+		[]byte(want), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LLGO_ROOT", llgoRoot)
+
+	clangDir := t.TempDir()
+	if err := installESPClangLicense(clangDir); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(clangDir, "LICENSE-LLVM.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Fatalf("installed license = %q, want %q", got, want)
+	}
+}
+
+func TestInstallESPClangLicenseMissing(t *testing.T) {
+	llgoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(llgoRoot, "runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(llgoRoot, "runtime", "go.mod"),
+		[]byte("module github.com/xgo-dev/llgo/runtime\n"), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LLGO_ROOT", llgoRoot)
+
+	err := installESPClangLicense(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), espClangLicenseFile) {
+		t.Fatalf("installESPClangLicense() error = %v, want missing license error", err)
+	}
+}
+
+func TestInstallESPClangLicenseWriteFailure(t *testing.T) {
+	llgoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(llgoRoot, "runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(llgoRoot, "runtime", "go.mod"),
+		[]byte("module github.com/xgo-dev/llgo/runtime\n"), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(llgoRoot, "LICENSES"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(llgoRoot, "LICENSES", espClangLicenseFile),
+		[]byte("complete LLVM license\n"), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LLGO_ROOT", llgoRoot)
+
+	notDir := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(notDir, []byte("file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := installESPClangLicense(notDir)
+	if err == nil || !strings.Contains(err.Error(), "install ESP Clang license") {
+		t.Fatalf("installESPClangLicense() error = %v, want write error", err)
+	}
+}
+
 func TestExtractZip(t *testing.T) {
 	// Create temporary test directory
 	tempDir := t.TempDir()

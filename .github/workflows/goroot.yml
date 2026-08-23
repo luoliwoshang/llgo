@@ -27,10 +27,10 @@ jobs:
         # These are reproducibility pins, not floating series selectors.
         # Upgrade them together in a dedicated toolchain-update PR.
         os: [macos-latest, ubuntu-latest]
-        go-version: ["1.24.11", "1.26.5"]
+        go-version: ["1.25.0", "1.26.5"]
         shard-index: ["0", "1", "2", "3"]
         include:
-          - go-version: "1.24.11"
+          - go-version: "1.25.0"
             lane: compatibility
           - go-version: "1.26.5"
             lane: primary
@@ -204,10 +204,10 @@ jobs:
             echo
             echo '| Platform / toolchain | Shards | Selected | Observed | Passed | Failed | Skipped |'
             echo '|---|---:|---:|---:|---:|---:|---:|'
-            write_row 'Darwin · Go 1.24.11' darwin/arm64 1.24.11 4
+            write_row 'Darwin · Go 1.25.0' darwin/arm64 1.25.0 4
             write_row 'Darwin · Go 1.26.5' darwin/arm64 1.26.5 4
             write_row '**Darwin total**' darwin/arm64 '' 8
-            write_row 'Linux · Go 1.24.11' linux/amd64 1.24.11 4
+            write_row 'Linux · Go 1.25.0' linux/amd64 1.25.0 4
             write_row 'Linux · Go 1.26.5' linux/amd64 1.26.5 4
             write_row '**Linux total**' linux/amd64 '' 8
             echo

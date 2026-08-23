@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/goplus/llgo/internal/crosscompile/compile"
-	"github.com/goplus/llgo/internal/crosscompile/compile/libc"
-	"github.com/goplus/llgo/internal/crosscompile/compile/rtlib"
+	"github.com/xgo-dev/llgo/internal/crosscompile/compile"
+	"github.com/xgo-dev/llgo/internal/crosscompile/compile/libc"
+	"github.com/xgo-dev/llgo/internal/crosscompile/compile/rtlib"
 )
 
 // for testing, in testing env, we use fake path, it will cause downloading failure

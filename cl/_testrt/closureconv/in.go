@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 type Func func(a int, b int) int
@@ -92,7 +92,8 @@ func demo4() Func {
 // CHECK: [[DEMO5_RET:%.*]] = load %main.Func, ptr [[DEMO5_OUT]]
 // CHECK: ret %main.Func [[DEMO5_RET]]
 
-// CHECK-LABEL: define i64 @"main.demo5$1"(ptr {{(nest|swiftself)}} %0, i64 %1, i64 %2){{.*}} {
+// DARWIN-ARM64-LABEL: define i64 @"main.demo5$1"(ptr swiftself %0, i64 %1, i64 %2){{.*}} {
+// LINUX-AMD64-LABEL: define i64 @"main.demo5$1"(ptr nest %0, i64 %1, i64 %2){{.*}} {
 // CHECK: [[DEMO5_SUM:%.*]] = add i64 %1, %2
 // CHECK: [[DEMO5_ENV_VALUE:%.*]] = load { ptr }, ptr %0
 // CHECK: [[DEMO5_CAPTURE_ADDR:%.*]] = extractvalue { ptr } [[DEMO5_ENV_VALUE]], 0
@@ -109,7 +110,8 @@ func demo5(n int) Func {
 // CHECK: [[MAIN_F1_ENV:%.*]] = extractvalue %main.Func [[MAIN_F1]], 1
 // CHECK: [[MAIN_F1_CODE_RAW:%.*]] = extractvalue %main.Func [[MAIN_F1]], 0
 // CHECK: [[MAIN_F1_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[MAIN_F1_CODE_RAW]])
-// CHECK: [[MAIN_R1:%.*]] = call i64 [[MAIN_F1_CODE]](ptr {{(nest|swiftself)}} [[MAIN_F1_ENV]], i64 99, i64 200)
+// DARWIN-ARM64: [[MAIN_R1:%.*]] = call i64 [[MAIN_F1_CODE]](ptr swiftself [[MAIN_F1_ENV]], i64 99, i64 200)
+// LINUX-AMD64: [[MAIN_R1:%.*]] = call i64 [[MAIN_F1_CODE]](ptr nest [[MAIN_F1_ENV]], i64 99, i64 200)
 // CHECK: call void @"{{.*}}/runtime/internal/runtime.PrintInt"(i64 [[MAIN_R1]])
 // The individual demo2, demo3, and demo4 functions above check their distinct
 // construction forms; one captured closure is enough to cover invocation here.
@@ -117,7 +119,8 @@ func demo5(n int) Func {
 // CHECK: [[MAIN_F5_ENV:%.*]] = extractvalue %main.Func [[MAIN_F5]], 1
 // CHECK: [[MAIN_F5_CODE_RAW:%.*]] = extractvalue %main.Func [[MAIN_F5]], 0
 // CHECK: [[MAIN_F5_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[MAIN_F5_CODE_RAW]])
-// CHECK: [[MAIN_R5:%.*]] = call i64 [[MAIN_F5_CODE]](ptr {{(nest|swiftself)}} [[MAIN_F5_ENV]], i64 99, i64 200)
+// DARWIN-ARM64: [[MAIN_R5:%.*]] = call i64 [[MAIN_F5_CODE]](ptr swiftself [[MAIN_F5_ENV]], i64 99, i64 200)
+// LINUX-AMD64: [[MAIN_R5:%.*]] = call i64 [[MAIN_F5_CODE]](ptr nest [[MAIN_F5_ENV]], i64 99, i64 200)
 // CHECK: call void @"{{.*}}/runtime/internal/runtime.PrintInt"(i64 [[MAIN_R5]])
 // Conversion to the unnamed function type preserves the two function words.
 // CHECK: [[PLAIN_SOURCE:%.*]] = call %main.Func @main.demo5(i64 1)
@@ -126,7 +129,8 @@ func demo5(n int) Func {
 // CHECK: [[PLAIN_ENV:%.*]] = extractvalue { ptr, ptr } [[PLAIN_FN]], 1
 // CHECK: [[PLAIN_CODE_RAW:%.*]] = extractvalue { ptr, ptr } [[PLAIN_FN]], 0
 // CHECK: [[PLAIN_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[PLAIN_CODE_RAW]])
-// CHECK: call i64 [[PLAIN_CODE]](ptr {{(nest|swiftself)}} [[PLAIN_ENV]], i64 99, i64 200)
+// DARWIN-ARM64: call i64 [[PLAIN_CODE]](ptr swiftself [[PLAIN_ENV]], i64 99, i64 200)
+// LINUX-AMD64: call i64 [[PLAIN_CODE]](ptr nest [[PLAIN_ENV]], i64 99, i64 200)
 // Conversion from Func to Func2 preserves code and environment independently.
 // CHECK: [[FUNC2_SOURCE:%.*]] = call %main.Func @main.demo5(i64 1)
 // CHECK: [[FUNC2_CODE:%.*]] = extractvalue %main.Func [[FUNC2_SOURCE]], 0
@@ -136,7 +140,8 @@ func demo5(n int) Func {
 // CHECK: [[FUNC2_CALL_ENV:%.*]] = extractvalue %main.Func2 [[FUNC2]], 1
 // CHECK: [[FUNC2_CALL_CODE_RAW:%.*]] = extractvalue %main.Func2 [[FUNC2]], 0
 // CHECK: [[FUNC2_CALL_CODE:%.*]] = call ptr asm "", "=r,0"(ptr [[FUNC2_CALL_CODE_RAW]])
-// CHECK: call i64 [[FUNC2_CALL_CODE]](ptr {{(nest|swiftself)}} [[FUNC2_CALL_ENV]], i64 99, i64 200)
+// DARWIN-ARM64: call i64 [[FUNC2_CALL_CODE]](ptr swiftself [[FUNC2_CALL_ENV]], i64 99, i64 200)
+// LINUX-AMD64: call i64 [[FUNC2_CALL_CODE]](ptr nest [[FUNC2_CALL_ENV]], i64 99, i64 200)
 
 func main() {
 	n1 := demo1(1)(99, 200)
@@ -161,7 +166,8 @@ func main() {
 	println(fn2(99, 200))
 }
 
-// CHECK-LABEL: define i64 @"main.(*Call).add$bound"(ptr {{(nest|swiftself)}} %0, i64 %1, i64 %2){{.*}} {
+// DARWIN-ARM64-LABEL: define i64 @"main.(*Call).add$bound"(ptr swiftself %0, i64 %1, i64 %2){{.*}} {
+// LINUX-AMD64-LABEL: define i64 @"main.(*Call).add$bound"(ptr nest %0, i64 %1, i64 %2){{.*}} {
 // CHECK: [[BOUND_ENV:%.*]] = load { ptr }, ptr %0
 // CHECK: [[BOUND_CALL:%.*]] = extractvalue { ptr } [[BOUND_ENV]], 0
 // CHECK: [[BOUND_RESULT:%.*]] = call i64 @"main.(*Call).add"(ptr [[BOUND_CALL]], i64 %1, i64 %2)

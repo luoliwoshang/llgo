@@ -10,14 +10,14 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/goplus/llgo/internal/crosscompile/compile"
-	"github.com/goplus/llgo/internal/env"
-	"github.com/goplus/llgo/internal/flash"
-	"github.com/goplus/llgo/internal/lto"
-	"github.com/goplus/llgo/internal/optlevel"
-	"github.com/goplus/llgo/internal/targets"
-	"github.com/goplus/llgo/internal/xtool/llvm"
-	envllvm "github.com/goplus/llgo/xtool/env/llvm"
+	"github.com/xgo-dev/llgo/internal/crosscompile/compile"
+	"github.com/xgo-dev/llgo/internal/env"
+	"github.com/xgo-dev/llgo/internal/flash"
+	"github.com/xgo-dev/llgo/internal/lto"
+	"github.com/xgo-dev/llgo/internal/optlevel"
+	"github.com/xgo-dev/llgo/internal/targets"
+	"github.com/xgo-dev/llgo/internal/xtool/llvm"
+	envllvm "github.com/xgo-dev/llgo/xtool/env/llvm"
 )
 
 type Export struct {

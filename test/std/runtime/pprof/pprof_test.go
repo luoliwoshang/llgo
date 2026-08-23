@@ -2,10 +2,43 @@ package pprof_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
+	"io"
 	"runtime/pprof"
 	"testing"
+	"time"
 )
+
+//go:noinline
+func cpuProfileHotLoop(d time.Duration) uint64 {
+	deadline := time.Now().Add(d)
+	x := uint64(1)
+	for time.Now().Before(deadline) {
+		for i := 0; i < 10000; i++ {
+			x = x*1664525 + 1013904223
+		}
+	}
+	return x
+}
+
+func requireCPUProfileContains(t *testing.T, data []byte, function string) {
+	t.Helper()
+	zr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("CPU profile is not valid gzip: %v", err)
+	}
+	raw, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatalf("read CPU profile: %v", err)
+	}
+	if err := zr.Close(); err != nil {
+		t.Fatalf("close CPU profile reader: %v", err)
+	}
+	if !bytes.Contains(raw, []byte(function)) {
+		t.Fatalf("CPU profile does not contain sampled function %q (compressed=%d bytes)", function, len(data))
+	}
+}
 
 func TestStartStopCPUProfile(t *testing.T) {
 	var buf bytes.Buffer
@@ -15,15 +48,10 @@ func TestStartStopCPUProfile(t *testing.T) {
 	}
 	defer pprof.StopCPUProfile()
 
-	for i := 0; i < 1000; i++ {
-		_ = i * i
-	}
+	_ = cpuProfileHotLoop(500 * time.Millisecond)
 
 	pprof.StopCPUProfile()
-
-	if buf.Len() == 0 {
-		t.Error("CPU profile is empty")
-	}
+	requireCPUProfileContains(t, buf.Bytes(), "cpuProfileHotLoop")
 }
 
 func TestStartCPUProfileTwice(t *testing.T) {
@@ -40,6 +68,30 @@ func TestStartCPUProfileTwice(t *testing.T) {
 	}
 
 	pprof.StopCPUProfile()
+
+	var restarted bytes.Buffer
+	if err := pprof.StartCPUProfile(&restarted); err != nil {
+		t.Fatalf("StartCPUProfile after stop failed: %v", err)
+	}
+	_ = cpuProfileHotLoop(300 * time.Millisecond)
+	pprof.StopCPUProfile()
+	requireCPUProfileContains(t, restarted.Bytes(), "cpuProfileHotLoop")
+}
+
+func TestCPUProfileGoroutine(t *testing.T) {
+	var buf bytes.Buffer
+	if err := pprof.StartCPUProfile(&buf); err != nil {
+		t.Fatalf("StartCPUProfile failed: %v", err)
+	}
+	defer pprof.StopCPUProfile()
+
+	done := make(chan uint64, 1)
+	go func() {
+		done <- cpuProfileHotLoop(500 * time.Millisecond)
+	}()
+	<-done
+	pprof.StopCPUProfile()
+	requireCPUProfileContains(t, buf.Bytes(), "cpuProfileHotLoop")
 }
 
 func TestWriteHeapProfile(t *testing.T) {

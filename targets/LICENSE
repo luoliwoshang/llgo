@@ -6,7 +6,9 @@ The target configuration files in this directory are derived from the TinyGo pro
 TinyGo project's license terms.
 
 Original source: https://github.com/tinygo-org/tinygo/tree/release/targets
+Initial import reference: https://github.com/tinygo-org/tinygo/tree/8c5886060f022a36768b5c29327759846021a868/targets
 License: BSD 3-Clause License (same as TinyGo project)
+Repository-wide copy: ../LICENSES/TinyGo-BSD-3-Clause.txt
 
 --------------------------------------------------------------------------------
 

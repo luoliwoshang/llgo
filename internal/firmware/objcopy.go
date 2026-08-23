@@ -1,4 +1,6 @@
-// From tinygo/builder/objcopy.go
+// Portions of this file are derived from tinygo/builder/objcopy.go.
+// Copyright (c) 2018-2025 The TinyGo Authors. All rights reserved.
+// See ../../LICENSES/TinyGo-BSD-3-Clause.txt for license terms.
 
 package firmware
 
@@ -9,7 +11,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/goplus/llgo/internal/gohex"
+	"github.com/xgo-dev/llgo/internal/gohex"
 )
 
 // maxPadBytes is the maximum allowed bytes to be padded in a rom extraction

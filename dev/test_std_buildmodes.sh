@@ -16,7 +16,7 @@ max_group=0
 for test_pkg in "${test_pkgs[@]}"; do
 	read -r import_path package_dir < <(go list -tags=llgo -f '{{.ImportPath}} {{.Dir}}' "${test_pkg}")
 	case "${import_path}" in
-		github.com/goplus/llgo/test/std/*) ;;
+		github.com/xgo-dev/llgo/test/std/*) ;;
 		*)
 			echo "not a test/std package: ${test_pkg}" >&2
 			exit 2
@@ -41,7 +41,7 @@ done
 # weak.Pointer can otherwise assign shared instantiations to libunique.test and
 # leave another output with unresolved weak.Pointer methods.
 for i in "${!import_paths[@]}"; do
-	if [[ "${import_paths[$i]}" == "github.com/goplus/llgo/test/std/unique" ]]; then
+	if [[ "${import_paths[$i]}" == "github.com/xgo-dev/llgo/test/std/unique" ]]; then
 		max_group=$((max_group + 1))
 		groups[$i]="${max_group}"
 	fi
@@ -96,11 +96,17 @@ for mode in c-shared c-archive; do
 			fi
 			import_path="${import_paths[$i]}"
 			stem="${stems[$i]}"
-			test_main_pkg="${import_path}.test"
 			runner_base="${work_dir}/runner-${i}"
 			echo "==> ${test_pkgs[$i]}: run ${mode}"
+			# Test-main packages keep the Go package identity "main". The
+			# output library is still named after its import path (for example,
+			# libtar.test), but its entry points are main.init and main.main.
+			runner_cflags=("-DGO_TEST_MAIN_PACKAGE=\"main\"")
+			if [[ "${mode}" == c-shared ]]; then
+				runner_cflags+=("-DGO_C_SHARED=1")
+			fi
 			clang -x c -c "${runner_source}" \
-				"-DGO_TEST_PACKAGE=\"${test_main_pkg}\"" \
+				"${runner_cflags[@]}" \
 				-o "${runner_base}.o"
 
 			if [[ "${mode}" == c-shared ]]; then
@@ -113,7 +119,7 @@ for mode in c-shared c-archive; do
 					-L"${work_dir}" "-l${stem}" "${runtime_libs[@]}"
 				LD_LIBRARY_PATH="${work_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
 					DYLD_LIBRARY_PATH="${work_dir}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}" \
-					"${runner_base}"
+					"${runner_base}" llgo-cshared-arg-one "llgo c-shared arg two"
 			else
 				library="${work_dir}/lib${stem}.a"
 				clang++ "${runner_base}.o" -o "${runner_base}" \

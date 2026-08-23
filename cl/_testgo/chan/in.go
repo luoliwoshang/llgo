@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // CHECK-LABEL: define void @main.main(){{.*}} {
@@ -48,7 +48,8 @@ package main
 // CHECK-NEXT: call void @"{{.*}}PrintInt"(i64 [[CH2_PRINT_VALUE]])
 // CHECK: call void @"{{.*}}PrintBool"(i1 [[CH2_PRINT_OK]])
 
-// CHECK-LABEL: define void @"main.main$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.main$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.main$1"(ptr nest %0){{.*}} {
 // CHECK: [[SEND_CAPTURE:%.*]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[SEND_SLOT:%.*]] = extractvalue { ptr } [[SEND_CAPTURE]], 0
 // CHECK-NEXT: [[SEND_CH:%.*]] = load ptr, ptr [[SEND_SLOT]]
@@ -56,7 +57,8 @@ package main
 // CHECK: store i64 100, ptr [[SEND_BUF]]
 // CHECK-NEXT: call i1 @"{{.*}}ChanSend"(ptr [[SEND_CH]], ptr [[SEND_BUF]], i64 8)
 
-// CHECK-LABEL: define void @"main.main$2"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.main$2"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.main$2"(ptr nest %0){{.*}} {
 // CHECK: [[CLOSE_CAPTURE:%.*]] = load { ptr }, ptr %0
 // CHECK-NEXT: [[CLOSE_SLOT:%.*]] = extractvalue { ptr } [[CLOSE_CAPTURE]], 0
 // CHECK-NEXT: [[CLOSE_CH:%.*]] = load ptr, ptr [[CLOSE_SLOT]]

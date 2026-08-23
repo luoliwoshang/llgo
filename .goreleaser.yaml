@@ -21,8 +21,8 @@ builds:
     flags:
       - -tags=darwin,amd64,byollvm
     ldflags:
-      - -X github.com/goplus/llgo/internal/env.buildVersion=v{{.Version}}
-      - -X github.com/goplus/llgo/internal/env.buildTime={{.Date}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildVersion=v{{.Version}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildTime={{.Date}}
     env:
       - CC=o64-clang
       - CXX=o64-clang++
@@ -37,8 +37,8 @@ builds:
     flags:
       - -tags=darwin,arm64,byollvm
     ldflags:
-      - -X github.com/goplus/llgo/internal/env.buildVersion=v{{.Version}}
-      - -X github.com/goplus/llgo/internal/env.buildTime={{.Date}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildVersion=v{{.Version}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildTime={{.Date}}
     env:
       - CC=oa64-clang
       - CXX=oa64-clang++
@@ -53,8 +53,8 @@ builds:
     flags:
       - -tags=linux,amd64,byollvm
     ldflags:
-      - -X github.com/goplus/llgo/internal/env.buildVersion=v{{.Version}}
-      - -X github.com/goplus/llgo/internal/env.buildTime={{.Date}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildVersion=v{{.Version}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildTime={{.Date}}
       - "-extldflags=-Wl,-rpath,$ORIGIN/../crosscompile/clang/lib"
     env:
       # Use the packaged host Clang driver with the target's complete bullseye sysroot.
@@ -73,8 +73,8 @@ builds:
     flags:
       - -tags=linux,arm64,byollvm
     ldflags:
-      - -X github.com/goplus/llgo/internal/env.buildVersion=v{{.Version}}
-      - -X github.com/goplus/llgo/internal/env.buildTime={{.Date}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildVersion=v{{.Version}}
+      - -X github.com/xgo-dev/llgo/internal/env.buildTime={{.Date}}
       - "-extldflags=-Wl,-rpath,$ORIGIN/../crosscompile/clang/lib"
     env:
       # The amd64 Clang driver is multi-target; libraries and headers stay arm64.
@@ -95,7 +95,9 @@ archives:
       {{- if .Arm}}v{{.Arm}}{{end}}
     files:
       - LICENSE
+      - LICENSES
       - README.md
+      - THIRD_PARTY_NOTICES.md
       - runtime
       - targets
       - src: ".sysroot/{{.Os}}/{{.Arch}}/crosscompile/clang"
@@ -108,7 +110,7 @@ checksum:
 nfpms:
   - package_name: llgo
     vendor: goplus
-    homepage: https://github.com/goplus/llgo
+    homepage: https://github.com/xgo-dev/llgo
     maintainer: Aofei Sheng <aofei@aofeisheng.com>
     description: |
       LLGo is a Go compiler based on LLVM in order to better integrate Go with the C ecosystem including Python. It's a
@@ -129,6 +131,14 @@ nfpms:
       {{.ProjectName}}{{.Version}}.{{.Os}}-{{.Arch}}
       {{- if .Arm}}v{{.Arm}}{{end}}
     bindir: /usr/local/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/llgo/LICENSE
+      - src: THIRD_PARTY_NOTICES.md
+        dst: /usr/share/doc/llgo/THIRD_PARTY_NOTICES.md
+      - src: LICENSES/
+        dst: /usr/share/doc/llgo/LICENSES
+        type: tree
 
 snapcrafts:
   - name: llgo
@@ -147,6 +157,13 @@ snapcrafts:
       - ...
     license: Apache-2.0
     confinement: classic
+    extra_files:
+      - source: LICENSE
+        destination: usr/share/doc/llgo/LICENSE
+      - source: THIRD_PARTY_NOTICES.md
+        destination: usr/share/doc/llgo/THIRD_PARTY_NOTICES.md
+      - source: LICENSES
+        destination: usr/share/doc/llgo/LICENSES
     name_template: >-
       {{.ProjectName}}{{.Version}}.{{.Os}}-{{.Arch}}
       {{- if .Arm}}v{{.Arm}}{{end}}

@@ -33,7 +33,13 @@ func main() {
 // CHECK-NEXT:   %[[TMP2:[0-9]+]] = icmp slt i64 %[[TMP1]], 0
 // CHECK-NEXT:   %[[TMP3:[0-9]+]] = icmp uge i64 %[[TMP1]], 8
 // CHECK-NEXT:   %[[TMP4:[0-9]+]] = or i1 %[[TMP3]], %[[TMP2]]
-// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %[[TMP4]], i64 %[[TMP1]], i1 true, i64 8)
+// CHECK-NEXT:   br i1 %[[TMP4]], label %_llgo_[[BB1:[0-9]+]], label %_llgo_[[BB2:[0-9]+]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB1]]:
+// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.PanicIndex"(i64 %[[TMP1]], i64 8)
+// CHECK-NEXT:   br label %_llgo_[[BB1]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB2]]:
 // CHECK-NEXT:   %[[TMP5:[0-9]+]] = getelementptr inbounds i8, ptr @main.array, i64 %[[TMP1]]
 // CHECK-NEXT:   %[[TMP6:[0-9]+]] = load i8, ptr %[[TMP5]], align 1
 // CHECK-NEXT:   ret i8 %[[TMP6]]

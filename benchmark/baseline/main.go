@@ -51,12 +51,16 @@ type workload struct {
 	name   string
 	source string
 	output string
+	flags  []string
 }
 
 var workloads = []workload{
 	{name: "cprintf", source: "benchmark/binary_size/cprintf/main.go", output: "Hello, world\n"},
+	{name: "cprintf-lto", source: "benchmark/binary_size/cprintf/main.go", output: "Hello, world\n", flags: []string{"-lto=full"}},
 	{name: "println", source: "benchmark/binary_size/println/main.go", output: "Hello, world\n"},
+	{name: "println-lto", source: "benchmark/binary_size/println/main.go", output: "Hello, world\n", flags: []string{"-lto=full"}},
 	{name: "fmtprintf", source: "benchmark/binary_size/fmtprintf/main.go", output: "Hello, world\n"},
+	{name: "fmtprintf-lto", source: "benchmark/binary_size/fmtprintf/main.go", output: "Hello, world\n", flags: []string{"-lto=full"}},
 }
 
 var expectedGoBenchmarks = []string{
@@ -148,7 +152,7 @@ func exportBenchmarks(dir, output string) error {
 
 	var data strings.Builder
 	fmt.Fprintf(&data, "goos: %s\ngoarch: %s\n", runtime.GOOS, runtime.GOARCH)
-	data.WriteString("pkg: github.com/goplus/llgo/benchmark/baseline\n")
+	data.WriteString("pkg: github.com/xgo-dev/llgo/benchmark/baseline\n")
 	for _, unit := range []string{
 		"file-bytes",
 		"text-bytes",
@@ -223,15 +227,17 @@ func collect(ctx context.Context, root, llgo, out string, buildRuns, runRuns int
 	var sizes, timings []metric
 	for _, item := range workloads {
 		binary := filepath.Join(binDir, item.name)
+		buildArgs := append([]string{"build"}, item.flags...)
+		buildArgs = append(buildArgs, "-o", binary, filepath.Join(root, item.source))
 		// Keep first-use toolchain and filesystem caches out of the measured
 		// median so the first revision is not systematically disadvantaged.
-		if err := run(ctx, env, io.Discard, llgo, "build", "-o", binary, filepath.Join(root, item.source)); err != nil {
+		if err := run(ctx, env, io.Discard, llgo, buildArgs...); err != nil {
 			return fmt.Errorf("warm build %s: %w", item.name, err)
 		}
 		buildDurations := make([]time.Duration, 0, buildRuns)
 		for range buildRuns {
 			start := time.Now()
-			if err := run(ctx, env, io.Discard, llgo, "build", "-o", binary, filepath.Join(root, item.source)); err != nil {
+			if err := run(ctx, env, io.Discard, llgo, buildArgs...); err != nil {
 				return fmt.Errorf("build %s: %w", item.name, err)
 			}
 			buildDurations = append(buildDurations, time.Since(start))

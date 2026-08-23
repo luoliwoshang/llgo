@@ -27,13 +27,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goplus/llgo/cl/cltest"
-	"github.com/goplus/llgo/internal/build"
-	"github.com/goplus/llgo/internal/buildenv"
-	"github.com/goplus/llgo/internal/cabi"
-	"github.com/goplus/llgo/internal/llgen"
-	"github.com/goplus/llgo/internal/lto"
-	llvmenv "github.com/goplus/llgo/xtool/env/llvm"
+	"github.com/xgo-dev/llgo/cl/cltest"
+	"github.com/xgo-dev/llgo/internal/build"
+	"github.com/xgo-dev/llgo/internal/buildenv"
+	"github.com/xgo-dev/llgo/internal/cabi"
+	"github.com/xgo-dev/llgo/internal/llgen"
+	"github.com/xgo-dev/llgo/internal/lto"
+	llvmenv "github.com/xgo-dev/llgo/xtool/env/llvm"
 )
 
 func testCompile(t *testing.T, src, expected string) {
@@ -78,6 +78,7 @@ var embedTargetConfigs = []embedTargetConfig{
 				"./_testgo/cgomacro",    // fast fail: build constraints exclude all Go files (cgo)
 				"./_testgo/cgopython",   // fast fail: build constraints exclude all Go files (cgo)
 				"./_testgo/chan",        // timeout: emulator did not auto-exit
+				"./_testgo/complitnil",  // baremetal terminates on the nil-pointer panic before deferred recovery
 				"./_testgo/cursor",      // panic: internal/bytealg: selected .s files require plan9asm translation
 				"./_testgo/defer4",      // unexpected output: got "fatal error", expected "recover: panic message"
 				"./_testgo/goexit",      // llgo panic: unsatisfied import internal/runtime/sys
@@ -132,6 +133,7 @@ var embedTargetConfigs = []embedTargetConfig{
 				"./_testgo/alias",       // unexpected output
 				"./_testgo/cgodefer",    // panic: cannot build SSA for packages
 				"./_testgo/cgopython",   // panic: cannot build SSA for packages
+				"./_testgo/complitnil",  // baremetal terminates on the nil-pointer panic before deferred recovery
 				"./_testgo/cursor",      // panic: internal/bytealg: selected .s files require plan9asm translation
 				"./_testgo/defer4",      // runtime output: fatal error
 				"./_testgo/indexerr",    // runtime output: fatal error

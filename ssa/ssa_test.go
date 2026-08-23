@@ -34,7 +34,7 @@ import (
 	"unsafe"
 
 	"github.com/goplus/gogen/packages"
-	rtabi "github.com/goplus/llgo/runtime/abi"
+	rtabi "github.com/xgo-dev/llgo/runtime/abi"
 	"github.com/xgo-dev/llvm"
 )
 
@@ -1560,7 +1560,7 @@ func TestMakeClosureWithCtx(t *testing.T) {
 	for _, want := range []string{
 		"define i64 @inner(ptr ",
 		"i64 %1)",
-		`call ptr @"github.com/goplus/llgo/runtime/internal/runtime.AllocU"(i64 8)`,
+		`call ptr @"github.com/xgo-dev/llgo/runtime/internal/runtime.AllocU"(i64 8)`,
 		"insertvalue { ptr, ptr } { ptr @inner, ptr undef }",
 	} {
 		if !strings.Contains(ir, want) {
@@ -1636,7 +1636,7 @@ func TestIfaceMethodClosureCallIR(t *testing.T) {
 	defer pm.Close()
 	const wantMeta = `[OrdinaryEdges]
 caller:
-    github.com/goplus/llgo/runtime/internal/runtime.IfacePtrData
+    github.com/xgo-dev/llgo/runtime/internal/runtime.IfacePtrData
 
 [UseIfaceMethod]
 caller:
@@ -1654,13 +1654,13 @@ _llgo_iface$Yoe3OCWqNu8XXGUO_vekWtum96Bix1ffdbPGjVhQ1pI:
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 
-%"github.com/goplus/llgo/runtime/internal/runtime.iface" = type { ptr, ptr }
+%"github.com/xgo-dev/llgo/runtime/internal/runtime.iface" = type { ptr, ptr }
 
 ; Function Attrs: null_pointer_is_valid
-define i64 @caller(%"github.com/goplus/llgo/runtime/internal/runtime.iface" %0) #0 {
+define i64 @caller(%"github.com/xgo-dev/llgo/runtime/internal/runtime.iface" %0) #0 {
 _llgo_0:
-  %1 = call ptr @"github.com/goplus/llgo/runtime/internal/runtime.IfacePtrData"(%"github.com/goplus/llgo/runtime/internal/runtime.iface" %0)
-  %2 = extractvalue %"github.com/goplus/llgo/runtime/internal/runtime.iface" %0, 0
+  %1 = call ptr @"github.com/xgo-dev/llgo/runtime/internal/runtime.IfacePtrData"(%"github.com/xgo-dev/llgo/runtime/internal/runtime.iface" %0)
+  %2 = extractvalue %"github.com/xgo-dev/llgo/runtime/internal/runtime.iface" %0, 0
   %3 = getelementptr ptr, ptr %2, i64 3
   %4 = load ptr, ptr %3, align 8
   %5 = insertvalue { ptr, ptr } undef, ptr %4, 0
@@ -1672,7 +1672,7 @@ _llgo_0:
 }
 
 ; Function Attrs: null_pointer_is_valid
-declare ptr @"github.com/goplus/llgo/runtime/internal/runtime.IfacePtrData"(%"github.com/goplus/llgo/runtime/internal/runtime.iface") #0
+declare ptr @"github.com/xgo-dev/llgo/runtime/internal/runtime.IfacePtrData"(%"github.com/xgo-dev/llgo/runtime/internal/runtime.iface") #0
 
 attributes #0 = { null_pointer_is_valid "frame-pointer"="non-leaf" }
 `)
@@ -2504,10 +2504,10 @@ func TestGlobalStrings(t *testing.T) {
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 
-%"github.com/goplus/llgo/runtime/internal/runtime.String" = type { ptr, i64 }
+%"github.com/xgo-dev/llgo/runtime/internal/runtime.String" = type { ptr, i64 }
 
-@"foo/bar.a" = global %"github.com/goplus/llgo/runtime/internal/runtime.String" zeroinitializer, align 8
-@"foo/bar.b" = global %"github.com/goplus/llgo/runtime/internal/runtime.String" zeroinitializer, align 8
+@"foo/bar.a" = global %"github.com/xgo-dev/llgo/runtime/internal/runtime.String" zeroinitializer, align 8
+@"foo/bar.b" = global %"github.com/xgo-dev/llgo/runtime/internal/runtime.String" zeroinitializer, align 8
 @"foo/bar.c" = global i64 100, align 8
 `)
 	err := pkg.Undefined("foo/bar.a", "foo/bar.b")
@@ -2522,11 +2522,11 @@ source_filename = "foo/bar"
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
 source_filename = "foo/bar"
 
-%"github.com/goplus/llgo/runtime/internal/runtime.String" = type { ptr, i64 }
+%"github.com/xgo-dev/llgo/runtime/internal/runtime.String" = type { ptr, i64 }
 
 @"foo/bar.c" = global i64 100, align 8
-@"foo/bar.a" = external global %"github.com/goplus/llgo/runtime/internal/runtime.String"
-@"foo/bar.b" = external global %"github.com/goplus/llgo/runtime/internal/runtime.String"
+@"foo/bar.a" = external global %"github.com/xgo-dev/llgo/runtime/internal/runtime.String"
+@"foo/bar.b" = external global %"github.com/xgo-dev/llgo/runtime/internal/runtime.String"
 `)
 	global := prog.NewPackage("", "global")
 	global.AddGlobalString("foo/bar.a", "1.0")
@@ -2534,12 +2534,12 @@ source_filename = "foo/bar"
 	assertPkg(t, global, `; ModuleID = 'global'
 source_filename = "global"
 
-%"github.com/goplus/llgo/runtime/internal/runtime.String" = type { ptr, i64 }
+%"github.com/xgo-dev/llgo/runtime/internal/runtime.String" = type { ptr, i64 }
 
 @0 = private unnamed_addr constant [3 x i8] c"1.0", align 1
-@"foo/bar.a" = global %"github.com/goplus/llgo/runtime/internal/runtime.String" { ptr @0, i64 3 }, align 8
+@"foo/bar.a" = global %"github.com/xgo-dev/llgo/runtime/internal/runtime.String" { ptr @0, i64 3 }, align 8
 @1 = private unnamed_addr constant [4 x i8] c"info", align 1
-@"foo/bar.b" = global %"github.com/goplus/llgo/runtime/internal/runtime.String" { ptr @1, i64 4 }, align 8
+@"foo/bar.b" = global %"github.com/xgo-dev/llgo/runtime/internal/runtime.String" { ptr @1, i64 4 }, align 8
 `)
 }
 
@@ -2559,8 +2559,10 @@ func TestZeroSizedGlobalEmitsAliasSymbol(t *testing.T) {
 		return pkg
 	})
 	pkg := prog.NewPackage("bar", "foo/bar")
-	typ := types.NewPointer(types.NewArray(types.Typ[types.Int], 0))
+	elem := types.NewArray(types.Typ[types.Int], 0)
+	typ := types.NewPointer(elem)
 	a := pkg.NewVar("foo/bar.a", typ, InGo)
+	a.Init(prog.Zero(prog.Type(elem, InGo)))
 	a.InitNil()
 	pkg.NewVar("other/pkg.a", typ, InGo)
 	assertPkg(t, pkg, `; ModuleID = 'foo/bar'
@@ -2738,7 +2740,7 @@ func TestAbiTables(t *testing.T) {
 	s := fn.impl.String()
 	if !strings.Contains(s, `define void @"foo/bar.init$abitables"()`) ||
 		!strings.Contains(s, `@"foo/bar.init$abitables$slice"`) ||
-		!strings.Contains(s, `@"github.com/goplus/llgo/runtime/internal/runtime.typelist"`) {
+		!strings.Contains(s, `@"github.com/xgo-dev/llgo/runtime/internal/runtime.typelist"`) {
 		t.Fatal("error abi tables", s)
 	}
 }

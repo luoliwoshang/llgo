@@ -4,7 +4,7 @@ package main
 
 import (
 	"github.com/goplus/lib/c"
-	"github.com/goplus/llgo/runtime/abi"
+	"github.com/xgo-dev/llgo/runtime/abi"
 )
 
 // CHECK: {{^}}@[[GLOB0:[0-9]+]] = private unnamed_addr constant [20 x i8] c"Kind: %d, Size: %d\0A\00", align 1{{$}}
@@ -39,7 +39,13 @@ func main() {
 // CHECK-SAME: i64 %[[TMP0:[0-9]+]]){{.*}} {
 // CHECK-NEXT: _llgo_[[BB0:[0-9]+]]:
 // CHECK-NEXT:   %[[TMP1:[0-9]+]] = icmp uge i64 %[[TMP0]], 25
-// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %[[TMP1]], i64 %[[TMP0]], i1 false, i64 25)
+// CHECK-NEXT:   br i1 %[[TMP1]], label %_llgo_[[BB1:[0-9]+]], label %_llgo_[[BB2:[0-9]+]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB1]]:
+// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.PanicIndexU"(i64 %[[TMP0]], i64 25)
+// CHECK-NEXT:   br label %_llgo_[[BB1]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB2]]:
 // CHECK-NEXT:   %[[TMP2:[0-9]+]] = getelementptr inbounds ptr, ptr @main.basicTypes, i64 %[[TMP0]]
 // CHECK-NEXT:   %[[TMP3:[0-9]+]] = load ptr, ptr %[[TMP2]], align 8
 // CHECK-NEXT:   ret ptr %[[TMP3]]
@@ -51,7 +57,13 @@ func main() {
 // CHECK-NEXT:   %[[TMP1:[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.AllocZ"(i64 72)
 // CHECK-NEXT:   %[[TMP2:[0-9]+]] = getelementptr inbounds %"{{.*}}/runtime/abi.Type", ptr %[[TMP1]], i32 0, i32 0
 // CHECK-NEXT:   %[[TMP3:[0-9]+]] = icmp uge i64 %[[TMP0]], 25
-// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.CheckIndexRange"(i1 %[[TMP3]], i64 %[[TMP0]], i1 false, i64 25)
+// CHECK-NEXT:   br i1 %[[TMP3]], label %_llgo_[[BB1:[0-9]+]], label %_llgo_[[BB2:[0-9]+]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB1]]:
+// CHECK-NEXT:   call void @"{{.*}}/runtime/internal/runtime.PanicIndexU"(i64 %[[TMP0]], i64 25)
+// CHECK-NEXT:   br label %_llgo_[[BB1]]
+// CHECK-EMPTY:
+// CHECK-NEXT: _llgo_[[BB2]]:
 // CHECK-NEXT:   %[[TMP4:[0-9]+]] = getelementptr inbounds i64, ptr @main.sizeBasicTypes, i64 %[[TMP0]]
 // CHECK-NEXT:   %[[TMP5:[0-9]+]] = load i64, ptr %[[TMP4]], align 8
 // CHECK-NEXT:   %[[TMP6:[0-9]+]] = getelementptr inbounds %"{{.*}}/runtime/abi.Type", ptr %[[TMP1]], i32 0, i32 2
@@ -72,8 +84,13 @@ func main() {
 // CHECK-NEXT: _llgo_[[BB1]]:
 // CHECK-NEXT:   store i1 true, ptr @"main.init$guard", align 1
 // CHECK-NEXT:   call void @"{{.*}}/runtime/abi.init"()
-// CHECK-NEXT:   %[[TMP1:[0-9]+]] = call ptr @main.basicType(i64 24)
-// CHECK-NEXT:   store ptr %[[TMP1]], ptr getelementptr inbounds (ptr, ptr @main.basicTypes, i64 24), align 8
+// CHECK-NEXT:   %[[TMP1:[0-9]+]] = alloca [25 x ptr], align 8
+// CHECK-NEXT:   call void @llvm.memset.p0.i64(ptr %[[TMP1]], i8 0, i64 200, i1 false)
+// CHECK-NEXT:   %[[TMP2:[0-9]+]] = getelementptr inbounds ptr, ptr %[[TMP1]], i64 24
+// CHECK-NEXT:   %[[TMP3:[0-9]+]] = call ptr @main.basicType(i64 24)
+// CHECK-NEXT:   store ptr %[[TMP3]], ptr %[[TMP2]], align 8
+// CHECK-NEXT:   %[[TMP4:[0-9]+]] = load [25 x ptr], ptr %[[TMP1]], align 8
+// CHECK-NEXT:   store [25 x ptr] %[[TMP4]], ptr @main.basicTypes, align 8
 // CHECK-NEXT:   br label %_llgo_[[BB2]]
 // CHECK-EMPTY:
 // CHECK-NEXT: _llgo_[[BB2]]:

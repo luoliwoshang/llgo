@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	llssa "github.com/goplus/llgo/ssa"
+	llssa "github.com/xgo-dev/llgo/ssa"
 )
 
 func TestZeroSizedFieldDerefEmitsBaseNilGuard(t *testing.T) {
@@ -69,5 +69,26 @@ func keepPointer(pointer *struct{}) func() bool {
 				t.Fatalf("captured pointer value incorrectly lost its environment:\n%s", ir)
 			}
 		})
+	}
+}
+
+func TestUnusedDerefEmitsNilGuard(t *testing.T) {
+	const src = `package unusedderef
+func LoadArrayElement() {
+	var values [2]*int
+	_ = *values[1]
+}
+func LoadPointer(p *int) {
+	_ = *p
+}
+`
+	ir := compileWithRewrites(t, src, nil)
+	arrayLoad := llvmFunction(t, ir, "unusedderef.LoadArrayElement")
+	if !strings.Contains(arrayLoad, "AssertNilDeref") {
+		t.Fatalf("unused array-element dereference should retain a nil guard:\n%s", arrayLoad)
+	}
+	directLoad := llvmFunction(t, ir, "unusedderef.LoadPointer")
+	if !strings.Contains(directLoad, "AssertNilDeref") {
+		t.Fatalf("unused direct dereference should retain a nil guard:\n%s", directLoad)
 	}
 }

@@ -38,18 +38,18 @@ import (
 	"testing"
 
 	"github.com/goplus/gogen/packages"
-	"github.com/goplus/llgo/cl"
-	"github.com/goplus/llgo/internal/build"
-	"github.com/goplus/llgo/internal/filecheck"
-	"github.com/goplus/llgo/internal/littest"
-	"github.com/goplus/llgo/internal/llgen"
-	"github.com/goplus/llgo/internal/mockable"
-	"github.com/goplus/llgo/ssa/ssatest"
 	"github.com/qiniu/x/test"
+	"github.com/xgo-dev/llgo/cl"
+	"github.com/xgo-dev/llgo/internal/build"
+	"github.com/xgo-dev/llgo/internal/filecheck"
+	"github.com/xgo-dev/llgo/internal/littest"
+	"github.com/xgo-dev/llgo/internal/llgen"
+	"github.com/xgo-dev/llgo/internal/mockable"
+	"github.com/xgo-dev/llgo/ssa/ssatest"
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 
-	llssa "github.com/goplus/llgo/ssa"
+	llssa "github.com/xgo-dev/llgo/ssa"
 )
 
 func init() {
@@ -249,23 +249,75 @@ func testFrom(t *testing.T, pkgDir, sel string) {
 	if err != nil {
 		t.Fatal("LoadSpec failed:", err)
 	}
-	if spec.Mode == littest.ModeSkip {
-		return
-	}
 	var v string
+	var prefixes []string
 	withFuncInfoDisabled(func() {
-		v = llgen.GenFrom(pkgDir)
-	})
-	if spec.Mode == littest.ModeFileCheck {
-		if err := littest.Check(spec, v); err != nil {
-			_ = os.WriteFile(pkgDir+"/result.txt", []byte(v), 0644)
-			t.Fatal(err)
+		if spec.PostABI {
+			generated := llgen.GeneratePostABI(pkgDir)
+			v = generated.Text
+			prefixes = filecheck.TargetPrefixes(generated.GOOS, generated.GOARCH, generated.Target)
+		} else {
+			generated := llgen.Generate(pkgDir)
+			v = generated.Text
+			prefixes = filecheck.TargetPrefixes(generated.GOOS, generated.GOARCH, generated.Target)
 		}
-		return
+	})
+	if err := littest.Check(spec, v, prefixes...); err != nil {
+		_ = os.WriteFile(filepath.Join(pkgDir, "result.txt"), []byte(v), 0644)
+		t.Fatal(err)
 	}
-	if test.Diff(t, pkgDir+"/result.txt", []byte(v), []byte(spec.Text)) {
-		t.Fatal("llgen.GenFrom: unexpected result")
+	if len(spec.Targets) != 0 {
+		testIRTargets(t, pkgDir, spec, specificTargetPrefix(t, prefixes))
 	}
+}
+
+func testIRTargets(t *testing.T, pkgDir string, spec littest.Spec, currentPrefix string) {
+	t.Helper()
+	for _, target := range additionalIRTargets(spec.Targets, currentPrefix) {
+		t.Run(target.String(), func(t *testing.T) {
+			conf := &build.Config{Goos: target.GOOS, Goarch: target.GOARCH}
+			var generated llgen.GeneratedIR
+			withFuncInfoDisabled(func() {
+				if spec.PostABI {
+					generated = llgen.GeneratePostABIWithConf(pkgDir, conf)
+				} else {
+					generated = llgen.GenerateWithConf(pkgDir, conf)
+				}
+			})
+			if generated.GOOS != target.GOOS || generated.GOARCH != target.GOARCH {
+				t.Fatalf("target %s resolved to %s/%s", target, generated.GOOS, generated.GOARCH)
+			}
+			prefixes := filecheck.TargetPrefixes(generated.GOOS, generated.GOARCH, generated.Target)
+			if len(prefixes) < 2 {
+				t.Fatalf("target %s has no specific FileCheck prefix", target)
+			}
+			if err := littest.Check(spec, generated.Text, prefixes...); err != nil {
+				result := "result." + strings.ReplaceAll(target.String(), "/", "-") + ".txt"
+				_ = os.WriteFile(filepath.Join(pkgDir, result), []byte(generated.Text), 0644)
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func additionalIRTargets(targets []littest.Target, currentPrefix string) []littest.Target {
+	additional := make([]littest.Target, 0, len(targets))
+	for _, target := range targets {
+		prefixes := filecheck.TargetPrefixes(target.GOOS, target.GOARCH, "")
+		if len(prefixes) >= 2 && prefixes[len(prefixes)-1] == currentPrefix {
+			continue
+		}
+		additional = append(additional, target)
+	}
+	return additional
+}
+
+func specificTargetPrefix(t *testing.T, prefixes []string) string {
+	t.Helper()
+	if len(prefixes) < 2 || prefixes[0] != "CHECK" {
+		t.Fatalf("IR target has no specific FileCheck prefix: %v", prefixes)
+	}
+	return prefixes[len(prefixes)-1]
 }
 
 func testRunAndTestFrom(t *testing.T, pkgDir, relPkg, sel string, opts runOptions) {
@@ -285,8 +337,8 @@ func testRunAndTestFrom(t *testing.T, pkgDir, relPkg, sel string, opts runOption
 		}
 	}
 	if !checkOutput {
-		// IR-only mode: when expect.txt is not checked, use llgen.GenFrom via
-		// testFrom to compare this package's generated IR against out.ll.
+		// IR-only mode: when expect.txt is not checked, validate the
+		// source-embedded FileCheck directives via testFrom.
 		if opts.checkIR {
 			testFrom(t, pkgDir, sel)
 		}
@@ -310,22 +362,23 @@ func testRunAndTestFrom(t *testing.T, pkgDir, relPkg, sel string, opts runOption
 	conf := opts.conf
 	var capturedIR *string
 	var capturedMeta *string
+	var capturedPrefixes *[]string
 	var checkIR bool
 	if opts.checkIR {
 		irSpec, checkIR, err = readIRSpec(pkgDir)
 		if err != nil {
 			t.Fatal("LoadSpec failed:", err)
 		}
-		if checkIR {
-			conf, capturedIR, capturedMeta = withModuleCapture(opts.conf, pkgDir)
+		if checkIR && !irSpec.PostABI {
+			conf, capturedIR, capturedMeta, capturedPrefixes = withModuleCapture(opts.conf, pkgDir)
 		}
 	}
 	if opts.checkMeta && capturedMeta == nil {
-		conf, capturedIR, capturedMeta = withModuleCapture(conf, pkgDir)
+		conf, capturedIR, capturedMeta, capturedPrefixes = withModuleCapture(conf, pkgDir)
 	}
 
 	var output []byte
-	if checkIR {
+	if checkIR && !irSpec.PostABI {
 		withFuncInfoDisabled(func() {
 			output, err = runWithConf(relPkg, pkgDir, conf)
 		})
@@ -344,12 +397,32 @@ func testRunAndTestFrom(t *testing.T, pkgDir, relPkg, sel string, opts runOption
 	if !checkIR {
 		return
 	}
-	if capturedIR == nil || *capturedIR == "" {
-		t.Fatalf("module snapshot missing for file %s", irSpec.Path)
+	var ir string
+	var prefixes []string
+	if irSpec.PostABI {
+		// Keep the runtime build and the existing pre-ABI ModuleHook contract
+		// unchanged; obtain the opt-in stage through a separate IR-only compile.
+		withFuncInfoDisabled(func() {
+			generated := llgen.GeneratePostABIWithConf(pkgDir, opts.conf)
+			ir = generated.Text
+			prefixes = filecheck.TargetPrefixes(generated.GOOS, generated.GOARCH, generated.Target)
+		})
+	} else {
+		if capturedIR == nil || *capturedIR == "" {
+			t.Fatalf("module snapshot missing for file %s", irSpec.Path)
+		}
+		if capturedPrefixes == nil || len(*capturedPrefixes) == 0 {
+			t.Fatalf("module target missing for file %s", irSpec.Path)
+		}
+		ir = *capturedIR
+		prefixes = *capturedPrefixes
 	}
-	if err := littest.Check(irSpec, *capturedIR); err != nil {
-		_ = os.WriteFile(filepath.Join(pkgDir, "result.txt"), []byte(*capturedIR), 0644)
+	if err := littest.Check(irSpec, ir, prefixes...); err != nil {
+		_ = os.WriteFile(filepath.Join(pkgDir, "result.txt"), []byte(ir), 0644)
 		t.Fatal(err)
+	}
+	if len(irSpec.Targets) != 0 {
+		testIRTargets(t, pkgDir, irSpec, specificTargetPrefix(t, prefixes))
 	}
 }
 
@@ -415,7 +488,7 @@ func RunAndCapture(relPkg, pkgDir string) ([]byte, error) {
 
 // CaptureMeta builds relPkg and returns the package metadata captured for pkgDir.
 func CaptureMeta(relPkg, pkgDir string) (string, error) {
-	conf, _, capturedMeta := withModuleCapture(build.NewDefaultConf(build.ModeRun), pkgDir)
+	conf, _, capturedMeta, _ := withModuleCapture(build.NewDefaultConf(build.ModeRun), pkgDir)
 	output, err := runWithConf(relPkg, pkgDir, conf)
 	if err != nil {
 		return "", fmt.Errorf("%w\noutput: %s", err, string(output))
@@ -428,13 +501,14 @@ func RunAndCaptureWithConf(relPkg, pkgDir string, conf *build.Config) ([]byte, e
 	return runWithConf(relPkg, pkgDir, conf)
 }
 
-func withModuleCapture(conf *build.Config, pkgDir string) (*build.Config, *string, *string) {
+func withModuleCapture(conf *build.Config, pkgDir string) (*build.Config, *string, *string, *[]string) {
 	if conf == nil {
 		conf = build.NewDefaultConf(build.ModeRun)
 	}
 	localConf := *conf
 	var module string
 	var meta string
+	var prefixes []string
 	prevHook := localConf.ModuleHook
 	localConf.ModuleHook = func(pkg build.Package) {
 		if prevHook != nil {
@@ -445,9 +519,11 @@ func withModuleCapture(conf *build.Config, pkgDir string) (*build.Config, *strin
 		}) {
 			module = pkg.LPkg.String()
 			meta = pkg.Meta.String()
+			target := pkg.LPkg.Prog.Target()
+			prefixes = filecheck.TargetPrefixes(target.GOOS, target.GOARCH, target.Target)
 		}
 	}
-	return &localConf, &module, &meta
+	return &localConf, &module, &meta, &prefixes
 }
 
 func findMetaCheckDirs(pkgDir string) ([]string, error) {
@@ -702,15 +778,7 @@ func symbolTable(bin string) (string, error) {
 }
 
 func readIRSpec(pkgDir string) (littest.Spec, bool, error) {
-	spec, err := littest.LoadSpec(pkgDir)
-	if err != nil {
-		var pathErr *os.PathError
-		if errors.Is(err, os.ErrNotExist) && errors.As(err, &pathErr) && filepath.Clean(pathErr.Path) == filepath.Join(pkgDir, "out.ll") {
-			return littest.Spec{}, false, nil
-		}
-		return littest.Spec{}, false, err
-	}
-	return spec, true, nil
+	return littest.FindSpec(pkgDir)
 }
 
 func withFuncInfoDisabled(fn func()) {
@@ -798,7 +866,7 @@ func CompileIREx(t *testing.T, src any, fname string, dbg bool, configure func(l
 func TestCompileEx(t *testing.T, src any, fname, expected string, dbg bool) {
 	t.Helper()
 	v := CompileIREx(t, src, fname, dbg, nil)
-	if llssa.StripModuleTarget(v) != expected && expected != ";" { // expected == ";" means skipping out.ll
+	if llssa.StripModuleTarget(v) != expected {
 		t.Fatalf("\n==> got:\n%s\n==> expected:\n%s\n", v, expected)
 	}
 }

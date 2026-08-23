@@ -18,89 +18,65 @@ package littest
 
 import (
 	"bufio"
-	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/goplus/llgo/internal/filecheck"
-)
-
-type Mode int
-
-const (
-	ModeSkip Mode = iota
-	ModeLiteral
-	ModeFileCheck
+	"github.com/xgo-dev/llgo/internal/filecheck"
 )
 
 type Spec struct {
-	Path string
-	Text string
-	Mode Mode
+	Path    string
+	PostABI bool
+	Targets []Target
 }
 
-const Marker = "LITTEST"
+// Target selects one GOOS/GOARCH pair for an IR check.
+type Target struct {
+	GOOS   string
+	GOARCH string
+}
+
+func (t Target) String() string {
+	return t.GOOS + "/" + t.GOARCH
+}
+
+const (
+	Marker        = "LITTEST"
+	PostABIMarker = "LITTEST: POST-ABI"
+)
 
 func LoadSpec(pkgDir string) (Spec, error) {
-	if spec, ok, err := loadSourceSpec(pkgDir); err != nil {
-		return Spec{}, err
-	} else if ok {
-		return spec, nil
-	}
-
-	path := filepath.Join(pkgDir, "out.ll")
-	data, err := os.ReadFile(path)
+	spec, ok, err := FindSpec(pkgDir)
 	if err != nil {
 		return Spec{}, err
-	}
-	if bytes.Equal(data, []byte{';'}) {
-		return Spec{Path: path, Mode: ModeSkip}, nil
-	}
-	return Spec{Path: path, Text: string(data), Mode: ModeLiteral}, nil
-}
-
-func Check(spec Spec, actual string) error {
-	switch spec.Mode {
-	case ModeSkip:
-		return nil
-	case ModeFileCheck:
-		return filecheck.Match(spec.Path, actual)
-	case ModeLiteral:
-		if actual != spec.Text {
-			return fmt.Errorf("%s: literal LLVM IR mismatch", spec.Path)
-		}
-		return nil
-	default:
-		return errors.New("unknown lit spec mode")
-	}
-}
-
-func loadSourceSpec(pkgDir string) (Spec, bool, error) {
-	marked, ok, err := FindMarkedSourceFile(pkgDir)
-	if err != nil {
-		return Spec{}, false, err
 	}
 	if !ok {
-		return Spec{}, false, nil
+		return Spec{}, fmt.Errorf("%s: missing // %s source lit spec", pkgDir, Marker)
 	}
-	if marked == "" {
-		return Spec{}, false, nil
+	return spec, nil
+}
+
+func Check(spec Spec, actual string, targetPrefixes ...string) error {
+	if len(targetPrefixes) == 0 {
+		return filecheck.Match(spec.Path, actual)
 	}
-	return Spec{
-		Path: marked,
-		Mode: ModeFileCheck,
-	}, true, nil
+	return filecheck.MatchWithTargetPrefixes(spec.Path, actual, targetPrefixes...)
 }
 
 func FindMarkedSourceFile(dir string) (string, bool, error) {
+	spec, ok, err := FindSpec(dir)
+	return spec.Path, ok, err
+}
+
+// FindSpec finds the source-embedded IR check in dir without requiring one.
+func FindSpec(dir string) (Spec, bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", false, err
+		return Spec{}, false, err
 	}
-	var marked string
+	var spec Spec
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -110,40 +86,95 @@ func FindMarkedSourceFile(dir string) (string, bool, error) {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		ok, err := HasMarker(path)
+		candidate, ok, err := readMarker(path)
 		if err != nil {
-			return "", false, err
+			return Spec{}, false, err
 		}
 		if !ok {
 			continue
 		}
-		if marked != "" {
-			return "", false, fmt.Errorf("%s: multiple source lit specs found: %s, %s", dir, filepath.Base(marked), filepath.Base(path))
+		if spec.Path != "" {
+			return Spec{}, false, fmt.Errorf("%s: multiple source lit specs found: %s, %s", dir, filepath.Base(spec.Path), filepath.Base(path))
 		}
-		marked = path
+		candidate.Path = path
+		spec = candidate
 	}
-	if marked == "" {
-		return "", false, nil
+	if spec.Path == "" {
+		return Spec{}, false, nil
 	}
-	return marked, true, nil
+	return spec, true, nil
 }
 
 func HasMarker(path string) (bool, error) {
+	_, ok, err := ReadMarker(path)
+	return ok, err
+}
+
+// ReadMarker reports whether the source's first-line marker selects post-ABI IR.
+// Plain // LITTEST retains the existing check behavior and may carry a
+// space-separated GOOS/GOARCH target matrix. POST-ABI explicitly selects the
+// target-ABI-lowered stage and may also carry a matrix.
+func ReadMarker(path string) (postABI, found bool, err error) {
+	spec, found, err := readMarker(path)
+	return spec.PostABI, found, err
+}
+
+func readMarker(path string) (spec Spec, found bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return false, err
+		return Spec{}, false, err
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	if !scanner.Scan() {
-		return false, scanner.Err()
+		return Spec{}, false, scanner.Err()
 	}
 	line := strings.TrimSpace(scanner.Text())
 	if !strings.HasPrefix(line, "//") {
-		return false, nil
+		return Spec{}, false, nil
 	}
-	return strings.TrimSpace(strings.TrimPrefix(line, "//")) == Marker, nil
+	marker := strings.TrimSpace(strings.TrimPrefix(line, "//"))
+	switch marker {
+	case Marker:
+		return Spec{}, true, nil
+	case PostABIMarker:
+		return Spec{PostABI: true}, true, nil
+	}
+	postABI := false
+	markerName := Marker
+	switch {
+	case strings.HasPrefix(marker, Marker+" "):
+	case strings.HasPrefix(marker, PostABIMarker+" "):
+		postABI = true
+		markerName = PostABIMarker
+	default:
+		return Spec{}, false, nil
+	}
+
+	targets, err := parseTargets(strings.TrimSpace(strings.TrimPrefix(marker, markerName)))
+	if err != nil {
+		return Spec{}, false, fmt.Errorf("%s: %w", path, err)
+	}
+	return Spec{PostABI: postABI, Targets: targets}, true, nil
+}
+
+func parseTargets(text string) ([]Target, error) {
+	fields := strings.Fields(text)
+	targets := make([]Target, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		goos, goarch, ok := strings.Cut(field, "/")
+		if !ok || goos == "" || goarch == "" || strings.Contains(goarch, "/") {
+			return nil, fmt.Errorf("invalid LITTEST target %q; want GOOS/GOARCH", field)
+		}
+		if _, ok := seen[field]; ok {
+			return nil, fmt.Errorf("duplicate LITTEST target %q", field)
+		}
+		seen[field] = struct{}{}
+		targets = append(targets, Target{GOOS: goos, GOARCH: goarch})
+	}
+	return targets, nil
 }
 
 func IsSourceSpecFile(name string) bool {

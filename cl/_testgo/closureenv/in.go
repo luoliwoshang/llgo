@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // Zero-sized captures need no environment, while real captures and bound
@@ -23,18 +23,21 @@ package main
 // CHECK: store ptr [[ZSP_VALUE]], ptr %{{[0-9]+}}
 // CHECK: [[ZSP_CLOSURE:%[0-9]+]] = insertvalue { ptr, ptr } { ptr @"main.zeroSizedPointerCapture$1", ptr undef }, ptr [[ZSP_ENV]], 1
 // CHECK-NEXT: ret { ptr, ptr } [[ZSP_CLOSURE]]
-// CHECK-LABEL: define i1 @"main.zeroSizedPointerCapture$1"(ptr {{(nest|swiftself)}}
+// DARWIN-ARM64-LABEL: define i1 @"main.zeroSizedPointerCapture$1"(ptr swiftself
+// LINUX-AMD64-LABEL: define i1 @"main.zeroSizedPointerCapture$1"(ptr nest
 // CHECK: [[ZSP_ENV_VALUE:%[0-9]+]] = load { ptr }, ptr %{{[0-9]+}}
 // CHECK-NEXT: [[ZSP_SLOT:%[0-9]+]] = extractvalue { ptr } [[ZSP_ENV_VALUE]], 0
 // CHECK-NEXT: [[ZSP_POINTER:%[0-9]+]] = load ptr, ptr [[ZSP_SLOT]]
 // CHECK-NEXT: [[ZSP_IS_NIL:%[0-9]+]] = icmp eq ptr [[ZSP_POINTER]], null
 // CHECK-NEXT: ret i1 [[ZSP_IS_NIL]]
-// CHECK-LABEL: define i1 @"main.(*nilReceiver).IsNil$bound"(ptr {{(nest|swiftself)}}
+// DARWIN-ARM64-LABEL: define i1 @"main.(*nilReceiver).IsNil$bound"(ptr swiftself
+// LINUX-AMD64-LABEL: define i1 @"main.(*nilReceiver).IsNil$bound"(ptr nest
 // CHECK: [[BOUND_ENV:%[0-9]+]] = load { ptr }, ptr %{{[0-9]+}}
 // CHECK-NEXT: [[BOUND_RECEIVER:%[0-9]+]] = extractvalue { ptr } [[BOUND_ENV]], 0
 // CHECK-NEXT: [[BOUND_RESULT:%[0-9]+]] = call i1 @"main.(*nilReceiver).IsNil"(ptr [[BOUND_RECEIVER]])
 // CHECK-NEXT: ret i1 [[BOUND_RESULT]]
-// CHECK-LABEL: define i1 @"main.interface{IsNil() bool}.IsNil$bound"(ptr {{(nest|swiftself)}}
+// DARWIN-ARM64-LABEL: define i1 @"main.interface{IsNil() bool}.IsNil$bound"(ptr swiftself
+// LINUX-AMD64-LABEL: define i1 @"main.interface{IsNil() bool}.IsNil$bound"(ptr nest
 // CHECK: [[IB_ENV:%[0-9]+]] = load { %"{{.*}}/runtime/internal/runtime.iface" }, ptr %{{[0-9]+}}
 // CHECK-NEXT: [[IB_IFACE:%[0-9]+]] = extractvalue { %"{{.*}}/runtime/internal/runtime.iface" } [[IB_ENV]], 0
 // CHECK-NEXT: [[IB_DATA:%[0-9]+]] = call ptr @"{{.*}}/runtime/internal/runtime.IfacePtrData"(%"{{.*}}/runtime/internal/runtime.iface" [[IB_IFACE]])

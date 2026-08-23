@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 // Select cases are nondeterministic at runtime; check only that both the main
@@ -30,7 +30,8 @@ package main
 // CHECK: [[MAIN_DISPATCH:%[0-9]+]] = extractvalue { i64, i1, {}, {} } %{{[0-9]+}}, 0
 // CHECK-NEXT: [[MAIN_CASE0:%[0-9]+]] = icmp eq i64 [[MAIN_DISPATCH]], 0
 // CHECK: [[MAIN_CASE1:%[0-9]+]] = icmp eq i64 [[MAIN_DISPATCH]], 1
-// CHECK-LABEL: define void @"main.main$1"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.main$1"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.main$1"(ptr nest %0){{.*}} {
 // CHECK: [[GOR_ENV:%[0-9]+]] = load { ptr, ptr, ptr }, ptr %0
 // CHECK-NEXT: [[GOR_C1_SLOT:%[0-9]+]] = extractvalue { ptr, ptr, ptr } [[GOR_ENV]], 0
 // CHECK-NEXT: [[GOR_C1:%[0-9]+]] = load ptr, ptr [[GOR_C1_SLOT]]

@@ -1,17 +1,18 @@
 // Copyright 2014 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style license.
+// See LICENSES/Go-BSD-3-Clause.txt at this module root for license terms.
 
 package runtime
 
 import (
 	"unsafe"
 
-	c "github.com/goplus/llgo/runtime/internal/clite"
-	clitedebug "github.com/goplus/llgo/runtime/internal/clite/debug"
-	cliteos "github.com/goplus/llgo/runtime/internal/clite/os"
-	latomic "github.com/goplus/llgo/runtime/internal/lib/sync/atomic"
-	rtdebug "github.com/goplus/llgo/runtime/internal/runtime"
+	latomic "sync/atomic"
+
+	c "github.com/xgo-dev/llgo/runtime/internal/clite"
+	clitedebug "github.com/xgo-dev/llgo/runtime/internal/clite/debug"
+	cliteos "github.com/xgo-dev/llgo/runtime/internal/clite/os"
+	rtdebug "github.com/xgo-dev/llgo/runtime/internal/runtime"
 )
 
 // Frames may be used to get function/file/line information for a

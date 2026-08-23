@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 type T struct {
@@ -196,7 +196,8 @@ type M interface {
 // CHECK: %[[T6_DATA:[0-9]+]] = extractvalue %main.T6 %0, 1
 // CHECK: %[[T6_CODE:[0-9]+]] = extractvalue %main.T6 %0, 0
 // CHECK: %[[T6_CALL:__llgo_funcval_code]] = call ptr asm "", "=r,0"(ptr %[[T6_CODE]])
-// CHECK: call i64 %[[T6_CALL]](ptr {{(nest|swiftself)}} %[[T6_DATA]])
+// DARWIN-ARM64: call i64 %[[T6_CALL]](ptr swiftself %[[T6_DATA]])
+// LINUX-AMD64: call i64 %[[T6_CALL]](ptr nest %[[T6_DATA]])
 
 // CHECK-LABEL: define i64 @"main.(*T6).Invoke"(ptr %0){{.*}} {
 // CHECK: %[[T6_NIL:[0-9]+]] = icmp eq ptr %0, null

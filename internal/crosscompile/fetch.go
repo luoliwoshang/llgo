@@ -13,7 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/xgo-dev/llgo/internal/env"
 )
+
+const espClangLicenseFile = "XGo-LLVM-Apache-2.0-WITH-LLVM-exception.txt"
 
 // checkDownloadAndExtractWasiSDK downloads and extracts WASI SDK
 func checkDownloadAndExtractWasiSDK(dir string) (wasiSdkRoot string, err error) {
@@ -73,10 +77,28 @@ func checkDownloadAndExtractESPClang(platformSuffix, dir string) error {
 
 	// ESP Clang needs special handling: move esp-clang subdirectory to final destination
 	espClangDir := filepath.Join(tempExtractDir, "esp-clang")
+	if err := installESPClangLicense(espClangDir); err != nil {
+		return err
+	}
 	if err := os.Rename(espClangDir, dir); err != nil {
 		return fmt.Errorf("failed to rename esp-clang directory: %w", err)
 	}
 
+	return nil
+}
+
+// installESPClangLicense places the complete LLVM license next to an ESP Clang
+// toolchain. The upstream archive currently contains only a short license
+// pointer under include/llvm/Support; LLGo source trees and release archives
+// carry the complete Apache-2.0 WITH LLVM-exception text under LICENSES.
+func installESPClangLicense(clangDir string) error {
+	license, err := os.ReadFile(filepath.Join(env.LLGoROOT(), "LICENSES", espClangLicenseFile))
+	if err != nil {
+		return fmt.Errorf("read ESP Clang license: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(clangDir, "LICENSE-LLVM.txt"), license, 0o644); err != nil {
+		return fmt.Errorf("install ESP Clang license: %w", err)
+	}
 	return nil
 }
 

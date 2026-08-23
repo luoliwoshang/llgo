@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 import (
@@ -166,7 +166,8 @@ func main() {
 	println(s1 == "abc", s1 == s2, s1 != s2, s1 < s2, s1 <= s2, s1 > s2, s1 >= s2)
 }
 
-// CHECK-LABEL: define void @"main.main$3"(ptr {{(nest|swiftself)}} %0){{.*}} {
+// DARWIN-ARM64-LABEL: define void @"main.main$3"(ptr swiftself %0){{.*}} {
+// LINUX-AMD64-LABEL: define void @"main.main$3"(ptr nest %0){{.*}} {
 // CHECK: [[CAPTURE:%.*]] = load { ptr }, ptr %0
 // CHECK: [[N_ADDR:%.*]] = extractvalue { ptr } [[CAPTURE]], 0
 // CHECK: [[N:%.*]] = load i64, ptr [[N_ADDR]]

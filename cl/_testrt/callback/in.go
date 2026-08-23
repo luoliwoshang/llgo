@@ -1,4 +1,4 @@
-// LITTEST
+// LITTEST darwin/arm64 linux/amd64
 package main
 
 import (
@@ -8,7 +8,8 @@ import (
 // CHECK-LABEL: define void @main.callback(ptr %0, { ptr, ptr } %1){{.*}} {
 // CHECK: [[CALLBACK_ENV:%[0-9]+]] = extractvalue { ptr, ptr } %1, 1
 // CHECK-NEXT: [[CALLBACK_CODE:%[0-9]+]] = extractvalue { ptr, ptr } %1, 0
-// CHECK: call void %__llgo_funcval_code(ptr {{(nest|swiftself)}} [[CALLBACK_ENV]], ptr %0)
+// DARWIN-ARM64: call void %__llgo_funcval_code(ptr swiftself [[CALLBACK_ENV]], ptr %0)
+// LINUX-AMD64: call void %__llgo_funcval_code(ptr nest [[CALLBACK_ENV]], ptr %0)
 func callback(msg *c.Char, f func(*c.Char)) {
 	f(msg)
 }

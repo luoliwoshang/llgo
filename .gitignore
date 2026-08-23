@@ -27,6 +27,8 @@ build.dir/
 ltoplugin/build/
 .vscode/
 .venv/
+__pycache__/
+*.pyc
 
 # Test binary, built with `go test -c`
 *.test

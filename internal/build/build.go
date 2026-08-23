@@ -39,34 +39,34 @@ import (
 
 	"golang.org/x/tools/go/ssa"
 
-	"github.com/goplus/llgo/cl"
-	llabi "github.com/goplus/llgo/internal/abi"
-	"github.com/goplus/llgo/internal/buildenv"
-	"github.com/goplus/llgo/internal/cabi"
-	"github.com/goplus/llgo/internal/clang"
-	"github.com/goplus/llgo/internal/crosscompile"
-	"github.com/goplus/llgo/internal/dcepass"
-	"github.com/goplus/llgo/internal/deadcode"
-	"github.com/goplus/llgo/internal/env"
-	"github.com/goplus/llgo/internal/firmware"
-	"github.com/goplus/llgo/internal/flash"
-	"github.com/goplus/llgo/internal/goembed"
-	"github.com/goplus/llgo/internal/header"
-	"github.com/goplus/llgo/internal/lto"
-	"github.com/goplus/llgo/internal/meta"
-	"github.com/goplus/llgo/internal/mockable"
-	"github.com/goplus/llgo/internal/monitor"
-	"github.com/goplus/llgo/internal/optlevel"
-	"github.com/goplus/llgo/internal/packages"
-	"github.com/goplus/llgo/internal/pclnmap"
-	"github.com/goplus/llgo/internal/pclnpost"
-	"github.com/goplus/llgo/internal/typepatch"
-	"github.com/goplus/llgo/ssa/abi"
-	xenv "github.com/goplus/llgo/xtool/env"
+	"github.com/xgo-dev/llgo/cl"
+	llabi "github.com/xgo-dev/llgo/internal/abi"
+	"github.com/xgo-dev/llgo/internal/buildenv"
+	"github.com/xgo-dev/llgo/internal/cabi"
+	"github.com/xgo-dev/llgo/internal/clang"
+	"github.com/xgo-dev/llgo/internal/crosscompile"
+	"github.com/xgo-dev/llgo/internal/dcepass"
+	"github.com/xgo-dev/llgo/internal/deadcode"
+	"github.com/xgo-dev/llgo/internal/env"
+	"github.com/xgo-dev/llgo/internal/firmware"
+	"github.com/xgo-dev/llgo/internal/flash"
+	"github.com/xgo-dev/llgo/internal/goembed"
+	"github.com/xgo-dev/llgo/internal/header"
+	"github.com/xgo-dev/llgo/internal/lto"
+	"github.com/xgo-dev/llgo/internal/meta"
+	"github.com/xgo-dev/llgo/internal/mockable"
+	"github.com/xgo-dev/llgo/internal/monitor"
+	"github.com/xgo-dev/llgo/internal/optlevel"
+	"github.com/xgo-dev/llgo/internal/packages"
+	"github.com/xgo-dev/llgo/internal/pclnmap"
+	"github.com/xgo-dev/llgo/internal/pclnpost"
+	"github.com/xgo-dev/llgo/internal/typepatch"
+	"github.com/xgo-dev/llgo/ssa/abi"
+	xenv "github.com/xgo-dev/llgo/xtool/env"
 	gllvm "github.com/xgo-dev/llvm"
 
-	llruntime "github.com/goplus/llgo/runtime"
-	llssa "github.com/goplus/llgo/ssa"
+	llruntime "github.com/xgo-dev/llgo/runtime"
+	llssa "github.com/xgo-dev/llgo/ssa"
 )
 
 type Mode int
@@ -550,11 +550,14 @@ func Build(inv Invocation) ([]Package, error) {
 		defer syntaxErrMu.Unlock()
 		return syntaxErr
 	}
-	dedup.SetPreload(func(pkg *types.Package, files []*ast.File) {
-		if llruntime.SkipToBuild(pkg.Path()) {
+	dedup.SetPreload(func(pkg *packages.Package) {
+		if llruntime.SkipToBuild(pkg.PkgPath) {
 			return
 		}
-		if err := cl.ParsePkgSyntaxWithOptions(prog, cfg.Fset, pkg, files, preloadOptions); err != nil {
+		if pkg.Name == "main" && pkg.ForTest != "" {
+			pkg.Types.Scope().Insert(types.NewConst(0, pkg.Types, abi.ForTestMarker, types.Typ[types.UntypedBool], constant.MakeBool(true)))
+		}
+		if err := cl.ParsePkgSyntaxWithOptions(prog, cfg.Fset, pkg.Types, pkg.Syntax, preloadOptions); err != nil {
 			recordSyntaxErr(err)
 		}
 	})
@@ -627,6 +630,8 @@ func Build(inv Invocation) ([]Package, error) {
 	altPkgPaths := altPkgs(initial, conf, llssa.PkgRuntime)
 	altCfg := *cfg
 	altCfg.Dir = env.LLGoRuntimeDir()
+	// The runtime submodule may otherwise select a different toolchain from its go.mod.
+	altCfg.Env = withResolvedGoToolchain(cfg.Env, sourcePatchGoVersion)
 	loadAltSpan := buildTrace.startCoordinator("load runtime packages", map[string]any{
 		"packages": slices.Clone(altPkgPaths),
 	})
@@ -680,6 +685,7 @@ func Build(inv Invocation) ([]Package, error) {
 		pkgs:            map[*packages.Package]Package{},
 		pkgByID:         map[string]Package{},
 		cacheManager:    newCacheManager(),
+		patchFiles:      llgoFiles,
 		output:          output,
 		passOpt:         passOpt,
 		buildConf:       conf,
@@ -915,9 +921,6 @@ func filterTestPackages(initial []*packages.Package, outFile string) ([]*package
 		if needLink(pkg, ModeTest) {
 			filtered = append(filtered, pkg)
 		}
-		if pkg.Types != nil && pkg.Types.Name() == "main" {
-			pkg.Types.SetName("main.test")
-		}
 	}
 	if len(filtered) > 1 && outFile != "" {
 		return nil, fmt.Errorf("cannot use -o flag with multiple packages")
@@ -949,6 +952,7 @@ type context struct {
 	callerTracking *cl.CallerTracking
 	fingerprinting map[string]bool
 	cacheDisabled  map[string]none
+	patchFiles     map[string][]string
 	initial        []*packages.Package
 	pkgs           map[*packages.Package]Package // cache for lookup
 	pkgByID        map[string]Package            // cache for lookup by pkg.ID
@@ -1909,8 +1913,8 @@ func cSharedExportArgs(ctx *context, pkgs []*aPackage) []string {
 			}
 		}
 		if ctx.mode == ModeTest && pkg.Package != nil && pkg.Name == "main" && strings.HasSuffix(pkg.PkgPath, ".test") {
-			exports[pkg.PkgPath+".init"] = none{}
-			exports[pkg.PkgPath+".main"] = none{}
+			exports["main.init"] = none{}
+			exports["main.main"] = none{}
 		}
 	}
 	names := make([]string, 0, len(exports))
