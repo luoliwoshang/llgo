@@ -11,8 +11,8 @@
         "sha": "3b806d5d58380e238633777fe68a172c5840a3f9",
         "ref": "main",
         "url": "https://github.com/luoliwoshang/llgo/commit/3b806d5d58380e238633777fe68a172c5840a3f9",
-        "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42172460291",
-        "timestamp": "2026-11-06T06:07:29Z"
+        "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42190459552",
+        "timestamp": "2026-11-06T08:49:36Z"
       },
       "platforms": {
         "wasm-linux": {
@@ -24,8 +24,8 @@
             "sha": "3b806d5d58380e238633777fe68a172c5840a3f9",
             "ref": "main",
             "url": "https://github.com/luoliwoshang/llgo/commit/3b806d5d58380e238633777fe68a172c5840a3f9",
-            "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42172460291",
-            "timestamp": "2026-11-06T06:07:29Z"
+            "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42190459552",
+            "timestamp": "2026-11-06T08:49:36Z"
           },
           "platform": {
             "id": "wasm-linux",
@@ -56,12 +56,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 6881695036
+                    "build-ns": 6032162908
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 6881695036
+                "build-ns": 6032162908
               }
             },
             {
@@ -73,12 +73,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 6798948173
+                    "build-ns": 5672327022
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 6798948173
+                "build-ns": 5672327022
               }
             },
             {
@@ -90,12 +90,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 6112318778
+                    "build-ns": 5123443038
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 6112318778
+                "build-ns": 5123443038
               }
             },
             {
@@ -107,12 +107,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 18901704338
+                    "build-ns": 17087298759
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 18901704338
+                "build-ns": 17087298759
               }
             },
             {
@@ -124,12 +124,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 3174146996
+                    "build-ns": 2660241300
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 3174146996
+                "build-ns": 2660241300
               }
             },
             {
@@ -141,12 +141,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 2990987456
+                    "build-ns": 2514075152
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 2990987456
+                "build-ns": 2514075152
               }
             },
             {
@@ -650,11 +650,11 @@
     {
       "source": {
         "repository": "luoliwoshang/llgo",
-        "sha": "66c3cb1f1452431bec67a82a202f71a70335a6a7",
+        "sha": "956b25ab65268eb155cd7bd61d41a90f797374e8",
         "ref": "codex/deadcode-thinlto-size",
-        "url": "https://github.com/luoliwoshang/llgo/commit/66c3cb1f1452431bec67a82a202f71a70335a6a7",
-        "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42172460291",
-        "timestamp": "2026-11-06T06:07:29Z"
+        "url": "https://github.com/luoliwoshang/llgo/commit/956b25ab65268eb155cd7bd61d41a90f797374e8",
+        "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42190459552",
+        "timestamp": "2026-11-06T08:49:36Z"
       },
       "platforms": {
         "wasm-linux": {
@@ -663,11 +663,11 @@
           "shardId": "merged",
           "source": {
             "repository": "luoliwoshang/llgo",
-            "sha": "66c3cb1f1452431bec67a82a202f71a70335a6a7",
+            "sha": "956b25ab65268eb155cd7bd61d41a90f797374e8",
             "ref": "codex/deadcode-thinlto-size",
-            "url": "https://github.com/luoliwoshang/llgo/commit/66c3cb1f1452431bec67a82a202f71a70335a6a7",
-            "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42172460291",
-            "timestamp": "2026-11-06T06:07:29Z"
+            "url": "https://github.com/luoliwoshang/llgo/commit/956b25ab65268eb155cd7bd61d41a90f797374e8",
+            "runUrl": "https://github.com/luoliwoshang/llgo/actions/runs/42190459552",
+            "timestamp": "2026-11-06T08:49:36Z"
           },
           "platform": {
             "id": "wasm-linux",
@@ -698,12 +698,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 6516002350
+                    "build-ns": 5831500012
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 6516002350
+                "build-ns": 5831500012
               }
             },
             {
@@ -715,12 +715,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 6266657943
+                    "build-ns": 5676070483
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 6266657943
+                "build-ns": 5676070483
               }
             },
             {
@@ -732,12 +732,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 5529706411
+                    "build-ns": 5133785933
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 5529706411
+                "build-ns": 5133785933
               }
             },
             {
@@ -749,12 +749,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 19035208342
+                    "build-ns": 17171830190
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 19035208342
+                "build-ns": 17171830190
               }
             },
             {
@@ -766,12 +766,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 3009116964
+                    "build-ns": 2719068316
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 3009116964
+                "build-ns": 2719068316
               }
             },
             {
@@ -783,12 +783,12 @@
                 {
                   "iterations": 1,
                   "measurements": {
-                    "build-ns": 2809453546
+                    "build-ns": 2541769237
                   }
                 }
               ],
               "measurements": {
-                "build-ns": 2809453546
+                "build-ns": 2541769237
               }
             },
             {
