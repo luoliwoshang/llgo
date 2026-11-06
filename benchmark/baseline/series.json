@@ -11,6 +11,28 @@
       "sha": "3b806d5d58380e238633777fe68a172c5840a3f9",
       "sourceUrl": "https://github.com/luoliwoshang/llgo/commit/3b806d5d58380e238633777fe68a172c5840a3f9",
       "updatedAt": "2026-11-06T07:03:10.123Z"
+    },
+    {
+      "kind": "branch",
+      "id": "7a8ebf5669255f68",
+      "label": "Branch codex/deadcode-thinlto-size",
+      "path": "series/branch/7a8ebf5669255f68/summary.json",
+      "configPath": "series/branch/7a8ebf5669255f68/config.json",
+      "commitPath": "commits/66c3cb1f1452431bec67a82a202f71a70335a6a7.json",
+      "sha": "66c3cb1f1452431bec67a82a202f71a70335a6a7",
+      "sourceUrl": "https://github.com/luoliwoshang/llgo/commit/66c3cb1f1452431bec67a82a202f71a70335a6a7",
+      "updatedAt": "2026-11-06T07:25:19.041Z"
+    },
+    {
+      "kind": "pull",
+      "id": "216",
+      "label": "PR #216",
+      "path": "series/pull/216/summary.json",
+      "configPath": "series/pull/216/config.json",
+      "commitPath": "commits/66c3cb1f1452431bec67a82a202f71a70335a6a7.json",
+      "sha": "66c3cb1f1452431bec67a82a202f71a70335a6a7",
+      "sourceUrl": "https://github.com/luoliwoshang/llgo/commit/66c3cb1f1452431bec67a82a202f71a70335a6a7",
+      "updatedAt": "2026-11-06T07:25:19.005Z"
     }
   ]
 }
